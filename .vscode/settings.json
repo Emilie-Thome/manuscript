@@ -1,0 +1,48 @@
+{
+    "cSpell.words": [
+        "asynchrony",
+        "chronograms",
+        "coinduction",
+        "coinductive",
+        "coinductively",
+        "combinators",
+        "creusot",
+        "dataflows",
+        "denot",
+        "EBNF",
+        "epat",
+        "frontends",
+        "grfrp",
+        "grsync",
+        "Kleene",
+        "linearizes",
+        "microcontrollers",
+        "Onchange",
+        "opsem",
+        "oversampled",
+        "pointwise",
+        "postconditions",
+        "Propag",
+        "recomputations",
+        "reimplementations",
+        "strat"
+    ],
+    "latex-workshop.formatting.latex": "latexindent",
+    "latex-workshop.latex.outDir": "%WORKSPACE_FOLDER%/out/",
+    "latex-workshop.latex.texDirs": [
+        "%WORKSPACE_FOLDER%/src/"
+    ],
+    "latex-workshop.latex.bibDirs": [
+        "%WORKSPACE_FOLDER%/src/"
+    ],
+    "cSpell.flagWords": [
+        "wether",
+        "Wether",
+        "constrains",
+        "Constrains",
+        "constrain",
+        "Constrain",
+        "bellow",
+        "Bellow"
+    ]
+}
