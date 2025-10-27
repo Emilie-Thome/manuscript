@@ -24,6 +24,20 @@ jobs:
           scheme: full
           packages: latexmk
 
+      # --- DEBUGGING STEPS ---
+      # This will show us the exact path where TeX Live binaries are installed.
+      - name: Show TeX Live bin path
+        run: echo "TeX Live bin path is $(tlmgr path texlive-bin)"
+
+      # This will print the full system PATH. We can check if the TeX Live path is in it.
+      - name: Show system PATH
+        run: echo $PATH
+
+      # This command asks the system to find the 'latexmk' executable.
+      # If it's installed and in the PATH, it will print its location.
+      - name: Check for latexmk executable
+        run: which latexmk
+
       # Step 3: Run the 'make' command to compile your document.
       - name: Compile LaTeX
         run: make
