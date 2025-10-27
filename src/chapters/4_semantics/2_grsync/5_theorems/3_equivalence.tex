@@ -1,0 +1,1803 @@
+\subsubsection{Equivalence}
+\label{sec:semantics:grsync:theorems:equivalence}
+
+\Cref{thm:semantics:grsync:theorems:equivalence} establishes the equivalence between the operational
+and denotational semantics of \GRSync. It states that simulating components using steps from the
+operational semantics over input streams produces output streams that satisfy the constraints
+defined by the denotational semantics, and vice versa. This ensures that the two semantics provide
+consistent views of component behavior.
+
+To formalize the notion of step equivalence, we first define a notation for the $n^\text{th}$
+element of a stream $s$, denoted by $s[n]$. This is defined inductively as:
+
+\begin{align}
+    (v \step s')[0] & = v & (v \step s')[n+1] & = s'[n]. \label{eq:semantics:grsync:theorems:equivalence:get}
+\end{align}
+
+The proof of \Cref{thm:semantics:grsync:theorems:equivalence} proceeds by structural induction on
+the syntax of \GRSync. Due to the presence of component calls within expressions, the proof is
+mutually recursive with the proofs of the intermediate
+\Crefrange{lem:semantics:grsync:theorems:equivalence:e}{lem:semantics:grsync:theorems:equivalence:eq}.
+These lemmas establish the equivalence of the
+operational and denotational semantics for each syntactic construct of \GRSync (expressions,
+patterns, event patterns, and equations). This mutual recursion is well-founded because, while
+expressions can contain component calls, the components themselves are not mutually recursive,
+ensuring that the induction remains valid.
+
+\begin{remark}
+    \label{rmk:semantics:grsync:theorems:equivalence}
+    In the proofs of the lemmas and theorems presented in this section, establishing the implication
+    from the operational semantics to the denotational semantics is generally more challenging than
+    proving the converse. This direction requires demonstrating that each step of the operational
+    semantics simulation produces a value that is consistent with the constraints imposed by the
+    denotational semantics.
+
+    The converse implication, from the denotational semantics to the operational semantics, is often
+    simplified by leveraging the productivity of the operational semantics
+    (\Cref{thm:semantics:grfrp:theorems:productivity}). Specifically, we can construct an
+    operational semantics simulation that satisfies the denotational semantics (using the previously
+    established implication). Then, because the denotational semantics is deterministic
+    (\Cref{sec:semantics:grfrp:theorems:determinism}), we can conclude that this simulation is
+    equivalent to any other simulation satisfying the denotational semantics.
+\end{remark}
+
+\begin{lemma}[Equivalence for \GRSync expressions]
+    \label{lem:semantics:grsync:theorems:equivalence:e}
+    Let $e$ be a well-typed \GRSync expression, $ck$ be a clock, $H$ be a stream context, and
+    $(\rho_k^+)$ be a sequence of environments such that:
+    \begin{equation*}
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+                   & ck[k] = \true \, \Rightarrow \,
+            \forall x \in \deps{e}, \, \rho_k[x] = H[x][k] \neq \bot                \\
+            \wedge & ck[k] \neq \true \, \Rightarrow \,
+            \rho_k = \emptyrho \wedge (\forall x \in \deps{e}, \,  H[x][k] = \bot). \\
+        \end{array}
+        \right.
+    \end{equation*}
+
+    For all streams $s^+$, the denotational semantics \exprDenot{H}{ck}{e}{s^+}
+    holds \iff there exists a sequence of states $(s_k^+)$ corresponding to $e$ such that:
+    \begin{equation*}
+        s_0 = \initstate{e} \qquad
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+                   & ck[k] = \true \, \Rightarrow \, \exprOpsem{\rho_k}{s_k}{e}{s_{k+1}}{(s[k])^+} \\
+            \wedge & ck[k] \neq \true \, \Rightarrow \, s_{k+1} = s_k \wedge (s[k] = \bot)^+.      \\
+        \end{array}
+        \right.
+    \end{equation*}
+\end{lemma}
+\begin{skippableproof}
+    Let $e$ be a well-typed \GRSync expression, $ck$ be a clock, $H$ be a stream context, and
+    $(\rho_k^+)$ be a sequence of environments such that:
+    \begin{equation*}
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+                   & ck[k] = \true \, \Rightarrow \,
+            \forall x \in \deps{e}, \, \rho_k[x] = H[x][k] \neq \bot                \\
+            \wedge & ck[k] \neq \true \, \Rightarrow \,
+            \rho_k = \emptyrho \wedge (\forall x \in \deps{e}, \,  H[x][k] = \bot). \\
+        \end{array}
+        \right.
+    \end{equation*}
+
+    \paragraph{Operational $\Rightarrow$ Denotational}
+    \label{sec:semantics:grsync:theorems:equivalence:e:proof:op_to_den}
+    Let $s^+$ be streams, and $(s_k^+)$ be a sequence of states corresponding to $e$ such that:
+    \begin{equation*}
+        s_0 = \initstate{e} \qquad
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+                   & ck[k] = \true \, \Rightarrow \, \exprOpsem{\rho_k}{s_k}{e}{s_{k+1}}{(s[k])^+} \\
+            \wedge & ck[k] \neq \true \, \Rightarrow \, s_{k+1} = s_k \wedge (s[k] = \bot)^+.      \\
+        \end{array}
+        \right.
+    \end{equation*}
+    In order to prove that the denotational semantics \exprDenot{H}{ck}{e}{s^+}
+    holds, we proceed by structural induction on $e$ and by induction on component applications
+    (recursive component calls are not allowed).
+
+    \subparagraph{Constants}
+    Let $c$ be a constant. For all context $\rho$, the operational semantics of the constant
+    expression $c$ returns the value $c$, as described by the rule
+    \nameref{rule:semantics:grsync:opsem:step:e:const}. Therefore, the streams $s^+$
+    constitute only one stream denoted by $s$ such that:
+    \begin{equation*}
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+                   & ck[k] = \true \, \Rightarrow \, s[k] = c         \\
+            \wedge & ck[k] \neq \true \, \Rightarrow \,  s[k] = \bot, \\
+        \end{array}
+        \right.
+    \end{equation*}
+    which implies that $s \equiv \const{c}{ck}$. The rule
+    \nameref{rule:semantics:grsync:denot:e:const} ensures that the denotational semantics
+    \exprDenot{H}{ck}{c}{\const{c}{ck}} holds, and therefore that
+    \exprDenot{H}{ck}{c}{s} holds too.
+
+    \subparagraph{Identifiers}
+    Let $x$ be an identifier expression. For all context $\rho$, the operational semantics of the
+    identifier expression $x$ returns the value $\rho[x]$, as described by the rule
+    \nameref{rule:semantics:grsync:opsem:step:e:ident}. Therefore, the streams $s^+$
+    constitute only one stream denoted by $s$ such that:
+    \begin{equation*}
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+                   & ck[k] = \true \, \Rightarrow \, s[k] = \rho_k[x] \\
+            \wedge & ck[k] \neq \true \, \Rightarrow \,  s[k] = \bot, \\
+        \end{array}
+        \right.
+    \end{equation*}
+    The identifier $x$ is a dependency of the expression $x$ (\Cref{rule:semantics:grsync:causality%
+        :dependencies:deps:e:ident}), so the hypothesis on $H$ and $(\rho_k^+)$ implies that:
+    \begin{equation*}
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+                   & ck[k] = \true \, \Rightarrow \, s[k] = H[x][k]      \\
+            \wedge & ck[k] \neq \true \, \Rightarrow \,  s[k] = H[x][k], \\
+        \end{array}
+        \right.
+    \end{equation*}
+    which implies that $s \equiv H[x]$. The rule
+    \nameref{rule:semantics:grsync:denot:e:ident} ensures that
+    \exprDenot{H}{ck}{x}{H[x]} holds, and therefore that
+    \exprDenot{H}{ck}{x}{s} holds too.
+
+    \subparagraph{Last memories}
+    Let \last{x} be the memory of the identifier $x$. For all context $\rho$, the operational
+    semantics of the memory expression \last{x} returns the value $\rho[\last{x}]$, as described
+    by the rule \nameref{rule:semantics:grsync:opsem:step:e:last}. Therefore, the streams
+    $s^+$ constitute only one stream denoted by $s$ such that:
+    \begin{equation*}
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+                   & ck[k] = \true \, \Rightarrow \, s[k] = \rho_k[\last{x}] \\
+            \wedge & ck[k] \neq \true \, \Rightarrow \,  s[k] = \bot,        \\
+        \end{array}
+        \right.
+    \end{equation*}
+    The identifier \last{x} is a dependency of the expression \last{x} (\Cref{rule:semantics:grsync%
+        :causality:dependencies:deps:e:last}), so the hypothesis on $H$ and $(\rho_k^+)$ imply that:
+    \begin{equation*}
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+                   & ck[k] = \true \, \Rightarrow \, s[k] = H[\last{x}][k]      \\
+            \wedge & ck[k] \neq \true \, \Rightarrow \,  s[k] = H[\last{x}][k], \\
+        \end{array}
+        \right.
+    \end{equation*}
+    which implies that $s \equiv H[\last{x}]$. The rule
+    \nameref{rule:semantics:grsync:denot:e:ident} ensures that the denotational semantics
+    \exprDenot{H}{ck}{\last{x}}{H[\last{x}]} holds, and that
+    \exprDenot{H}{ck}{\last{x}}{s} holds too.
+
+    \subparagraph{Event emissions}
+    Let \emit{e} be the emission of the expression $e$.
+    Rule \nameref{rule:semantics:grsync:opsem:step:e:emit:value} ensures that the streams
+    $s^+$ constitute only one stream denoted by $s$ and there exists a stream $s'$ such that:
+    \begin{equation*}
+        \begin{array}{ll}
+                              & s_0 = \initstate{e} \\
+            \forall k \in \N, &
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \exprOpsem{\rho_k}{s_k}{e}{s_{k+1}}{\some{s'[k]}} \\
+                    \wedge & \some{s'[k]} = s[k]                               \\
+                \end{array}
+                \right.                                                                           \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,  (s_{k+1} = s_k \wedge s'[k] = \bot). \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    The structural induction hypothesis applied on $e$ ensures that \exprDenot{H}{ck}{e}{s'}
+    holds. The rule \nameref{rule:semantics:grsync:denot:e:emit} ensures that \exprDenot{H}{ck}
+    {\emit{e}}{\some{s'}} holds too. For all $k \in \N$, we have $\some{s'}[k] =
+        \some{s'[k]} = s[k]$, ensuring $\some{s'} \equiv s$. Therefore, \exprDenot{H}{ck}{\emit{e}}{s}.
+
+    \subparagraph{Operations}
+    Let $op(e^+)$ be the application of the operation $op$ to the expressions $e^+$.
+    The rule \nameref{rule:semantics:grsync:opsem:step:e:op:value} ensures the streams
+    $s^+$ constitute only one stream denoted by $s$ and there exist sequences of states
+    $(s_k^{\prime+})^+$ corresponding to each $e^+$ and streams $s^{\prime+}$ such that:
+    \begin{equation*}
+        \begin{array}{ll}
+                              & (s^{\prime+}_0) = ((\initstate{e})^+) \\
+            \forall k \in \N, &
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \left(\exprOpsem{\rho_k}{s'_k}{e}{s'_{k+1}}{s'[k]}\right)^+ \\
+                    \wedge & op((s'[k])^+) = s[k]                                        \\
+                    \wedge & s_k = (s^{\prime+}_k)                                       \\
+                \end{array}
+                \right.                                                                                   \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,  (s'_{k+1} = s'_k)^+ \wedge (s'[k] = \bot)^+. \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    The structural induction hypothesis applied on all $e^+$ ensures that all $(\exprDenot{H}{ck}{e}
+        {s'})^+$ hold. The rule \nameref{rule:semantics:grsync:denot:e:op} ensures that \exprDenot
+    {H}{ck}{op(e^+)}{op(s^{\prime+})} holds too. For all $k \in \N$, we have $op(
+        s^{\prime+})[k] = op((s'[k])^+) = s[k]$. Therefore \exprDenot{H}{ck}{op(e^+)}{s} holds.
+
+    \subparagraph{Component applications}
+    Let $f(e^+)$ be the application of the component $f$ to the expressions $e^+$.
+    The rule \nameref{rule:semantics:grsync:opsem:step:e:app:value} ensures that there exist
+    sequences of states $(s_k^{i +})^+$ corresponding to each $e^+$, a sequence of states
+    $(s_k^{f +})$ corresponding to $f$, and streams $s^{\prime+}$ such that:
+    \begin{equation*}
+        \begin{array}{ll}
+                              & (s^f_0, s^{i +}_0) = (\initsync{f}, (\initsync{e})^+) \\
+            \forall k \in \N, &
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \left(\exprOpsem{\rho_k}{s^i_k}{e}{s^i_{k+1}}{s'[k]}\right)^+ \\
+                    \wedge & \compOpsem{s^f_k}{(s'[k])^+}{f}{s^f_{k+1}}{(s[k])^+}          \\
+                    \wedge & s_k = (s^f_k, s^{i +}_k)                                      \\
+                \end{array}
+                \right.                                                                 \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,
+                s^f_{k+1} = s^f_k \wedge (s^i_{k+1} = s^i_k)^+ \wedge (s'[k] = \bot)^+. \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    The structural induction hypothesis applied on all $e^+$ ensures that all $(\exprDenot{H}{ck}{e}
+        {s'})^+$ hold. The rule \nameref{rule:semantics:grsync:theorems:productivity:observe:component} implies that for
+    all $k \in \N$ we have $\obsComp{f}{[s^{\prime+}]}{k} = (s[k])^+$. By the induction
+    hypothesis on component applications (component recursion is not allowed), \compDenot{ck}{f}
+    {s^{\prime+}}{s^+} holds. The rule \nameref{rule:semantics:grsync:denot:e:app} ensures that
+    \exprDenot{H}{ck}{f(e^+)}{s^+} holds.
+
+    \paragraph{Denotational $\Rightarrow$ Operational}
+    Let $s^+$ be streams such that the denotational semantics \exprDenot{H}{ck}{e}{s^+} holds.
+
+    The productivity of \GRSync expressions (\Cref{lem:semantics:grsync:theorems:productivity:expression})
+    ensures that for all environment $\rho$ and all $x \in \deps{e}$ such that $\rho[x] \neq \bot$
+    the step function of $e$ in $\rho$ from any state that corresponds to $e$ produces a new
+    compatible state and a well-defined value.
+
+    It is then possible to construct a sequence of states $(s_k^+)$ and streams $s^{\prime+}$ such
+    that:
+    \begin{equation*}
+        s_0 = \initsync{e} \qquad
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+                   & ck[k] = \true \, \Rightarrow \,
+            \exprOpsem{\rho_k}{s_k}{e}{s_{k+1}}{(s'[k])^+} \\
+            \wedge & ck[k] \neq \true \, \Rightarrow \,
+            s_{k+1} = s_k \wedge (s'[k] = \bot)^+.         \\
+        \end{array}
+        \right.
+    \end{equation*}
+
+    Paragraph~\ref{sec:semantics:grsync:theorems:equivalence:e:proof:op_to_den} ensures the streams
+    $s^{\prime+}$ satisfy the denotational semantics \exprDenot{H}{ck}{e}{s^{\prime+}}. For all
+    $n \in \N$, \Cref{lem:semantics:grsync:theorems:determinism:e} ensures $s^{\prime+}$ and $s^+$ are
+    equivalent up-to-$n$, which implies that $(s' \equiv s)^+$. The simulation of $e$ can then be
+    rewritten as:
+    \begin{equation*}
+        s_0 = \initsync{e} \qquad
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+                   & ck[k] = \true \, \Rightarrow \,
+            \exprOpsem{\rho_k}{s_k}{e}{s_{k+1}}{(s[k])^+} \\
+            \wedge & ck[k] \neq \true \, \Rightarrow \,
+            s_{k+1} = s_k \wedge (s[k] = \bot)^+,         \\
+        \end{array}
+        \right.
+    \end{equation*}
+    which concludes the proof.
+
+    \setcounter{paragraph}{0}
+    \setcounter{subparagraph}{0}
+\end{skippableproof}
+
+\begin{lemma}[Equivalence for \GRSync patterns]
+    \label{lem:semantics:grsync:theorems:equivalence:pat}
+    Let \guarded{pat^+ = s^+}{e_g} be a well-typed \GRSync pattern guarded by $e_g$ matching the
+    streams $s^+$, $ck$ be a clock, $H$ be a stream context, and $(\rho_k^+)$ be a sequence of
+    environments such that:
+    \begin{equation*}
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+                   & ck[k] = \true \, \Rightarrow \, \forall x \in \deps{e_g}, \,
+            \rho_k[x] = H[x][k] \neq \bot                                                   \\
+            \wedge & ck[k] \neq \true \, \Rightarrow \,  \rho_k = \emptyrho \wedge (\forall
+            x \in \deps{e_g}, \,  H[x][k] = \bot).                                          \\
+        \end{array}
+        \right.
+    \end{equation*}
+
+    For all clock $ck'$, \patDenot{H}{ck}{\guarded{pat^+ = s^+}{e_g}}{ck'} holds \iff there exist a
+    sequence of environments $(\rho_k^{\prime+})$ such that:
+    \begin{equation*}
+        \begin{array}{ll}
+            \forall k \in \N, &
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \patOpsem{\rho_k}{\guarded{pat^+ = s[k]^+}{e_g}}{ck'[k]}{\rho'_k} \\
+                    \wedge & \forall x \in \defs{pat^+}, \, H[x][k] = \rho'_k[x]               \\
+                \end{array}
+                \right.                                     \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \rho'_k = \emptyrho \wedge ck'[k] = \bot       \\
+                    \wedge & \forall x \in \defs{pat^+}, \, H[x][k] = \bot. \\
+                \end{array}
+                \right.                                     \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+\end{lemma}
+\begin{skippableproof}
+    Let \guarded{pat^+ = s^+}{e_g} be a well-typed \GRSync pattern matching the streams $s^+$, $ck$
+    be a clock, $H$ be a stream context, and $(\rho_k^+)$ be a sequence of environments such that:
+    \begin{equation*}
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+                   & ck[k] = \true \, \Rightarrow \, \forall x \in \deps{e_g}, \,
+            \rho_k[x] = H[x][k] \neq \bot                                                  \\
+            \wedge & ck[k] \neq \true \, \Rightarrow \, \rho_k = \emptyrho \wedge (\forall
+            x \in \deps{e_g}, \, H[x][k] = \bot).                                          \\
+        \end{array}
+        \right.
+    \end{equation*}
+
+    \paragraph{Operational $\Rightarrow$ Denotational}
+    \label{sec:semantics:grsync:theorems:equivalence:pat:proof:op_to_den}
+    Let $ck'$ be a clock, and $(\rho_k^{\prime+})$ a sequence of environments such that:
+    \begin{equation*}
+        \begin{array}{ll}
+            \forall k \in \N, &
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \patOpsem{\rho_k}{\guarded{pat^+ = s[k]^+}{e_g}}{ck'[k]}{\rho'_k} \\
+                    \wedge & \forall x \in \defs{pat^+}, \, H[x][k] = \rho'_k[x]               \\
+                \end{array}
+                \right.                                     \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \rho'_k = \emptyrho \wedge ck'[k] = \bot       \\
+                    \wedge & \forall x \in \defs{pat^+}, \, H[x][k] = \bot. \\
+                \end{array}
+                \right.                                     \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    In order to prove that the denotational semantics \patDenot{H}{ck}{\guarded{pat^+ = s^+}{e_g}}
+    {ck'} holds, we proceed by structural induction on $pat^+$.
+
+    \subparagraph{Guarded patterns}
+    The rule \nameref{rule:semantics:grsync:opsem:step:pats:bool} ensures there exist clocks
+    $ck^{\prime\prime+}$, a sequence of environments $(\rho_k^{\prime\prime+})$, and a stream $s_g$
+    such that:
+    \begin{equation*}
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+                   & ck[k] = \true \, \Rightarrow \,
+            \left\{
+            \begin{array}{ll}
+                       & \left(\patOpsem{\rho_k}{pat = s[k]}{ck^{\prime\prime}[k]}{\rho^{\prime\prime}_k}\right)^+                               \\
+                \wedge & \exprOpsem{\rho_k \ctxconcat \bigCtxconcat \rho^{\prime\prime+}_k}{()}{e_g}{()}{s_g[k]}                                 \\
+                \wedge & ck'[k] = (s_g[k] \kwf{\&\&} (\kwf{\&\&}(ck^{\prime\prime}[k]^+))) \wedge \rho'_k = \bigCtxconcat \rho^{\prime\prime+}_k \\
+            \end{array}
+            \right.                                     \\
+            \wedge & ck[k] \neq \true \, \Rightarrow \,
+            (ck^{\prime\prime}[k] = \bot)^+ \wedge (\rho^{\prime\prime}_k = \emptyrho)^+
+            \wedge s_g[k] = \bot.                       \\
+        \end{array}
+        \right.
+    \end{equation*}
+
+    By structural induction on each pattern $pat = s$ matching the stream $s$, each semantics
+    \patDenot{H}{ck}{pat = s}{ck^{\prime\prime}} holds. Moreover, for all $k \in \N$ and all
+    identifier $x \in \defs{pat}$, the environment $\rho^{\prime\prime}_k$ corresponding to the
+    pattern $pat$ ensures $H[x][k] = \rho^{\prime\prime}_k[x]$ when $ck^{\prime\prime}$ is
+    \true.
+
+    Let $ck_p$ be the clock such that $ck_p \equiv \kwf{\&\&}(ck^{\prime\prime+})$. We define the
+    stream $ck_g$ such that:
+    \begin{equation*}
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{lll}
+            ck_p[k] = \true  & \Rightarrow & ck_g[k] = s_g[k] \\
+            ck_p[k] = \false & \Rightarrow & ck_g[k] = \false \\
+            ck_p[k] = \bot   & \Rightarrow & ck_g[k] = \bot.  \\
+        \end{array}
+        \right.
+    \end{equation*}
+    %
+    It implies that for all $k \in \N$:
+    \begin{align}
+         & \begin{array}{ll}
+               ck_p[k] = \true    & \Rightarrow \,
+               \left\{
+               \begin{array}{ll}
+                \forall x \in \deps{e_g}, & \whenT{H}{ck_p}[x][k] =
+                (\rho_k \ctxconcat \bigCtxconcat \rho^{\prime\prime+}_k)[x] \neq \bot \\
+                \wedge                    & \whenT{ck}{ck_p}[k] = \true               \\
+                \wedge                    & \whenT{ck_g}{ck_p}[k] = s_g[k]            \\
+            \end{array}
+               \right.                             \\
+               ck_p[k] \neq \true & \Rightarrow \,
+               \left\{
+               \begin{array}{ll}
+                \forall x \in \deps{e_g}, & \whenT{H}{ck_p}[x][k] = \bot  \\
+                \wedge                    & \whenT{ck}{ck_p}[k] = \bot    \\
+                \wedge                    & \whenT{ck_g}{ck_p}[k] = \bot. \\
+            \end{array}
+               \right.                             \\
+           \end{array} \label{eq:semantics:grsync:theorems:equivalence:pats:whenT} \\
+         & \begin{array}{ll}
+               ck_p[k] = \false    & \Rightarrow \,
+               \left\{
+               \begin{array}{ll}
+                       & \whenF{ck}{ck_p}[k] = \true    \\
+                \wedge & \whenF{ck_g}{ck_p}[k] = \false \\
+            \end{array}
+               \right.                              \\
+               ck_p[k] \neq \false & \Rightarrow \,
+               \left\{
+               \begin{array}{ll}
+                       & \whenF{ck}{ck_p}[k] = \bot    \\
+                \wedge & \whenF{ck_g}{ck_p}[k] = \bot. \\
+            \end{array}
+               \right.                              \\
+           \end{array} \label{eq:semantics:grsync:theorems:equivalence:pats:whenF}
+    \end{align}
+    %
+    From \Cref{eq:semantics:grsync:theorems:equivalence:pats:whenT}, we can apply \Cref{lem:semantics:grsync:theorems:equivalence:e}
+    to state that the association of the guard $e_g$ to $ck_g$ filtered when $ck_p$ is \true
+    holds: $$\exprDenot{\whenT{H}{ck_p}}{\whenT{ck}{ck_p}}{e_g}{\whenT{ck_g}{ck_p}}.$$
+    %
+    Moreover, \Cref{eq:semantics:grsync:theorems:equivalence:pats:whenF} ensures that when $ck_p$ is \false, $ck_g$ is a
+    stream constantly equal to \false: $$\whenF{ck_g}{ck_p} \equiv
+        \const{\false}{\whenF{ck}{ck_p}}.$$
+    %
+    The rule \nameref{rule:semantics:grsync:denot:pats} implies that the guarded pattern \guarded
+    {pat^+ = s^+}{e_g} is associated with $ck_g$: $$\patDenot{H}{ck}{\guarded{pat^+ = s^+}{e_g}}{ck_g}.$$
+    %
+    For all $k \in \N$ such that $ck[k] = \true$, we have $ck_g[k]$ equals $s_g[k]$
+    when $ck_p[k]$ is \true and equals \false when $ck_p[k]$ is \false. Therefore, we
+    can say that $ck_g[k]$ equals $s_g[k] \kwf{\&\&} ck_p[k]$. For all $k \in \N$ such that
+    $ck[k] = \true$, we have $ck_p[k] = \kwf{\&\&}(ck^{\prime\prime+})[k]$ by construction,
+    which implies: $$ck_g[k] = s_g[k] \kwf{\&\&} (\kwf{\&\&} (ck^{\prime\prime+}))[k] = ck'[k].$$
+    %
+    Therefore \patDenot{H}{ck}{\guarded{pat^+ = s^+}{e_g}}{ck'} holds.
+
+    \subparagraph{Wildcards}
+    Let $\_ = s$ be a wildcard pattern matching the stream $s$. The rule \nameref{rule:semantics:%
+        grsync:opsem:step:pat:wild} ensures that:
+    \begin{equation*}
+        \begin{array}{l}
+            \forall k \in \N, \,
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \patOpsem{\rho_k}{\_ = s[k]}{ck'[k]}{[]} \\
+                    \wedge & ck'[k] = \true                           \\
+                \end{array}
+                \right.                                                    \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \, ck'[k] = \bot, \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    which implies that $ck' \equiv \const{\true}{ck}$. The rule \nameref{rule:%
+        semantics:grsync:denot:pat:wild} ensures that the denotational semantics \patDenot{H}{ck}
+    {\_ = s}{\const{\true}{ck}} holds, and therefore that the semantics \patDenot
+    {H}{ck}{\_ = s}{ck'} holds too.
+
+    \subparagraph{Constants}
+    Let $c = s$ be a constant pattern matching the stream $s$. Rule \nameref{rule:semantics:%
+        grsync:opsem:step:pat:const} ensures that:
+    \begin{equation*}
+        \begin{array}{l}
+            \forall k \in \N, \,
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \patOpsem{\rho_k}{c = s[k]}{ck'[k]}{[]} \\
+                    \wedge & ck'[k] = (s[k] \kwf{==} c)              \\
+                \end{array}
+                \right.                                                    \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \, ck'[k] = \bot, \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    which implies that $ck' \equiv (\cdot \kwf{==} c)(s)$. The rule \nameref{rule:semantics:grsync:%
+        denot:pat:const} ensures that the denotational semantics \patDenot{H}{ck}{c = s}{(\cdot
+        \kwf{==} c)(s)} holds, and therefore that \patDenot{H}{ck}{c = s}{ck'} holds too.
+
+    \subparagraph{Identifiers}
+    Let $x = s$ be an identifier pattern matching the stream $s$. The rule \nameref{rule:semantics:%
+        grsync:opsem:step:pat:ident} ensures that:
+    \begin{equation*}
+        \begin{array}{l}
+            \forall k \in \N, \,
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \patOpsem{\rho_k}{x = s[k]}{ck'[k]}{\rho'_k} \\
+                    \wedge & ck'[k] = \true \wedge \rho'_k = [s[k] / x]   \\
+                \end{array}
+                \right.                                     \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,
+                ck'[k] = \bot \wedge H[x][k] = \bot,        \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    which implies that $ck' \equiv \const{\true}{ck}$, that for all $k \in
+        \N$ such that $ck[k]$ is \true we have $H[x][k] = s[k]$, so that $H[x] \equiv
+        s$. The rule \nameref{rule:semantics:grsync:denot:pat:ident} ensures that the denotational
+    semantics \patDenot{H}{ck}{x = s}{\const{\true}{ck}} holds, so that
+    \patDenot{H}{ck}{x = s}{ck'} holds too.
+
+    \paragraph{Denotational $\Rightarrow$ Operational}
+    Let $ck'$ be a clock such that the denotational semantics \patDenot{H}{ck}{\guarded{pat^+ = s^+}
+        {e_g}}{ck'} holds.
+
+    The productivity of \GRSync patterns (\Cref{lem:semantics:grsync:theorems:productivity:patterns})
+    ensures that for all environment $\rho$ such that for all $x \in \deps{e_g}$ we have $\rho[x]
+        \neq \bot$, and for all values $v^+$ the step function of \guarded{pat^+ = v^+}{e_g} in
+    $\rho$ produces a boolean $b$ and an environment where identifiers defined by $pat^+$ are
+    well-defined if $b$ is \true.
+    %
+    It is then possible to construct a sequence of environments $(\rho_k^{\prime+})$, a clock
+    $ck^{\prime\prime}$, and a stream context $H'$ as follows.
+    \begin{equation*}
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+                   & ck[k] = \true \, \Rightarrow \,
+            \left\{
+            \begin{array}{ll}
+                       & \patOpsem{\rho_k}{\guarded{pat^+ = s[k]^+}{e_g}}{ck^{\prime\prime}[k]}{\rho'_k} \\
+                \wedge & \forall x \in \defs{pat^+}, \, H'[x][k] = \rho'_k[x]                            \\
+            \end{array}
+            \right.                                     \\
+            \wedge & ck[k] \neq \true \, \Rightarrow \,
+            \left\{
+            \begin{array}{ll}
+                       & \rho'_k = \emptyrho \wedge ck'[k] = \bot         \\
+                \wedge & \forall x \in \defs{pat^+}, \,  H'[x][k] = \bot. \\
+            \end{array}
+            \right.                                     \\
+        \end{array}
+        \right.
+    \end{equation*}
+    Paragraph~\ref{sec:semantics:grsync:theorems:equivalence:pat:proof:op_to_den} ensures the clock
+    $ck^{\prime\prime}$ satisfies \patDenot{H'}{ck}{\guarded{pat^+ = s^+}{e_g}}{ck^{\prime\prime}}.
+
+    For all $n \in \N$, \Cref{lem:semantics:grsync:theorems:determinism:pat} ensures that
+    $ck^{\prime\prime} \equiv_n ck'$ and that for all $x \in \defs{pat^+}$ the streams $H'[x]$ and
+    $H[x]$ are equivalent up-to-$n$. It implies that $ck^{\prime\prime} \equiv ck'$ and for all $x
+        \in \defs{pat^+}$ we have $H'[x] \equiv H[x]$. The simulation of $pat^+$ can then be
+    rewritten as:
+    \begin{equation*}
+        \begin{array}{l}
+            \forall k \in \N, \,
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \patOpsem{\rho_k}{\guarded{pat^+ = s^+}{e_g}}{ck'[k]}{\rho'_k} \\
+                    \wedge & \forall x \in \defs{pat^+}, \, H[x][k] = \rho'_k[x]            \\
+                \end{array}
+                \right.                                     \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \rho'_k = \emptyrho \wedge ck'[k] = \bot         \\
+                    \wedge & \forall x \in \defs{pat^+}, \,  H'[x][k] = \bot, \\
+                \end{array}
+                \right.                                     \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    which concludes the proof.
+
+    \setcounter{paragraph}{0}
+    \setcounter{subparagraph}{0}
+\end{skippableproof}
+
+\begin{lemma}[Equivalence for \GRSync event patterns]
+    \label{lem:semantics:grsync:theorems:equivalence:epat}
+    Let \guarded{epat^+}{e_g} be a well-typed \GRSync event pattern guarded by $e_g$, $ck$ be a
+    clock, $H$ be a stream context, and $(\rho_k^+)$ be a sequence of environments such that:
+    \begin{equation*}
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+                   & ck[k] = \true \, \Rightarrow \,  \forall x \in \deps{epat^+} \cup \deps{e_g}, \,
+            \rho_k[x] = H[x][k] \neq \bot                                                             \\
+            \wedge & ck[k] \neq \true \, \Rightarrow \,  \rho_k = \emptyrho \wedge (\forall
+            x \in \deps{epat^+} \cup \deps{e_g}, \, H[x][k] = \bot).                                  \\
+        \end{array}
+        \right.
+    \end{equation*}
+
+    For all clock $ck'$, the denotational semantics \epatDenot{H}{ck}{\guarded{epat^+}{e_g}}{ck'}
+    holds \iff there exist a sequence of states $(s_k^+)$ corresponding to $epat^+$, and a sequence
+    of environments $(\rho_k^{\prime+})$ such that:
+    \begin{equation*}
+        \begin{array}{ll}
+                              & s_0 = \initstate{epat^+} \\
+            \forall k \in \N, &
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \epatOpsem{\rho_k}{s_k}{\guarded{epat^+}{e_g}}{s_{k+1}}{ck'[k]}{\rho'_k} \\
+                    \wedge & \forall x \in \defs{epat^+}, \, H[x][k] = \rho'_k[x]                     \\
+                \end{array}
+                \right.                                     \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & s_{k+1} = s_k \wedge \rho'_k = \emptyrho \wedge ck'[k] = \bot \\
+                    \wedge & \forall x \in \defs{epat^+}, \, H[x][k] = \bot.               \\
+                \end{array}
+                \right.                                     \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+\end{lemma}
+\begin{skippableproof}
+    Let \guarded{epat^+}{e_g} be a well-typed \GRSync event pattern guarded by $e_g$, $ck$ be a
+    clock, $H$ be a stream context, and $(\rho_k^+)$ be a sequence of environments such that:
+    \begin{equation*}
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+                   & ck[k] = \true \, \Rightarrow \,  \forall x \in \deps{epat^+} \cup \deps{e_g}, \,
+            \rho_k[x] = H[x][k] \neq \bot                                                             \\
+            \wedge & ck[k] \neq \true \, \Rightarrow \,  \rho_k = \emptyrho \wedge (\forall
+            x \in \deps{epat^+} \cup \deps{e_g}, \, H[x][k] = \bot).                                  \\
+        \end{array}
+        \right.
+    \end{equation*}
+
+    \paragraph{Operational $\Rightarrow$ Denotational}
+    \label{sec:semantics:grsync:theorems:equivalence:epat:proof:op_to_den}
+    Let $ck'$ be a clock, $(s_k^+)$ be a sequence of states corresponding to $epat^+$, and
+    $(\rho_k^{\prime+})$ be a sequence of environments such that:
+    \begin{equation*}
+        \begin{array}{ll}
+                              & s_0 = \initstate{epat^+} \\
+            \forall k \in \N, &
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \epatOpsem{\rho_k}{s_k}{\guarded{epat^+}{e_g}}{s_{k+1}}{ck'[k]}{\rho'_k} \\
+                    \wedge & \forall x \in \defs{epat^+}, \, H[x][k] = \rho'_k[x]                     \\
+                \end{array}
+                \right.                                     \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & s_{k+1} = s_k \wedge \rho'_k = \emptyrho \wedge ck'[k] = \bot \\
+                    \wedge & \forall x \in \defs{epat^+}, \, H[x][k] = \bot.               \\
+                \end{array}
+                \right.                                     \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    In order to prove that the denotational semantics \epatDenot{H}{ck}{\guarded{epat^+}{e_g}}{ck'}
+    holds, we proceed by structural induction on $epat^+$.
+
+    \subparagraph{Guarded event patterns}
+    The rule \nameref{rule:semantics:grsync:opsem:step:epats:bool} ensures there exist sequences of
+    states $(s_k^{\prime+})^+$, clocks $ck^{\prime\prime+}$, a sequence of environments
+    $(\rho_k^{\prime\prime+})$, and a stream $s_g$ such that:
+    \begin{equation*}
+        \begin{array}{ll}
+                              & (s_0^{\prime+}) = ((\initstate{epat})^+) \\
+            \forall k \in \N, &
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & s_k = (s_k^{\prime+})                                                                                                  \\
+                    \wedge & \left(\epatOpsem{\rho_k}{s'_k}{epat}{s'_{k+1}}{ck^{\prime\prime}[k]}{\rho^{\prime\prime}_k}\right)^+                   \\
+                    \wedge & \exprOpsem{\rho_k \ctxconcat \bigCtxconcat \rho^{\prime\prime+}_k}{()}{e_g}{()}{s_g[k]}                                \\
+                    \wedge & ck'[k] = (s_g[k] \kwf{\&\&} (\kwf{\&\&} ck^{\prime\prime}[k])^+) \wedge \rho'_k = \bigCtxconcat \rho^{\prime\prime+}_k \\
+                \end{array}
+                \right.                                                     \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,
+                (s'_{k+1} = s'_k)^+ \wedge (ck^{\prime\prime}[k] = \bot)^+ \wedge
+                (\rho^{\prime\prime}_k = \emptyrho)^+ \wedge s_g[k] = \bot. \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+
+    By structural induction on each event patterns $epat$, the semantics \epatDenot{H}{ck}{epat}
+    {ck^{\prime\prime}} holds, and for all $k \in \N$ and identifier $x \in \defs{epat}$,
+    the environment $\rho^{\prime\prime}_k$ corresponding to the pattern $epat$ ensures $H[x][k] =
+        \rho^{\prime\prime}_k[x]$.
+
+    Let $ck_p$ be the clock such that $ck_p \equiv \kwf{\&\&}(ck^{\prime\prime+})$. We define the
+    stream $ck_g$ such that:
+    \begin{equation*}
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{lll}
+            ck_p[k] = \true  & \Rightarrow & ck_g[k] = s_g[k] \\
+            ck_p[k] = \false & \Rightarrow & ck_g[k] = \false \\
+            ck_p[k] = \bot   & \Rightarrow & ck_g[k] = \bot.  \\
+        \end{array}
+        \right.
+    \end{equation*}
+    %
+    It implies that for all $k \in \N$:
+    \begin{align}
+         & \begin{array}{ll}
+               ck_p[k] = \true    & \Rightarrow \,
+               \left\{
+               \begin{array}{ll}
+                \forall x \in \deps{e_g}, & \whenT{H}{ck_p}[x][k] =
+                (\rho_k \ctxconcat \bigCtxconcat \rho^{\prime\prime+}_k)[x] \neq \bot \\
+                \wedge                    & \whenT{ck}{ck_p}[k] = \true               \\
+                \wedge                    & \whenT{ck_g}{ck_p}[k] = s_g[k]            \\
+            \end{array}
+               \right.                             \\
+               ck_p[k] \neq \true & \Rightarrow \,
+               \left\{
+               \begin{array}{ll}
+                \forall x \in \deps{e_g}, & \whenT{H}{ck_p}[x][k] = \bot  \\
+                \wedge                    & \whenT{ck}{ck_p}[k] = \bot    \\
+                \wedge                    & \whenT{ck_g}{ck_p}[k] = \bot. \\
+            \end{array}
+               \right.                             \\
+           \end{array} \label{eq:semantics:grsync:theorems:equivalence:epats:whenT} \\
+         & \begin{array}{ll}
+               ck_p[k] = \false    & \Rightarrow \,
+               \left\{
+               \begin{array}{ll}
+                       & \whenF{ck}{ck_p}[k] = \true    \\
+                \wedge & \whenF{ck_g}{ck_p}[k] = \false \\
+            \end{array}
+               \right.                              \\
+               ck_p[k] \neq \false & \Rightarrow \,
+               \left\{
+               \begin{array}{ll}
+                       & \whenF{ck}{ck_p}[k] = \bot    \\
+                \wedge & \whenF{ck_g}{ck_p}[k] = \bot. \\
+            \end{array}
+               \right.                              \\
+           \end{array} \label{eq:semantics:grsync:theorems:equivalence:epats:whenF}
+    \end{align}
+    %
+    From \Cref{eq:semantics:grsync:theorems:equivalence:epats:whenT}, we can apply \Cref{lem:semantics:grsync:theorems:equivalence:%
+        e} to state that the association of the guard $e_g$ to $ck_g$ filtered when $ck_p$ is
+    \true holds: $$\exprDenot{\whenT{H}{ck_p}}{\whenT{ck}{ck_p}}{e_g}{
+            \whenT{ck_g}{ck_p}}.$$
+    %
+    Moreover, \Cref{eq:semantics:grsync:theorems:equivalence:epats:whenF} ensures that when $ck_p$ is \false,
+    $ck_g$ is a stream constantly equal to \false: $$\whenF{ck_g}{ck_p} \equiv
+        \const{\false}{\whenF{ck}{ck_p}}.$$
+    %
+    The rule \nameref{rule:semantics:grsync:denot:epats} implies that the guarded event pattern
+    \guarded{epat^+}{e_g} is associated with $ck_g$: $$\epatDenot{H}{ck}{\guarded{epat^+}{e_g}}{ck_g}.$$
+    %
+    For all $k \in \N$ such that $ck[k] = \true$, we have $ck_g[k]$ equals $s_g[k]$
+    when $ck_p[k]$ is \true and equals \false when $ck_p[k]$ is \false. Therefore, we
+    can say that $ck_g[k]$ equals $s_g[k] \kwf{\&\&} ck_p[k]$. For all $k \in \N$ such that
+    $ck[k] = \true$, we have $ck_p[k] = \kwf{\&\&}(ck^{\prime\prime+})[k]$ by construction,
+    which implies: $$ck_g[k] = s_g[k] \kwf{\&\&} (\kwf{\&\&} (ck^{\prime\prime+}))[k] = ck'[k].$$
+    %
+    Therefore \epatDenot{H}{ck}{\guarded{epat^+}{e_g}}{ck'} holds.
+
+    \subparagraph{Event detection}
+    Let \detect{x}{y} be an event detection pattern. Rules
+    \nameref{rule:semantics:grsync:opsem:step:epat:event:some} and
+    \nameref{rule:semantics:grsync:opsem:step:epat:event:none} ensure that there exists a sequence
+    of values $(v_k^+)$ such that:
+    \begin{equation*}
+        \begin{array}{l}
+            \forall k \in \N, \,
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \rho_k[y] = \none \Rightarrow ck'[k] = \false \wedge \rho'_k = \botrho{\{x\}} \\
+                    \wedge & \rho_k[y] = \some{v_k} \Rightarrow ck'[k] = \true \wedge \rho'_k = [v_k / x]  \\
+                    \wedge & \epatOpsem{\rho_k}{()}{\detect{x}{y}}{()}{ck'[k]}{\rho'_k}                    \\
+                \end{array}
+                \right.                                                                          \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \, ck'[k] = \bot \wedge H[x][k] = \bot. \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+
+    For all $k \in \N$ such that $ck$ is \true, we have $H[y][k] = \rho_k[y]$ by
+    initial hypothesis. Then we have $ck'[k] = \isSome{H[y][k]}$, which implies $ck' \equiv
+        \isSome{H[y][k]}$.
+
+    Because we also have $H[x][k] = \rho_k[x]$ for all $k \in \N$ such that $ck$ is
+    \true, then for all $k \in \N$ such that $ck'[k]$ is \true we have $H[y][k] =
+        \some{H[x][k]}$. It implies that the filtered stream are equivalent:
+    $\whenT{H[y]}{ck'} \equiv \whenT{\some{H[x]}}{ck'}$.
+
+    The rule \nameref{rule:semantics:grsync:denot:epat:event} ensures that the denotational
+    semantics \epatDenot{H}{ck}{\detect{x}{y}}{ck'} holds.
+
+    \subparagraph{Rising edges}
+    Let $e$ be a rising edge. The rule \nameref{rule:semantics:grsync:opsem:step:epat:edge:bool}
+    ensures that there exists a sequence of states $(s_k^{\prime+})$ corresponding to $e$, streams
+    $s^m$ and $s'$ such that:
+    \begin{equation*}
+        \begin{array}{ll}
+                              & (s^m[0], s'_0) = (\false, \initstate{e}) \\
+            \forall k \in \N, &
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \exprOpsem{\rho_k}{s'_k}{e}{s'_{k+1}}{s'[k]}                          \\
+                    \wedge & s_k = (s^m[k], s'_k) \wedge s^m[k+1] = s'[k]                          \\
+                    \wedge & ck'[k] = (s'[k] \kwf{\&\&} \kwf{!} s^m[k]) \wedge \rho'_k = \emptyrho \\
+                \end{array}
+                \right.                                     \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & (s^m[k+1], s'_{k+1}) = (s^m[k], s'_{k})                       \\
+                    \wedge & s'[k] = \bot \wedge ck'[k] = \bot \wedge \rho'_k = \emptyrho. \\
+                \end{array}
+                \right.                                     \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+
+    \Cref{lem:semantics:grsync:theorems:equivalence:e} ensures that the denotational semantics of $e$ holds:
+    \exprDenot{H}{ck}{e}{s'}.
+
+    The first value of $s^m$ is $s^m[0] = \false$, and for all $k \in \N$ such that
+    $ck[k]$ is \true we have $s^m[k+1] = s'[k]$ and if $ck[k]$ is \false we have $s^m[k+1]
+        = s^m[k]$. It implies that $\whenT{s^m}{ck} \equiv \buffer{\false}{s'}$.
+
+    Moreover, for all $k \in \N$ such that $ck[k]$ is \true, we have $ck'[k] = (s'[k]
+        \kwf{\&\&} \kwf{!} s^m[k])$, and if $ck[k]$ is \false we have $ck'[k] = \bot$, so that
+    $ck' \equiv s'\kwf{\&\&} \kwf{!}\whenT{s^m}{ck}$,
+    which implies that $ck' \equiv s' \kwf{\&\&} \kwf{!} \buffer{\false}{s'}$.
+
+    The rule \nameref{rule:semantics:grsync:denot:epat:edge} ensures that \epatDenot{H}{ck}{e}{ck'}
+    holds.
+
+    \paragraph{Denotational $\Rightarrow$ Operational}
+    Let $ck'$ be a clock such that the denotational semantics \epatDenot{H}{ck}{\guarded{epat^+}
+        {e_g}}{ck'} holds.
+
+    The productivity of \GRSync event patterns (\Cref{lem:semantics:grsync:theorems:productivity:epat})
+    ensures that for all environment $\rho$ and all $x \in \deps{epat^+} \cup \deps{e_g}$ such that
+    $\rho[x] \neq \bot$, the step function of \guarded{epat^+}{e_g} in $\rho$ from any state
+    produces a new state, a boolean $b$, and an environment where identifiers defined by $epat^+$
+    are well-defined if $b$ is \true.
+
+    It is then possible to construct a sequence of states $(s_k^+)$, a sequence of environments
+    $(\rho_k^{\prime+})$, a clock $ck^{\prime\prime}$, and a stream context $H'$ as follows.
+    \begin{equation*}
+        \begin{array}{ll}
+                              & s_0 = \initstate{epat^+} \\
+            \forall k \in \N, &
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \epatOpsem{\rho_k}{s_k}{\guarded{epat^+}{e_g}}{s_{k+1}}{ck^{\prime\prime}[k]}{\rho'_k} \\
+                    \wedge & \forall x \in \defs{epat^+}, \, H'[x][k] = \rho'_k[x]                                  \\
+                \end{array}
+                \right.                                     \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & s_{k+1} = s_k \wedge \rho'_k = \emptyrho \wedge ck'[k] = \bot \\
+                    \wedge & \forall x \in \defs{epat^+}, \, H'[x][k] = \bot.              \\
+                \end{array}
+                \right.                                     \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    %
+    Paragraph~\ref{sec:semantics:grsync:theorems:equivalence:epat:proof:op_to_den} ensures the clock
+    $ck^{\prime\prime}$ satisfies \epatDenot{H'}{ck}{\guarded{epat^+}{e_g}}{ck^{\prime\prime}}.
+
+    For all $n \in \N$, \Cref{lem:semantics:grsync:theorems:determinism:epat} ensures that
+    $ck^{\prime\prime} \equiv_n ck'$ and that for all $x \in \defs{epat^+}$ the streams $H'[x]$ and
+    $H[x]$ are equivalent up-to-$n$. It implies that $ck^{\prime\prime} \equiv ck'$ and for all $x
+        \in \defs{epat^+}$ we have $H'[x] \equiv H[x]$. The simulation of $epat^+$ can then be
+    rewritten as:
+    \begin{equation*}
+        \begin{array}{ll}
+                              & s_0 = \initstate{epat^+} \\
+            \forall k \in \N, &
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \epatOpsem{\rho_k}{s_k}{\guarded{epat^+}{e_g}}{s_{k+1}}{ck'[k]}{\rho'_k} \\
+                    \wedge & \forall x \in \defs{epat^+}, \, H[x][k] = \rho'_k[x]                     \\
+                \end{array}
+                \right.                                     \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & s_{k+1} = s_k \wedge \rho'_k = \emptyrho \wedge ck'[k] = \bot \\
+                    \wedge & \forall x \in \defs{epat^+}, \,  H'[x][k] = \bot,             \\
+                \end{array}
+                \right.                                     \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    which concludes the proof.
+
+    \setcounter{paragraph}{0}
+    \setcounter{subparagraph}{0}
+\end{skippableproof}
+
+\begin{lemma}[Equivalence for \GRSync equations]
+    \label{lem:semantics:grsync:theorems:equivalence:eq}
+    Let $eq^+$ be a well-typed and causal set of \GRSync equations, $ck$ be a clock, $H$ be a stream
+    context, and $(\rho_k^+)$ be a sequence of environments such that:
+    \begin{equation*}
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+                   & ck[k] = \true \, \Rightarrow \,
+            \forall x \in \deps{eq^+}, \, \rho_k[x] = H[x][k] \neq \bot               \\
+            \wedge & ck[k] \neq \true \, \Rightarrow \,
+            \rho_k = \emptyrho \wedge (\forall x \in \deps{eq^+}, \, H[x][k] = \bot). \\
+        \end{array}
+        \right.
+    \end{equation*}
+
+    The denotational semantics \eqDenot{H}{ck}{eq^+} holds \iff there exist a sequence of states
+    $(s_k^+)$ corresponding to $eq^+$ and a sequence of environments $(\rho_k^{\prime+})$ such that:
+    \begin{equation*}
+        \begin{array}{ll}
+                              & s_0 = \initstate{eq^+} \\
+            \forall k \in \N, &
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \eqOpsem{\rho_k}{s_k}{eq^+}{s_{k+1}}{\rho'_k}      \\
+                    \wedge & \forall x \in \defs{eq^+}, \, H[x][k] = \rho'_k[x] \\
+                \end{array}
+                \right.                                     \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & s_{k+1} = s_k \wedge \rho'_k = \emptyrho       \\
+                    \wedge & \forall x \in \defs{eq^+}, \,  H[x][k] = \bot. \\
+                \end{array}
+                \right.                                     \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+\end{lemma}
+\begin{skippableproof}
+    Both implications are proved by structural induction on \GRSync equations, and
+    relies on \Cref{%
+        lem:semantics:grsync:theorems:equivalence:e,%
+        lem:semantics:grsync:theorems:equivalence:pat,%
+        lem:semantics:grsync:theorems:equivalence:epat%
+    } that states the equivalence of semantics of \GRSync expressions, patterns, and event patterns.
+
+    \paragraph{Overview of the proof strategy}
+    As previously mentioned in the \Cref{rmk:semantics:grsync:theorems:equivalence}, the
+    difficulty aries in establishing the implication from the operational semantics to the
+    denotational semantics. More precisely, the difficult points in proving this implication are the
+    following.
+    \begin{itemize}
+        \item For blocks of mutually recursive equations, we use rank induction
+              (\Cref{def:semantics:grsync:causality:induction:rank}) to prove iteratively the
+              equality of the sequence of environments $(\rho_k^{\prime+})$ and the stream context
+              $H$ of the defined identifiers following their rank (\Cref{def:semantics:grsync:causality:rank}).
+        \item For \kwf{match} equations, we show that operational semantics implements the clock
+              filtering of the denotational semantics.
+        \item For \kwf{when} equations, it is a similar to \kwf{match} equations, but with corner
+              cases coming from the non-updated flows. We show that the operational semantics of
+              the non-updated flows implements their denotational semantics.
+    \end{itemize}
+
+
+    \paragraph{Operational $\Rightarrow$ Denotational}
+    \label{sec:semantics:grsync:theorems:equivalence:eq:proof:op_to_den}
+    Let $eq^+$ be a well-typed and causal set of \GRSync equations, $ck$ be a clock, $H$ be a stream
+    context, and $(\rho_k^+)$ be a sequence of environments such that:
+    \begin{equation*}
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+                   & ck[k] = \true \, \Rightarrow \,
+            \forall x \in \deps{eq^+}, \, \rho_k[x] = H[x][k] \neq \bot               \\
+            \wedge & ck[k] \neq \true \, \Rightarrow \,
+            \rho_k = \emptyrho \wedge (\forall x \in \deps{eq^+}, \, H[x][k] = \bot). \\
+        \end{array}
+        \right.
+    \end{equation*}
+
+    Let $(s_k^+)$ be a sequence of states corresponding to $eq^+$, and $(\rho_k^{\prime+})$ be a
+    sequence of environments such that:
+    \begin{equation*}
+        \begin{array}{ll}
+                              & s_0 = \initstate{eq^+} \\
+            \forall k \in \N, &
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \eqOpsem{\rho_k}{s_k}{eq^+}{s_{k+1}}{\rho'_k}      \\
+                    \wedge & \forall x \in \defs{eq^+}, \, H[x][k] = \rho'_k[x] \\
+                \end{array}
+                \right.                                     \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & s_{k+1} = s_k \wedge \rho'_k = \emptyrho       \\
+                    \wedge & \forall x \in \defs{eq^+}, \,  H[x][k] = \bot. \\
+                \end{array}
+                \right.                                     \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    In order to prove that the denotational semantics \eqDenot{H}{ck}{eq^+} holds, we proceed by
+    structural induction on $eq^+$.
+
+    \subparagraph{Multiple equations}
+    The rule \nameref{rule:semantics:grsync:opsem:step:eqs} ensures that for the set of equations
+    $eq^+ = (eq_1, \dots, eq_n) = eq_i^+$, there exist a sequence of $n$ states $((s_{k,1}, \dots,
+        s_{k,n})^+) = (s_{k, i})^+$ such that $s_{k, i}$ corresponds to $eq_i$, and:
+    \begin{equation*}
+        \begin{array}{ll}
+                              & (s_{0, 1}, \dots, s_{0, n}) = (\initstate{eq_1}, \dots, \initstate{eq_n}) \\
+            \forall k \in \N, &
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \fixsem{n+1}{\rho_k}{(s_{k, i})^+}{eq_i^+}{(s_{k+1, i})^+}{\rho'_k} \\
+                    \wedge & s_k = (s_{k, i})^+                                                  \\
+                \end{array}
+                \right.                                     \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                     & (s_{k+1, i})^+ = (s_{k, i})^+ \\
+                \end{array}
+                \right.                                     \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+
+    The rules \nameref{rule:semantics:grsync:opsem:step:fix0} and \nameref{rule:semantics:grsync:%
+        opsem:step:fixkp1} ensures that for all $j \in [0, n+1]$ there exist a sequence of $n$
+    states $((s_{k,j,1}, \dots, s_{k,j,n})^+) = (s_{k,j,i})^+$ such that $s_{k,j,i}$ corresponds to
+    $eq_i$, and a sequence of environments $(\rho_{k,j}^{+})$ such that the fix-point step functions
+    hold:
+    \begin{multline*}
+        \forall k \in \N, \\
+        \left\{
+        \begin{array}{ll}
+                   & \forall j \in [0, n+1], \,
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \fixsem{j}{\rho_k}{(s_{k, i})^+}{eq_i^+}{(s_{k,j,i})^+}{\rho_{k,j}} \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,
+                (\rho_{k,j} = \emptyrho \wedge (s_{k,j,i} = s_{k, i})^+)            \\
+            \end{array}
+            \right.                                                                             \\
+            \wedge & \rho_{k,0} = \botrho{\defs{eq_i^+}} \wedge (s_{k,0,i} = s_{k, i})^+ \wedge
+            \rho'_k = \rho_{k,n+1} \wedge (s_{k+1, i} = s_{k,n+1,i})^+                          \\
+        \end{array}
+        \right.
+    \end{multline*}
+
+    The causality of $eq_i^+$ allows us to prove the following property on all
+    $x \in \defs{eq_i^+}$, namely \P{x}, by rank induction
+    (\Cref{def:semantics:grsync:causality:induction:rank}):
+    \begin{equation*}
+        \forall k \in \N, \, ck[k] = \true \, \Rightarrow \,
+        (\forall \rank{eq_i^+}{x} \le r \le n, \, \rho_{k,r+1}[x] = H[x][k] \neq \bot).
+    \end{equation*}
+    \begin{itemize}
+        \item \textit{Base case:} Let $x \in \defs{eq_i^+}$ such that $\rank{eq_i^+}{x} = 0$.
+              The equation $eq_{i_x}$ that defines $x$ has zero dependency.
+              %
+              Therefore, for all $k \in \N$ such that $ck[k]$ is \true and for all
+              $0 \le r \le n$, the productivity of the step function of $eq_{i_x}$ from the
+              environment $\rho_k \ctxconcat \rho_{k,r}$ and state $s_{k,i_x}$ defines a new state
+              $s'_{k,i_x}$ and a new environment $\rho'_{k,r,i_x}$ (\Cref{lem:semantics:grsync:theorems:%
+                  productivity:equations}) such that:
+              \begin{equation*}
+                  \forall k \in \N, \,
+                  \left\{
+                  \begin{array}{ll}
+                             & ck[k] = \true \, \Rightarrow \,
+                      \left\{
+                      \begin{array}{ll}
+                                 & \eqOpsem{\rho_k \ctxconcat \rho_{k,r}}{s_{k,i_x}}{eq_{i_x}}{s'_{k,i_x}}{\rho'_{k,r,i_x}} \\
+                          \wedge & \rho'_{k,r,i_x}[x] \neq \bot                                                             \\
+                      \end{array}
+                      \right.                                                                                                \\
+                      \wedge & ck[k] \neq \true \, \Rightarrow \, \rho'_{k,r,i_x} = \emptyrho \wedge s'_{k,i_x} = s_{k,i_x}. \\
+                  \end{array}
+                  \right.
+              \end{equation*}
+
+              The induction hypothesis over the equivalence of the semantics of equations ensures
+              that, for all $0 \le r \le n$, the stream context induced by the sequence of $(\rho_k
+                  \ctxconcat \rho_{k,r} \ctxconcat \rho'_{k,r,i_x})^+$ satisfies the constraints of the
+              equation $eq_{i_x}$ in the denotational semantics.
+
+              However, \Cref{lem:semantics:grsync:theorems:determinism:eq} ensures that the contexts (the
+              ones induced by $(\rho_k \ctxconcat \rho_{k,r} \ctxconcat \rho'_{k,r,i_x})^+$), that satisfy
+              the constraints of $eq_{i_x}$ and are equivalent on its dependencies ($eq_{i_x}$ only
+              depends on the identifiers of $\rho_k^+$), are equivalent on \defs{eq_{i_x}}.
+              In particular, we have $x \in \defs{eq_{i_x}}$. So it implies that, for all $k \in
+                  \N$ such that $ck[k]$ is \true, the values of all
+              $(\rho'_{k,r,i_x}[x])_{0 \le r \le n}$ are equal.
+
+              The rule \nameref{rule:semantics:grsync:opsem:step:fixkp1} ensures that, for all
+              $0 \le r \le n$, we have $\rho_{k,r+1} = \bigCtxconcat_i \rho'_{k,r,i}$, and because the
+              context of each equation is disjoint (they are well-typed) we have $\rho_{k,r+1}[x] =
+                  \rho'_{k,r,i_x}[x]$. In particular, we have $\rho_{k,n+1}$ which equals $\rho'_k$.
+              So it implies that, for all $k \in \N$ such that $ck[k]$ is \true, the
+              values of all $(\rho_{k,r+1}[x])_{0 \le r \le n}$ are equal to $\rho'_k[x]$.
+
+              The initial hypothesis ensures that for all $z$ in \defs{eq_i^+} we have $H[z][k] =
+                  \rho'_k[z]$. In particular we have  $H[x][k] = \rho'_k[x]$.
+
+              Then, for all $k \in \N$ such that $ck[k]$ is \true and for all
+              $0 \le r \le n$, we have $\rho_{k,r+1}[x]$ that is well-defined (non-$\bot$) and
+              equal to $H[x][k]$.
+
+              We can then state that \P{x} holds.
+
+        \item \textit{Inductive step:} Let $j \in \N$.
+              We assume \P{y} for all $y \in \defs{eq^+} \cup \deps{eq^+}$ such that $\rank{eq^+}{y} \le j$.
+
+              Let $x$ be an identifier of rank $j+1$. The dependencies of $x$ are identifiers
+              of rank below $j$ (\Cref{lem:semantics:grsync:causality:rank:decrease}).
+              %
+              Therefore, for all identifier $y$ defined by $eq_i^+$ such that $x$ depends on $y$,
+              by applying the rank induction hypothesis \P{y} we have:
+              \begin{equation*}
+                  \forall k \in \N, \, ck[k] = \true \, \Rightarrow \,
+                  (\forall j \le r \le n, \, \rho_{k,r+1}[y] = H[y][k] \neq \bot),
+              \end{equation*}
+              or by renaming the interval of $r$:
+              \begin{equation*}
+                  \forall k \in \N, \, ck[k] = \true \, \Rightarrow \,
+                  (\forall j+1 \le r \le n+1, \, \rho_{k,r}[y] = H[y][k] \neq \bot).
+              \end{equation*}
+              Moreover, the initial hypothesis gives, for all identifier $y$ that is a dependency of $x$
+              not defined by $eq_i^+$, for all $k \in \N$, $\rho_k[y] = H[y][k] \neq \bot$
+              if $ck[k]$ is \true, and $H[y][k] = \bot$ otherwise.
+
+              Then, for all $k \in \N$ such that $ck[k]$ is \true and for all
+              $j+1 \le r \le n$, the environment $\rho_k \ctxconcat \rho_{k,r}$ defines all the
+              dependencies of $eq_{i_x}$. The productivity (\Cref{lem:semantics:grsync:theorems:productivit%
+                  y:equations}) of the step function of $eq_{i_x}$ from this environment and from
+              the state $s_{k,i_x}$ defines a new state $s'_{k,i_x}$ and a new environment
+              $\rho'_{k,r,i_x}$ such that:
+              \begin{equation*}
+                  \forall k \in \N, \,
+                  \left\{
+                  \begin{array}{ll}
+                             & ck[k] = \true \, \Rightarrow \,
+                      \left\{
+                      \begin{array}{ll}
+                                 & \eqOpsem{\rho_k \ctxconcat \rho_{k,r}}{s_{k,i_x}}{eq_{i_x}}{s'_{k,i_x}}{\rho'_{k,r,i_x}} \\
+                          \wedge & \rho'_{k,r,i_x}[x] \neq \bot                                                             \\
+                      \end{array}
+                      \right.                                                                                                \\
+                      \wedge & ck[k] \neq \true \, \Rightarrow \, \rho'_{k,r,i_x} = \emptyrho \wedge s'_{k,i_x} = s_{k,i_x}. \\
+                  \end{array}
+                  \right.
+              \end{equation*}
+
+              The induction hypothesis over the equivalence of the semantics of equations ensures
+              that, for all $j+1 \le r \le n$, the stream context induced by the sequence of
+              $(\rho_k \ctxconcat \rho_{k,r} \ctxconcat \rho'_{k,r,i_x})^+$ satisfies the constraints of
+              the equation $eq_{i_x}$ in the denotational semantics.
+
+              However, \Cref{lem:semantics:grsync:theorems:determinism:eq} ensures that the contexts (the
+              ones induced by $(\rho_k \ctxconcat \rho_{k,r} \ctxconcat \rho'_{k,r,i_x})^+$), that satisfy
+              the constraints of $eq_{i_x}$ and are equivalent on its dependencies ($eq_{i_x}$ only
+              depends on the identifiers of $\rho_k^+$ and $\rho_{k,r}^+$), are equivalent on
+              \defs{eq_{i_x}}. In particular, we have $x \in \defs{eq_{i_x}}$. So it implies that,
+              for all $k \in \N$ such that $ck[k]$ is \true, the values of all
+              $(\rho'_{k,r,i_x}[x])_{j+1 \le r \le n}$ are equal.
+
+              The rule \nameref{rule:semantics:grsync:opsem:step:fixkp1} ensures that, for all
+              $j+1 \le r \le n$, we have $\rho_{k,r+1} = \bigCtxconcat_i \rho'_{k,r,i}$, and because the
+              context of each equation is disjoint (they are well-typed) we have $\rho_{k,r+1}[x] =
+                  \rho'_{k,r,i_x}[x]$. In particular, we have $\rho_{k,n+1}$ which equals $\rho'_k$.
+              So it implies that, for all $k \in \N$ such that $ck[k]$ is \true, the
+              values of all $(\rho_{k,r+1}[x])_{j+1 \le r \le n}$ are equal to $\rho'_k[x]$.
+
+              The initial hypothesis ensures that for all $z$ in \defs{eq_i^+} we have $H[z][k] =
+                  \rho'_k[z]$. In particular we have  $H[x][k] = \rho'_k[x]$.
+
+              Then, for all $k \in \N$ such that $ck[k]$ is \true and for all
+              $j+1 \le r \le n$, we have $\rho_{k,r+1}[x]$ that is well-defined (non-$\bot$) and
+              equal to $H[x][k]$.
+
+              We can then state that \P{x} holds.
+    \end{itemize}
+
+    The rank of all identifiers defined by $(eq_1, \dots, eq_n)$ being bounded by $n$ (\Cref{lem:%
+        semantics:grsync:causality:rank:bounded}), they are all defined in $\rho'_k = \rho_{k,n+1}$
+    and equivalent to $H$.
+
+    All the dependencies of all equations from $eq_i^+$ are identical in $H$ and the sequence
+    $(\rho_k \ctxconcat \rho'_k)^+$.
+    We can then apply the structural induction hypothesis: for all $eq_i$, we can state that
+    \eqDenot{H}{ck}{eq_i} holds. The application of rule \nameref{rule:semantics:grsync:denot:eqs}
+    implies that \eqDenot{H}{ck}{eq_i^+} holds.
+
+    \subparagraph{Declarations}
+    Let $x^+ = e$ be a well-typed declaration. The rule \nameref{rule:semantics:grsync:opsem:step:%
+        eq:decl} ensures that there exist streams $s^+$ such that:
+    \begin{equation*}
+        \begin{array}{ll}
+                              & s_0 = \initstate{e} \\
+            \forall k \in \N, &
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \exprOpsem{\rho_k}{s_k}{e}{s_{k+1}}{(s[k])^+}      \\
+                    \wedge & \rho'_k = [(s[k] / x)^+] \wedge (H[x][k] = s[k])^+ \\
+                \end{array}
+                \right.                                                                           \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \, s_{k+1} = s_k \wedge (s[k] = \bot)^+. \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    By application of \Cref{lem:semantics:grsync:theorems:equivalence:e}, the semantics \exprDenot{H}{ck}{e}{s^+}
+    holds. Additionally, for all $k \in \N$ we have $(H[x][k] = s[k])^+$, which implies that
+    $(H[x] \equiv s)^+$. The rule \nameref{rule:semantics:grsync:denot:eq:decl} ensures that the
+    denotational semantics \eqDenot{H}{ck}{x^+ = e} holds.
+
+    \subparagraph{Match}
+    Let \match{e}{x^+}{(\branch{pat_i^+}{e_i}{eq_i^+})^+} be a well-typed \kwf{match} equation. The
+    rule \nameref{rule:semantics:grsync:opsem:step:eq:match:value} ensures that there exist
+    a sequence of states $(s_k^{e+})$ that correspond to $e$,
+    a list of streams $[s_e^+]$, and,
+    for each branch $i$, a clock $ck_i$, a sequence of states $(s_{i, k}^+)$ that corresponds to
+    $eq_i^+$, and a sequence of environments $(\rho_{i, k}^+)$ such that:
+    \begin{equation*}
+        \begin{array}{ll}
+            (s^e_0, s_{i, 0}^+) = (\initstate{e}, (\initstate{eq_i^+})^+) \\
+            \forall k \in \N,                                             \\
+            \quad \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \exprOpsem{\rho_k}{s^e_k}{e}{s^e_{k+1}}{(s_e[k])^+}                                        \\
+                    \wedge & \forall i, \, \patOpsem{\rho_k}{\guarded{pat_i^+ = (s_e[k])^+}{e_i}}{ck_i[k]}{\rho_{i, k}} \\
+                    \wedge & \exists j_k, \, ck_{j_k}[k] = \true \wedge \forall i < j_k, \, ck_i[k] = \false            \\
+                    \wedge & \eqOpsem{\rho_k \ctxconcat \rho_{j_k, k}}{s_{j_k, k}}{eq_{j_k}^+}{s_{j_k, k+1}}{\rho'_k}   \\
+                    \wedge & \forall i \neq j_k, \, s_{i, k+1} = s_{i, k}                                               \\
+                \end{array}
+                \right.                                     \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & s^e_{k+1} = s^e_k \wedge (s_e[k] = \bot)^+                                                 \\
+                    \wedge & \forall i, \, (s_{i, k+1} = s_{i, k} \wedge \rho_{i, k} = \emptyrho \wedge ck_i[k] = \bot) \\
+                    \wedge & \forall i, \, (\rho'_k = \emptyrho \wedge \forall x \in \defs{eq_i^+}, \, H[x][k] = \bot). \\
+                \end{array}
+                \right.                                     \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+
+    By application of \Cref{lem:semantics:grsync:theorems:equivalence:e}, the semantics \exprDenot{H}{ck}{e}{s^+}
+    holds.
+    %
+    Moreover, for all branch $i$, \Cref{lem:semantics:grsync:theorems:equivalence:pat} ensures that the simulation of
+    \guarded{pat_i^+ = (s_e[k])^+}{e_i} is equivalent to the denotational semantics \patDenot{H}
+    {ck}{\guarded{pat_i^+ = s_e^+}{e_i}}{ck_i}.
+
+    For all $k \in \N$, the existence of $j_k$ such that $ck_{j_k}[k]$ is \true when
+    $ck[k]$ is \true implies that $\kwf{\Vert}((ck_i[k])^+) = (\kwf{\Vert}(ck_i^+))[k] =
+        ck[k]$, and consequently that $ck \equiv \kwf{\Vert}(ck_i^+)$.
+
+    For all branch $i$, let $ck'_i$ be a clock equivalent to $ck_i \kwf{\&\&}
+        (\kwf{\&\&}(\kwf{!}ck_l)^{l < i})$. For all $k \in \N$ such that $ck[k]$ is
+    \true, we have $ck'_i[k] = ck_i[k] \kwf{\&\&}(\kwf{\&\&}(\kwf{!}ck_l[k])^{l < i}) =
+        \true$ \iff $ck_i[k] = \true$ and $ck_l[k] = \false$ for all $l < i$, which
+    corresponds to the definition of $j_k$.
+    %
+    Therefore, for all $k \in \N$ such that $ck[k]$ is \true and all branch $i$, we
+    have $ck'_i[k] = \true$ \iff $i = j_k$ and:
+    \begin{equation*}
+        \begin{array}{ll}
+            ck'_i[k] = \true    & \Rightarrow \,
+            \eqOpsem{\rho_k \ctxconcat \rho_{i, k}}{s_{i, k}}{eq_i^+}{s_{i, k+1}}{\rho'_k} \\
+            ck'_i[k] \neq \true & \Rightarrow \,
+            s_{i, k+1} = s_{i, k},                                                         \\
+        \end{array}
+    \end{equation*}
+    which implies:
+    \begin{equation*}
+        \begin{array}{ll}
+            ck'_i[k] = \true    & \Rightarrow \,
+            \left\{
+            \begin{array}{ll}
+                       & \eqOpsem{\rho_k \ctxconcat \rho_{i, k}}{s_{i, k}}{eq_i^+}{s_{i, k+1}}{\rho'_k}              \\
+                \wedge & \forall x \in \deps{eq_i^+}, \, \whenT{H}{ck'_i}[x][k] = (\rho_k \ctxconcat \rho_{i, k})[x] \\
+                \wedge & \forall x \in \defs{eq_i^+}, \, \whenT{H}{ck'_i}[x][k] = \rho'_k[x]                         \\
+            \end{array}
+            \right.                              \\
+            ck'_i[k] \neq \true & \Rightarrow \,
+            \left\{
+            \begin{array}{ll}
+                       & s_{i, k+1} = s_{i, k} \wedge \rho'_k = \emptyrho              \\
+                \wedge & \forall x \in \deps{eq_i^+}, \, \whenT{H}{ck'_i}[x][k] = \bot \\
+                \wedge & \forall x \in \defs{eq^+}, \,  \whenT{H}{ck'_i}[x][k] = \bot. \\
+            \end{array}
+            \right.                              \\
+        \end{array}
+    \end{equation*}
+    By application of the induction hypothesis on the filtered branch equations ($eq_i^+$) we can
+    state that, for all branch $i$, the denotational semantics \eqDenot{\whenT{H}{ck'_i}}{ck'_i}
+    {eq_i^+} holds.
+    %
+    The rule \nameref{rule:semantics:grsync:denot:eq:match} implies that \eqDenot{H}{ck}{\match{e}
+        {x^+}{(\branch{pat_i^+}{e_i}{eq_i^+})^+}} holds.
+
+    \subparagraph{When}
+    Let \when{x^+}{x_m^+ = c^+}{(\branch{epat_i^+}{e_i}{eq_i^+})^+} be a well-typed \kwf{when}
+    equation. The rules \nameref{rule:semantics:grsync:opsem:step:eq:when:branch} and
+    \nameref{rule:semantics:grsync:opsem:step:eq:when:default} ensure that there exist
+    a list of streams $[s_m^+]$,
+    a sequence of environments $(\rho_k^{m+})$, and
+    for each branch $i$
+    a clock $ck_i$,
+    a sequence of states $(s_{i, k}^{p+})$ that corresponds to $epat_i^+$,
+    a sequence of states $(s_{i, k}^+)$ that corresponds to $eq_i^+$,
+    a sequence of environments $(\rho_{i, k}^+)$, and
+    a sequence of environments $(\rho_{i, k}^{\prime+})$, and
+    a sequence of environments $(\rho_k^{\prime\prime+})$
+    such that $(c^+, s_{i, 0}^{p+}, s_{i, 0}^+) = ((\initstate{epat_i})^+, (\initstate{eq_i^+})^+)$ and
+    for all $k \in \N$:
+    \begin{equation*}
+        \begin{array}{l}
+            ck[k] = \true \, \Rightarrow \,
+            \left\{
+            \begin{array}{ll}
+                       & \forall i, \, \epatOpsem{\rho_k}{s^p_{i, k}}{\guarded{epat_i^+}{e_i}}{s^p_{i, k+1}}{ck_i[k]}{\rho_{i, k}} \\
+                \wedge & \rho^m_k = [(s_m[k]/\last{x_m})^+]                                                                        \\
+                \wedge & \exists j_k, \, ck_{j_k}[k] = \true \wedge \forall i < j_k, \, ck_i[k] = \false \, \Rightarrow            \\
+                       &
+                \left\{
+                \begin{array}{ll}
+                           & E_{j_k} = (\{x^+\} \backslash \{x_m^+\}) \backslash \defs{eq^+_{j_k}}                                                                                \\
+                    \wedge & S_{j_k} = \{x_m^+\} \backslash \defs{eq^+_{j_k}}                                                                                                     \\
+                    \wedge & \rho'_{j_k, k} = [\none / x_e \in E_{j_k}] \ctxconcat [\rho^m_k[\last{x_s}] / x_s \in S_{j_k}]                                                       \\
+                    \wedge & \eqOpsem{\rho_k \ctxconcat \rho_{j_k, k} \ctxconcat \rho^m_k \ctxconcat \rho'_{j_k, k}}{s_{j_k, k}}{eq_{j_k}^+}{s_{j_k, k+1}}{\rho_k^{\prime\prime}} \\
+                    \wedge & \rho'_k = \rho^m_k \ctxconcat \rho'_{j_k, k} \ctxconcat \rho_k^{\prime\prime}                                                                        \\
+                    \wedge & \forall i \neq j_k, \, s_{i, k+1} = s_{i, k}                                                                                                         \\
+                \end{array}
+                \right.                                                                                                            \\
+                \wedge & \forall i, \, ck_i[k] = \false \, \Rightarrow                                                             \\
+                       &
+                \left\{
+                \begin{array}{ll}
+                           & \rho'_{j_k, k} = \emptyrho                                                                                 \\
+                    \wedge & \rho_k^{\prime\prime} = \emptyrho                                                                          \\
+                    \wedge & \rho'_k = \rho^m_k \ctxconcat [\none / x_e \in \{x^+\} \backslash \{x_m^+\}] \ctxconcat [(s_m[k] / x_m)^+] \\
+                    \wedge & \forall i, \, s_{i, k+1} = s_{i, k}                                                                        \\
+                \end{array}
+                \right.                                                                                                            \\
+                \wedge & \left(s_m[k+1] = \rho'_k[x_m]\right)^+                                                                    \\
+            \end{array}
+            \right. \\
+            ck[k] \neq \true \, \Rightarrow \,
+            \left\{
+            \begin{array}{ll}
+                       & \forall i, \, (s^p_{i, k+1} = s^p_{i, k} \wedge s_{i, k+1} = s_{i, k} \wedge \rho_{i, k} = \emptyrho \wedge ck_i[k] = \bot)                \\
+                \wedge & \forall i, \, (\rho^m_k = \emptyrho \wedge \rho'_{j_k, k} = \emptyrho \wedge \rho_k^{\prime\prime} = \emptyrho \wedge \rho'_k = \emptyrho) \\
+                \wedge & \forall i, \, (\left(s_m[k+1] = s_m[k]\right)^+ \wedge \forall x \in \defs{eq_i^+}, \, H[x][k] = \bot).                                    \\
+            \end{array}
+            \right. \\
+        \end{array}
+    \end{equation*}
+
+    For all branch $i$, \Cref{lem:semantics:grsync:theorems:equivalence:epat} ensures that the simulation of
+    \guarded{epat_i^+}{e_i}, defining the environments $(\rho_{i, k}^+)$, is equivalent to the
+    denotational semantics \epatDenot{H}{ck}{\guarded{epat_i^+}{e_i}}{ck_i}.
+
+    For all $k \in \N$, we have $s_m[k+1] = \rho'_k[x_m]$ if $ck[k]$ is \true, and
+    $s_m[k+1] = s_m[k]$ if $ck[k]$ is \false.
+    %
+    For all $k \in \N$ such that $ck[k]$ is \true, the initial hypothesis gives
+    $\rho'_k[x_m] = H[x_m][k]$, which implies that $s_m[k+1] = H[x_m][k]$ and consequently that
+    $s_m \equiv \buffer{c}{H[x_m]}$.
+    %
+    The initial hypothesis also gives $\rho'_k[\last{x_m}]=H[\last{x_m}][k]$, and because
+    $\rho'_k[\last{x_m}]=\rho^m_k[\last{x_m}]$, we have $\rho^m_k[\last{x_m}] = H[\last{x_m}][k]$.
+    %
+    We also have $\rho^m_k[\last{x_m}] = s_m[k]$ by definition of $\rho^m_k$, so it implies that
+    $H[\last{x_m}][k] = \buffer{c}{H[x_m]}[k]$.
+    %
+    So finally we have $H[\last{x_m}] \equiv \buffer{c}{H[x_m]}$.
+
+    For all branch $i$, let $ck'_i$ be a clock equivalent to $ck_i \kwf{\&\&}
+        (\kwf{\&\&}(\kwf{!}ck_l)^{l < i})$. For all $k \in \N$ such that $ck[k]$ is
+    \true, we have $ck'_i[k] = ck_i[k] \kwf{\&\&}(\kwf{\&\&}(\kwf{!}ck_l[k])^{l < i}) =
+        \true$ \iff $ck_i[k] = \true$ and $ck_l[k] = \false$ for all $l < i$, which
+    corresponds to the definition of $j_k$.
+    %
+    Therefore, for all $k \in \N$ such that $ck[k]$ is \true and all branch $i$, we
+    have $ck'_i[k] = \true$ \iff $i = j_k$ and:
+    \begin{equation*}
+        \begin{array}{ll}
+            ck'_i[k] = \true    & \Rightarrow \,
+            \eqOpsem{\rho_k \ctxconcat \rho_{i, k} \ctxconcat \rho^m_k \ctxconcat \rho'_{i, k}}{s_{i, k}}{eq_i^+}{s_{i, k+1}}{\rho_k^{\prime\prime}} \\
+            ck'_i[k] \neq \true & \Rightarrow \, s_{i, k+1} = s_{i, k}.                                                                              \\
+        \end{array}
+    \end{equation*}
+    For all $k \in \N$ and all branch $i$ such that $ck'_i[k]$ is \true, the initial
+    hypothesis gives $\rho'_k[x_s] = H[x_s][k]$ for all $x_s$ in $\{x_m^+\} \backslash \defs{eq^+_i}
+    $. But $\rho'_k[x_s] = \rho'_{i, k}[x_s]$, which implies that $\rho'_{i, k}[x_s] = H[x_s][k]$.
+    %
+    Similarly for $x_e$ in $\{x^+\} \backslash \{x_m^+\} \backslash \defs{eq_i^+}$, we have
+    $\rho'_k[x_e] = H[x_e][k]$ that implies $\rho'_{i, k}[x_e] = H[x_e][k]$.
+    %
+    It implies:
+    \begin{equation*}
+        \begin{array}{ll}
+            ck'_i[k] = \true    & \Rightarrow \,
+            \left\{
+            \begin{array}{ll}
+                       & \eqOpsem{\rho_k \ctxconcat \rho_{i, k} \ctxconcat \rho^m_k \ctxconcat \rho'_{i, k}}{s_{i, k}}{eq_i^+}{s_{i, k+1}}{\rho_k^{\prime\prime}} \\
+                \wedge & \forall x \in \deps{eq_i^+}, \, \whenT{H}{ck'_i}[x][k] = (\rho_k \ctxconcat \rho_{i, k} \ctxconcat \rho^m_k \ctxconcat \rho'_{i, k})[x]  \\
+                \wedge & \forall x \in \defs{eq_i^+}, \, \whenT{H}{ck'_i}[x][k] = \rho_k^{\prime\prime}[x]                                                        \\
+            \end{array}
+            \right.                              \\
+            ck'_i[k] \neq \true & \Rightarrow \,
+            \left\{
+            \begin{array}{ll}
+                       & s_{i, k+1} = s_{i, k}  \wedge \rho_k^{\prime\prime} = \emptyrho \\
+                \wedge & \forall x \in \deps{eq_i^+}, \, \whenT{H}{ck'_i}[x][k] = \bot   \\
+                \wedge & \forall x \in \defs{eq_i^+}, \, \whenT{H}{ck'_i}[x][k] = \bot.  \\
+            \end{array}
+            \right.                              \\
+        \end{array}
+    \end{equation*}
+    By application of the induction hypothesis on the filtered branch equations ($eq_i^+$) we can
+    state that, for all branch $i$, the denotational semantics \eqDenot{\whenT{H}{ck'_i}}
+    {ck'_i}{eq_i^+} holds.
+
+    For all $k \in \N$ and all branch $i$ such that $ck'_i[k]$ is \true, for all $x_s$
+    in $\{x_m^+\} \backslash \defs{eq^+_i}$ we have  $\rho'_{i, k}[x_s] = H[x_s][k]$. The definition
+    of $\rho'_{i, k}$ ensures that $\rho'_{i, k}[x_s] = \rho^m_k[\last{x_s}]$ which is equal to
+    $H[\last{x_s}][k]$. Therefore we have $H[x_s][k] = H[\last{x_s}][k]$, which implies
+    $\whenT{H[x_s]}{ck'_i} \equiv \whenT{H[\last{x_s}]}{ck'_i}$.
+    %
+    Similarly for $x_e$ in $\{x^+\} \backslash \{x_m^+\} \backslash \defs{eq_i^+}$, we have
+    $\rho'_{i, k}[x_e] = H[x_e][k]$ and $\rho'_{i, k}[x_e] = \none$. Therefore we have
+    $H[x_e][k] = \none$, which implies: $$\whenT{H[x_e]}{ck'_i} \equiv
+        \const{\none}{ck'_i}.$$
+
+    For all $k \in \N$ such that $ck_i[k]$ are \false, for all $x_s$
+    in $\{x_m^+\} \backslash \defs{eq^+_i}$ we have  $\rho'_k[x_s] = H[x_s][k]$. The definition
+    of $\rho'_k$ ensures that $\rho'_k[x_s] = s_m[k]$ which is equal to $H[\last{x_s}][k]$.
+    Therefore we have $H[x_s][k] = H[\last{x_s}][k]$, which implies: $$\whenF{H[x_s]}{\kwf{\Vert}(ck_i^+)} \equiv \whenF{H[\last{x_s}]}{\kwf{\Vert}(ck_i^+)}.$$
+    %
+    Similarly for $x_e$ in $\{x^+\} \backslash \{x_m^+\} \backslash \defs{eq_i^+}$, we have
+    $\rho'_k[x_e] = H[x_e][k]$ and $\rho'_k[x_e] = \none$. Therefore we have
+    $H[x_e][k] = \none$, which implies: $$\whenF{H[x_e]}{\kwf{\Vert}(ck_i^+)} \equiv
+        \const{\none}{\whenF{ck}{\kwf{\Vert}(ck_i^+)}}.$$
+
+    The rule \nameref{rule:semantics:grsync:denot:eq:when} implies that \eqDenot{H}{ck}{\kwf{when}
+        \{\dots\}} holds.
+
+    \paragraph{Denotational $\Rightarrow$ Operational}
+    Let $eq^+$ be a well-typed and causal set of \GRSync equations, $ck$ be a clock, $H$ be a stream
+    context, and $(\rho_k^+)$ be a sequence of environments such that:
+    \begin{equation*}
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+                   & ck[k] = \true \, \Rightarrow \,
+            \forall x \in \deps{eq^+}, \, \rho_k[x] = H[x][k] \neq \bot               \\
+            \wedge & ck[k] \neq \true \, \Rightarrow \,
+            \rho_k = \emptyrho \wedge (\forall x \in \deps{eq^+}, \, H[x][k] = \bot). \\
+        \end{array}
+        \right.
+    \end{equation*}
+
+    Suppose the denotational semantics \eqDenot{H}{ck}{eq^+} holds.
+    %
+    The productivity of causal equations (\Cref{lem:semantics:grsync:theorems:productivity:equations})
+    ensures that for all environment $\rho$ and all $x \in \deps{eq^+}$ such that
+    $\rho[x] \neq \bot$, the step function of $eq^+$ in $\rho$ from any state produces a new state,
+    and an environment where identifiers defined by $eq^+$ are well-defined.
+    %
+    It is then possible to construct a sequence of states $(s_k^+)$, a sequence of environments
+    $(\rho_k^{\prime+})$, and a stream context $H'$ as follows.
+    \begin{equation*}
+        \begin{array}{l}
+            s_0 = \initstate{eq^+} \\
+            \forall k \in \N, \,
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \eqOpsem{\rho_k}{s_k}{eq^+}{s_{k+1}}{\rho'_k}       \\
+                    \wedge & \forall x \in \defs{eq^+}, \, H'[x][k] = \rho'_k[x] \\
+                \end{array}
+                \right.                                     \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & s_{k+1} = s_k \wedge \rho'_k = \emptyrho       \\
+                    \wedge & \forall x \in \defs{eq^+}, \, H'[x][k] = \bot. \\
+                \end{array}
+                \right.                                     \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+
+    Paragraph~\ref{sec:semantics:grsync:theorems:equivalence:eq:proof:op_to_den} ensures \eqDenot{H'}{ck}
+    {eq^+} holds. For all $n \in \N$, \Cref{lem:semantics:grsync:theorems:determinism:eq} ensures
+    that for all $x \in \defs{eq^+}$ the streams $H'[x]$ and $H[x]$ are equivalent up-to-$n$, which
+    implies $H'[x] \equiv H[x]$. The simulation of $eq^+$ can then be rewritten as:
+    \begin{equation*}
+        \begin{array}{l}
+            s_0 = \initstate{eq^+} \\
+            \forall k \in \N, \,
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \eqOpsem{\rho_k}{s_k}{eq^+}{s_{k+1}}{\rho'_k}      \\
+                    \wedge & \forall x \in \defs{eq^+}, \, H[x][k] = \rho'_k[x] \\
+                \end{array}
+                \right.                                     \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & s_{k+1} = s_k \wedge \rho'_k = \emptyrho       \\
+                    \wedge & \forall x \in \defs{eq^+}, \,  H[x][k] = \bot, \\
+                \end{array}
+                \right.                                     \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    which concludes the proof.
+
+    \setcounter{paragraph}{0}
+    \setcounter{subparagraph}{0}
+\end{skippableproof}
+
+\begin{theorem}[Equivalence]
+    \label{thm:semantics:grsync:theorems:equivalence}
+    Let $f$ be a well-typed and causal component in a program \G and a typing context \tyCtx.
+    Let $[i^+]$ and $[o^+]$ be lists of input and output streams on clock $ck$ respectively. The
+    following equivalence holds.
+    \begin{equation*}
+        \compDenot{ck}{f}{i^+}{o^+} \; \Leftrightarrow \; \forall n \in \N, \,
+        \obsComp{f}{[i^+]}{n} = (o[n])^+
+    \end{equation*}
+\end{theorem}
+\begin{skippableproof}
+    Let \component{f}{x_i^+}{x_o^+}{eq^+}{x_m^+ = c^+} be a well-typed and causal component in a
+    program \G and a typing context \tyCtx. Let $[i^+]$ and $[o^+]$ be lists of input and output
+    streams on clock $ck$ respectively.
+
+    \paragraph{Operational $\Rightarrow$ Denotational}
+    \label{sec:semantics:grsync:theorems:equivalence:proof:op_to_den}
+    Let an infinite sequence of executions for the component $f$ such that for all $k\in\N$,
+    if $ck[k]$ is \true, from the state $s_k$ and the input values $(i[k])^+$, its step
+    function produces the next state $s_{k+1}$ and the output values $v_k^+$ as follows:
+    \begin{equation*}
+        s_0 = \initsync{f} \qquad
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+                   & ck[k] = \true \, \Rightarrow \, \compOpsem{s_k}{(i[k])^+}{f}{s_{k+1}}{v^+_k} \\
+            \wedge & ck[k] \neq \true \, \Rightarrow \, s_{k+1} = s_k \wedge (v_k = \bot)^+.      \\
+        \end{array}
+        \right.
+    \end{equation*}
+    The states $s_k$ of $f$ are refined to exhibit the memories $m_k^+$ and equations state $s'_k$:
+    \begin{equation*}
+        \begin{array}{ll}
+                              & (m_0^+, s'_0) = (c^+, \initsync{eq^+}) \\
+            \forall k \in \N, &
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \, \compOpsem{(m_k^+, s'_k)}{(i[k])^+}{f}{(m_{k+1}^+, s'_{k+1})}{v^+_k} \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \, s'_{k+1} = s'_k \wedge (m_{k+1} = m_k)^+ \wedge (v_k = \bot)^+.   \\
+            \end{array}
+            \right.                                                    \\
+        \end{array}
+    \end{equation*}
+    In the following, for the sake of clarity, we will refer to the states of $eq^+$ using $s_k$.
+
+    Each step $k \in \N$ of the component $f$, such that $ck[k]$ is \true, performs the
+    step function of its set of equations $eq^+$ starting with a context $\rho^i_k$ initialized with
+    the input and memory values. This creates a new context $\rho^o_k$ that contains all the
+    identifiers of $f$ (proved in \Cref{thm:semantics:grsync:theorems:productivity}). The outputs and next
+    memories are then retrieved from this context:
+    \begin{equation*}
+        \begin{array}{ll}
+                              & (m_0^+, s_0) = (c^+, \initsync{eq^+}) \\
+            \forall k \in \N, &
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \eqOpsem{\rho^i_k}{s_k}{eq^+}{s_{k+1}}{\rho^o_k}           \\
+                    \wedge & (m_{k+1} = \rho^o_k[x_m])^+ \wedge (v_k = \rho^o_k[x_o])^+ \\
+                    \wedge & \rho^i_k = [(i[k]/x_i)^+, (m_k/\last{x_m})^+]              \\
+                \end{array}
+                \right.                                     \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & s_{k+1} = s_k \wedge (m_{k+1} = m_k)^+ \wedge (v_k = \bot)^+ \\
+                    \wedge & \rho^i_k = \emptyrho \wedge \rho^o_k = \emptyrho.            \\
+                \end{array}
+                \right.                                     \\
+            \end{array}
+            \right.                                                   \\
+        \end{array}
+    \end{equation*}
+
+    We construct the stream context $H$ such that, for all identifier $x$ and step $k\in\N$,
+    we have $H[x][k]=(\rho^i_k \ctxconcat \rho^o_k)[x]$ when $ck[k]$ is \true, and $H[x][k]=\bot$
+    otherwise. This implies that $(H[x_i] \equiv i)^+$, $(H[x_o] \equiv o)^+$, and
+    $(H[\last{x_m}] \equiv \buffer{c}{H[x_m]})^+$.
+
+    Therefore we have:
+    \begin{equation*}
+        \begin{array}{ll}
+                              & s_0 = \initstate{eq^+} \\
+            \forall k \in \N, &
+            \left\{
+            \begin{array}{ll}
+                       & ck[k] = \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & \forall x, \in \{x_i^+\} \cup \{x_m^+\} \Rightarrow \rho^i_k[x] = H[x][k] \neq \bot \\
+                    \wedge & \eqOpsem{\rho^i_k}{s_k}{eq^+}{s_{k+1}}{\rho^o_k}                                    \\
+                    \wedge & \forall x \in \defs{eq^+}, \, H[x][k] = \rho^o_k[x] \neq \bot                       \\
+                \end{array}
+                \right.                                     \\
+                \wedge & ck[k] \neq \true \, \Rightarrow \,
+                \left\{
+                \begin{array}{ll}
+                           & s_{k+1} = s_k \wedge \rho^i_k = \emptyrho \wedge \rho^o_k = \emptyrho \\
+                    \wedge & \forall x \in \defs{eq^+}, \, H[x][k] = \bot.                         \\
+                \end{array}
+                \right.                                     \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    By application of \Cref{lem:semantics:grsync:theorems:equivalence:eq}, $H$ satisfies the constraints of the
+    equations $eq^+$ on the clock $ck$, so that \eqDenot{H}{ck}{eq^+} holds.
+
+    The rule \nameref{rule:semantics:grsync:denot:comp} ensures that the denotational semantics
+    \compDenot{ck}{f}{i^+}{o^+} holds.
+
+    \paragraph{Denotational $\Rightarrow$ Operational}
+    Suppose the input and output streams satisfy the denotational semantics of $f$:
+    $$\compDenot{ck}{f}{i^+}{o^+}.$$
+    The productivity of the operational semantics (\Cref{thm:semantics:grsync:theorems:productivity}) ensures
+    there exists a simulation of $f$ on the input streams $i^+$, which builds output streams
+    $o^{\prime+}$ such that: $$\forall n \in \N, \, \obsComp{f}{[i^+]}{n} = (o'[n])^+.$$
+    The paragraph~\ref{sec:semantics:grsync:theorems:equivalence:proof:op_to_den} ensures the simulation
+    satisfies the denotational semantics of $f$: $$\compDenot{ck}{f}{i^+}{o^{\prime+}}.$$ For all
+    $n \in \N$, \Cref{thm:semantics:grsync:theorems:determinism} ensures $o^{\prime+}$ and $o^+$ are
+    equivalent up-to-$n$, which implies that $(o' \equiv o)^+$. The simulation of $f$ can then be
+    rewritten as: $$\forall n \in \N, \, \obsComp{f}{[i^+]}{n} = (o[n])^+,$$
+    which concludes the proof.
+
+    \setcounter{paragraph}{0}
+\end{skippableproof}
+
+\paragraph{Summary}
+In summary, this section established the formal equivalence between the operational and denotational
+semantics of \GRSync.
+%
+The central result, \Cref{thm:semantics:grsync:theorems:equivalence}, demonstrates that the
+step-by-step execution of a component is consistent with its abstract, stream-based interpretation.
+%
+The proof proceeded by structural induction on the language syntax.
+%
+The complexity of mutually recursive definitions was handled using rank induction
+(\Cref{def:semantics:grsync:causality:induction:rank}), which relies on the dataflow dependencies
+within the program.
+%
+This equivalence theorem is a crucial soundness result, confirming that the operational model is a
+faithful implementation of the denotational specification. This ensures that the language behavior
+is both productive and predictable in execution.

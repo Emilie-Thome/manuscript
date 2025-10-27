@@ -1,0 +1,468 @@
+\subsubsection{Determinism}
+\label{sec:semantics:grfrp:theorems:determinism}
+
+The determinism of a service ensures that one input history will give a unique output history.
+\Cref{thm:semantics:grfrp:theorems:determinism} states the determinism of services' denotational
+semantics: two output contexts originating from one input context are equal.
+It relies on \Cref{lem:semantics:grfrp:theorems:determinism}, stating the determinism of flow operations.
+
+\newcommand{\depSet}[1]{{\ensuremath{\textit{deps}\left(#1\right)}}}
+\begin{definition}[Dependencies of flow operations]
+    \label{def:semantics:grfrp:theorems:determinism:deps}
+
+    In order to state the determinism of the denotational semantics of \GRFRP flow operations, we
+    first define the set of their dependencies.
+
+    For all flow operation $\sigma$, the set of its dependencies is denoted by \depSet{\sigma} and
+    is defined in \Crefrange{eq:semantics:grfrp:theorems:determinism:deps:ident}{eq:semantics:grfrp%
+        :theorems:determinism:deps:time}. The dependencies of a flow identifier $x$ is $\{x\}$.
+    The dependencies of other operations are the union of the dependencies of their sub-operations.
+    %
+    \begin{align}
+        \depSet{x}                            & = \{x\} \label{eq:semantics:grfrp:theorems:determinism:deps:ident}                                    \\
+        \depSet{f(\sigma^+)}                  & = \bigcup \depSet{\sigma}^+ \label{eq:semantics:grfrp:theorems:determinism:deps:app}                  \\
+        \depSet{\onchange{\sigma}}            & = \depSet{\sigma} \label{eq:semantics:grfrp:theorems:determinism:deps:onchange}                       \\
+        \depSet{\persist{\sigma}}             & = \depSet{\sigma} \label{eq:semantics:grfrp:theorems:determinism:deps:persist}                        \\
+        \depSet{\scan{\sigma}{T}}             & = \depSet{\sigma} \label{eq:semantics:grfrp:theorems:determinism:deps:scan}                           \\
+        \depSet{\sample{\sigma}{T}}           & = \depSet{\sigma} \label{eq:semantics:grfrp:theorems:determinism:deps:sample}                         \\
+        \depSet{\timeout{\sigma}{T}}          & = \depSet{\sigma} \label{eq:semantics:grfrp:theorems:determinism:deps:timeout}                        \\
+        \depSet{\throttle{\sigma}{\Delta}}    & = \depSet{\sigma} \label{eq:semantics:grfrp:theorems:determinism:deps:throttle}                       \\
+        \depSet{\mergeop{\sigma_1}{\sigma_2}} & = \depSet{\sigma_1} \cup \depSet{\sigma_2} \label{eq:semantics:grfrp:theorems:determinism:deps:merge} \\
+        \depSet{\timeop}                      & = \emptyset \label{eq:semantics:grfrp:theorems:determinism:deps:time}
+    \end{align}
+\end{definition}
+
+\begin{lemma}[Determinism for \GRFRP flow operations]
+    \label{lem:semantics:grfrp:theorems:determinism}
+    Let $\sigma$ be a well-typed flow operation in a well-typed and causal program \G and a typing
+    context \tyCtx.
+    If \tck is a timestamped clock, and $K_1$ and $K_2$ are streams contexts, then for all lists of
+    streams $[\ts_1^+]$ and $[\ts_2^+]$ on \tck, we have:
+    \begin{equation*}
+        \wedge \begin{array}{l}
+            \sigmaDenot{\tck}{K_1}{\sigma}{\ts_1^+} \\
+            \sigmaDenot{\tck}{K_2}{\sigma}{\ts_2^+}
+        \end{array}
+        \; \Rightarrow \;
+        (\forall y \in \depSet{\sigma}, \, K_1[y] \equiv K_2[y])
+        \; \Rightarrow \;
+        (\ts_1 \equiv \ts_2)^+
+    \end{equation*}
+\end{lemma}
+\begin{skippableproof}
+    The proof is done by structural induction on flow operations and relies on the determinism of
+    \GRSync components (\Cref{thm:semantics:grsync:theorems:determinism}).
+
+    \paragraph{Identifiers}
+    Let $x$ be a flow identifier, let \tck be a timestamped clock, let $K_1$ and $K_2$ be contexts
+    of streams, and let $[\ts_1^+]$ and $[\ts_2^+]$ be lists of timestamped streams such that:
+    \begin{align*}
+        \sigmaDenot{\tck}{K_1}{x}{\ts_1^+} \\
+        \sigmaDenot{\tck}{K_2}{x}{\ts_2^+} \\
+        \forall y \in \depSet{x}, \, K_1[y] \equiv K_2[y].
+    \end{align*}
+
+    \Cref{eq:semantics:grfrp:theorems:determinism:deps:ident} ensures that $K_1[x] \equiv K_2[x]$.
+    The denotational semantics of identifiers relies on the rule \nameref{rule:semantics:grfrp:%
+        denot:op:ident} that states $[\ts_1^+]$ and $[\ts_2^+]$ only have one element each, named $\ts_1$ and
+    $\ts_2$ respectively, such that $K_1[x] \equiv \ts_1$ and $K_2[x] \equiv \ts_2$. By symmetry and
+    transitivity of the equivalence relation, we have $\ts_1 \equiv \ts_2$.
+
+    \paragraph{Component applications}
+    Let $f$ be a well-typed and causal component defined in a program \G such that:
+    \begin{equation*}
+        G[f] = \component{f}{x_i^+}{x_o^+}{eq^+}{x_m^+ = c^+}.
+    \end{equation*}
+
+    Let $f(\sigma^+)$ be a well-typed component application, let \tck be a timestamped clock, let
+    $K_1$ and $K_2$ be contexts of streams, and let $[\ts_{o, 1}^+]$ and $[\ts_{o, 2}^+]$ be lists of
+    timestamped streams on \tck such that:
+    \begin{align*}
+        \sigmaDenot{\tck}{K_1}{f(\sigma^+)}{\ts_{o, 1}^+} \\
+        \sigmaDenot{\tck}{K_2}{f(\sigma^+)}{\ts_{o, 2}^+} \\
+        \forall y \in \depSet{f(\sigma^+)}, \, K_1[y] \equiv K_2[y].
+    \end{align*}
+
+    \Cref{eq:semantics:grfrp:theorems:determinism:deps:app} ensures that for each input $\sigma$ we
+    have $\depSet{\sigma} \subseteq \depSet{f(\sigma^+)}$.
+
+    The rule \nameref{rule:semantics:grfrp:denot:op:app} ensures that there exist two lists of
+    streams $[\ts_{i, 1}^+]$ and $[\ts_{i, 2}^+]$, and default values named $v_d$ that are uniquely
+    defined for each type (\ie identical in both semantics) such that:
+    \begin{align*}
+         & \left(\sigmaDenot{\tck}{K_1}{\sigma}{\ts_{i, 1}}\right)^+                                                                   \\
+         & \left(\sigmaDenot{\tck}{K_2}{\sigma}{\ts_{i, 2}}\right)^+                                                                   \\
+         & \left(\on{\ts_{i, 1}}{\tck}\right)^+                                                                                        \\
+         & \left(\on{\ts_{i, 2}}{\tck}\right)^+                                                                                        \\
+         & \left(\on{\ts_{o, 1}}{\tck}\right)^+                                                                                        \\
+         & \left(\on{\ts_{o, 2}}{\tck}\right)^+                                                                                        \\
+         & \compDenot{\clock{\tck}}{f}{\clocked{\tyCtx[x_i]}{v_d}{\ts_{i, 1}}{\tck}^+}{\clocked{\tyCtx[x_o]}{v_d}{\ts_{o, 1}}{\tck}^+} \\
+         & \compDenot{\clock{\tck}}{f}{\clocked{\tyCtx[x_i]}{v_d}{\ts_{i, 2}}{\tck}^+}{\clocked{\tyCtx[x_o]}{v_d}{\ts_{o, 2}}{\tck}^+}
+    \end{align*}
+
+    The induction hypothesis applied to each $\sigma$ ensures that $\left(\ts_{i, 1} \equiv
+        \ts_{i, 2}\right)^+$. The partial function \smf{clocked^\#_\tyCtx} (defined by \Crefrange
+    {eq:semantics:grfrp:denot:clocked:update}{eq:semantics:grfrp:denot:clocked:none}) is
+    deterministic, so that for each identifier $x_i$, the stream \clocked{\tyCtx[x_i]}{v_d}{\ts_{i, 1}}
+    {\tck} is equivalent to \clocked{\tyCtx[x_i]}{v_d}{\ts_{i, 2}}{\tck}. This equivalence relation
+    is defined by the rule \nameref{eq:semantics:streams:equiv}.
+
+    The determinism of causal components, stated by \Cref{thm:semantics:grsync:theorems:determinism%
+    }, ensures that for all $n \in \N$ we have all pairs of streams \clocked{\tyCtx[x_o]}
+    {v_d}{\ts_{o, 1}}{\tck} and \clocked{\tyCtx[x_o]}{v_d}{\ts_{o, 2}}{\tck} that are equivalence up-to%
+    -$n$ (defined in \Cref{def:semantics:grsync:theorems:determinism:equiv_upto_n}). It implies that all pairs
+    \clocked{\tyCtx[x_o]}{v_d}{\ts_{o, 1}}{\tck} and \clocked{\tyCtx[x_o]}{v_d}{\ts_{o, 2}}{\tck} are
+    equivalent.
+
+    We want to prove that all pairs $\ts_{o, 1}$ and $\ts_{o, 2}$ are equivalent. We proceed by
+    induction on $n$ in \N, proving that $\ts_{o, 1} \equiv_{n+1} \ts_{o, 2}$:
+
+    The notation $\ts[n]$ denotes the $n^\text{th}$ element of a timestamped stream \ts, and is
+    defined as:
+    \begin{align}
+        ((t, v) \next \ts')[0] & = (t, v) & ((t, v) \next \ts')[n+1] & = \ts'[n].
+        \label{eq:semantics:grfrp:theorems:determinism:get}
+    \end{align}
+
+    The definition of \smf{clocked^\#_\tyCtx} depends on the type of $x_o$. We proceed by case
+    analysis.
+    \begin{itemize}
+        \item Suppose $\tyCtx[x_o] = ty$.
+              \begin{itemize}
+                  \item \textit{Base case:} Let $k \in \N$, let a value $v$, and let $t_k$ such that
+                        $\tck[k] = (t_k, \true)$ and $\ts_{o, 1}[0] = (t_k, v)$ (because
+                        $\ts_{o, 1}$ in on \tck). Because timestamps are increasing in timestamped
+                        streams, for all $k' < k$ we have $\clocked{ty}{v_d}{\ts_{o, 1}}{\tck}[k'] = v_d$,
+                        and we have $\clocked{ty}{v_d}{\ts_{o, 1}}{\tck}[k] = v$.
+                        Therefore, we have the same for $\ts_{o, 2}$: for all $k' < k$ we have
+                        $\clocked{ty}{v_d}{\ts_{o, 2}}{\tck}[k'] = v_d$, and we have
+                        $\clocked{ty}{v_d}{\ts_{o, 2}}{\tck}[k] = v$.
+                        Timestamped streams for signals only contain their updates, which implies
+                        that $\ts_{o, 2}[0] = (t_k, v) = \ts_{o, 1}[0] = $, and thus
+                        $\ts_{o, 1} \equiv_1 \ts_{o, 2}$.
+
+                  \item \textit{Inductive step:} Let $n \in \N$ such that
+                        $\ts_{o, 1} \equiv_{n+1} \ts_{o, 2}$. Let $k_1, k_2 \in \N$, let values
+                        $v_1$ and $v_2$, and let $t_{k_1}$ and $t_{k_2}$ such that
+                        $\tck[k_1] = (t_{k_1}, \true)$, $\tck[k_2] = (t_{k_2}, \true)$,
+                        $\ts_{o, 1}[n] = (t_{k_1}, v_1)$, and $\ts_{o, 1}[n+1] = (t_{k_2}, v_2)$.
+
+                        Because timestamps are increasing in timestamped streams, for all
+                        $k_1 < k' < k_2$ we have $\clocked{ty}{v_d}{\ts_{o, 1}}{\tck}[k']$ that
+                        equals $\clocked{ty}{v_d}{\ts_{o, 1}}{\tck}[k_1]$,
+                        and we have $\clocked{ty}{v_d}{\ts_{o, 1}}{\tck}[k_2] = v_2$.
+                        Therefore, we have the same for $\ts_{o, 2}$: for all $k_1 < k' < k_2$ we
+                        have $\clocked{ty}{v_d}{\ts_{o, 2}}{\tck}[k']$ that
+                        equals $\clocked{ty}{v_d}{\ts_{o, 2}}{\tck}[k_1]$,
+                        and we have $\clocked{ty}{v_d}{\ts_{o, 2}}{\tck}[k_2] = v_2$.
+                        Timestamped streams for signals only contain their updates, which implies
+                        that $\ts_{o, 2}[n+1] = (t_{k_2}, v_2) = \ts_{o, 1}[n+1]$, and thus
+                        $\ts_{o, 1} \equiv_{n+1} \ts_{o, 2}$.
+              \end{itemize}
+        \item Suppose $\tyCtx[x_o] = \mayB{ty}$.
+              \begin{itemize}
+                  \item \textit{Base case:} Let $k \in \N$, let a value $v$, and let $t_k$ such that
+                        $\tck[k] = (t_k, \true)$ and $\ts_{o, 1}[0] = (t_k, v)$ (because
+                        $\ts_{o, 1}$ in on \tck). Because timestamps are increasing in timestamped
+                        streams, for all $k' < k$ we have $\clocked{\mayB{ty}}{v_d}{\ts_{o, 1}}{\tck}[k'] = \none$,
+                        and we have $\clocked{\mayB{ty}}{v_d}{\ts_{o, 1}}{\tck}[k] = \some{v}$.
+                        Therefore, we have the same for $\ts_{o, 2}$: for all $k' < k$ we have
+                        $\clocked{\mayB{ty}}{v_d}{\ts_{o, 2}}{\tck}[k'] = \none$, and we have
+                        $\clocked{\mayB{ty}}{v_d}{\ts_{o, 2}}{\tck}[k] = \some{v}$.
+                        It implies that $\ts_{o, 1}[0] = \ts_{o, 2}[0]$, and thus $\ts_{o, 1} \equiv_1 \ts_{o, 2}$.
+
+                  \item \textit{Inductive step:} Let $n \in \N$ such that
+                        $\ts_{o, 1} \equiv_{n+1} \ts_{o, 2}$. Let $k_1, k_2 \in \N$, let values
+                        $v_1$ and $v_2$, and let $t_{k_1}$ and $t_{k_2}$ such that
+                        $\tck[k_1] = (t_{k_1}, \true)$, $\tck[k_2] = (t_{k_2}, \true)$,
+                        $\ts_{o, 1}[n] = (t_{k_1}, v_1)$, and $\ts_{o, 1}[n+1] = (t_{k_2}, v_2)$.
+
+                        Because timestamps are increasing in timestamped streams, for all
+                        $k_1 < k' < k_2$ we have $\clocked{\mayB{ty}}{v_d}{\ts_{o, 1}}{\tck}[k'] = \none$,
+                        and we have $\clocked{\mayB{ty}}{v_d}{\ts_{o, 1}}{\tck}[k_2] = \some{v_2}$.
+                        Therefore, we have the same for $\ts_{o, 2}$: for all $k_1 < k' < k_2$ we
+                        have $\clocked{\mayB{ty}}{v_d}{\ts_{o, 2}}{\tck}[k'] = \none$,
+                        and we have $\clocked{\mayB{ty}}{v_d}{\ts_{o, 2}}{\tck}[k_2] = \some{v_2}$.
+                        It implies that $\ts_{o, 2}[n+1] = (t_{k_2}, v_2) = \ts_{o, 1}[n+1]$, and thus
+                        $\ts_{o, 1} \equiv_{n+1} \ts_{o, 2}$.
+              \end{itemize}
+    \end{itemize}
+
+    It implies that all pairs of streams $\ts_{o, 1}$ and $\ts_{o, 2}$ are equivalent.
+
+    \paragraph{Other operations}
+
+    The denotational semantics of other operations are defined through deterministic functions,
+    leading to unique associated streams.
+
+    For example, let \timeout{\sigma}{T} be a timeout of duration $T$ on the event $\sigma$, let
+    \tck be a timestamped clock, let $K_1$ and $K_2$ be contexts of streams, and let $[\ts_1^+]$ and
+    $[\ts_2^+]$ be lists of timestamped streams such that:
+    \begin{align*}
+        \sigmaDenot{\tck}{K_1}{\timeout{\sigma}{T}}{\ts_1^+} \\
+        \sigmaDenot{\tck}{K_2}{\timeout{\sigma}{T}}{\ts_2^+} \\
+        \forall y \in \depSet{\timeout{\sigma}{T}}, \, K_1[y] \equiv K_2[y].
+    \end{align*}
+
+    The denotational semantics of timeout operations relies on the rule \nameref{rule:semantics:%
+        grfrp:denot:op:timeout} that states $[\ts_1^+]$ and $[\ts_2^+]$ only have one element each,
+    named $\ts_1$ and $\ts_2$ respectively, such that:
+    \begin{align*}
+         & \sigmaDenot{\tck}{K_1}{\sigma}{\ts'_1} \\
+         & \sigmaDenot{\tck}{K_2}{\sigma}{\ts'_2} \\
+         & \on{\ts_1}{\tck}                       \\
+         & \on{\ts_2}{\tck}                       \\
+         & \timeoutAux{\ts'_1}{T}{T} \equiv \ts_1 \\
+         & \timeoutAux{\ts'_2}{T}{T} \equiv \ts_2
+    \end{align*}
+
+    \Cref{eq:semantics:grfrp:theorems:determinism:deps:timeout} ensures that \depSet{\timeout
+        {\sigma}{T}} is equal to \depSet{\sigma}.
+    The induction hypothesis applied to each $\sigma$ ensures that $\ts'_1 \equiv \ts'_2$. The partial
+    function \smf{timeout^\#_{T}} (defined by \Crefrange{eq:semantics:grfrp:denot:op:timeout:aux:1}
+    {eq:semantics:grfrp:denot:op:timeout:aux:2}) is deterministic, so we have $\ts_1 \equiv \ts_2$.
+
+    \setcounter{paragraph}{0}
+\end{skippableproof}
+
+\newcommand{\declSet}[1]{{\ensuremath{\textit{decl}\left(#1\right)}}}
+\newcommand{\importSet}[1]{{\ensuremath{\textit{import}\left(#1\right)}}}
+\newcommand{\exportSet}[1]{{\ensuremath{\textit{export}\left(#1\right)}}}
+\begin{definition}[Declared, imported, and exported identifiers]
+    \label{not:semantics:grfrp:theorems:determinism:sets}
+
+    In order to state the determinism of the denotational semantics of \GRFRP services, we first
+    introduce the definitions of the sets of declared, imported, and exported identifiers.
+    %
+    The set of the identifiers imported by a service or a block of statements is defined in
+    \Crefrange{eq:semantics:grfrp:theorems:determinism:sets:export:service}{eq:semantics:grfrp:%
+        theorems:determinism:sets:export:export}.
+    %
+    \begin{align}
+        \importSet{\service{F}{stmt^+}}        & = \importSet{stmt^+}\label{eq:semantics:grfrp:theorems:determinism:sets:import:service}           \\
+        \importSet{\skp}                       & = \emptyset\label{eq:semantics:grfrp:theorems:determinism:sets:import:skip}                       \\
+        \importSet{stmt^+, \decl{x^+}{\sigma}} & = \importSet{stmt^+}\label{eq:semantics:grfrp:theorems:determinism:sets:import:decl}              \\
+        \importSet{stmt^+, \import{x}}         & = \{x\} \cup \importSet{stmt^+}\label{eq:semantics:grfrp:theorems:determinism:sets:import:import} \\
+        \importSet{stmt^+, \export{x}}         & = \importSet{stmt^+}\label{eq:semantics:grfrp:theorems:determinism:sets:import:export}
+    \end{align}
+    %
+    The set of the identifiers declared by a service or a block of statements is defined in
+    \Crefrange{eq:semantics:grfrp:theorems:determinism:sets:decl:service}{eq:semantics:grfrp:%
+        theorems:determinism:sets:decl:export}. It contains all locally defined identifiers, but
+    also the imported ones.
+    %
+    \begin{align}
+        \declSet{\service{F}{stmt^+}}        & = \declSet{stmt^+} \label{eq:semantics:grfrp:theorems:determinism:sets:decl:service}           \\
+        \declSet{\skp}                       & = \emptyset \label{eq:semantics:grfrp:theorems:determinism:sets:decl:skip}                     \\
+        \declSet{stmt^+, \decl{x^+}{\sigma}} & = \{x^+\} \cup \declSet{stmt^+} \label{eq:semantics:grfrp:theorems:determinism:sets:decl:decl} \\
+        \declSet{stmt^+, \import{x}}         & = \{x\} \cup \declSet{stmt^+} \label{eq:semantics:grfrp:theorems:determinism:sets:decl:import} \\
+        \declSet{stmt^+, \export{x}}         & = \declSet{stmt^+} \label{eq:semantics:grfrp:theorems:determinism:sets:decl:export}
+    \end{align}
+    %
+    The set of the identifiers exported by a service or a block of statements is defined in
+    \Crefrange{eq:semantics:grfrp:theorems:determinism:sets:import:service}{eq:semantics:grfrp:%
+        theorems:determinism:sets:import:export}.
+    %
+    \begin{align}
+        \exportSet{\service{F}{stmt^+}}          & = \exportSet{stmt^+}\label{eq:semantics:grfrp:theorems:determinism:sets:export:service}           \\
+        \exportSet{\skp}                         & = \emptyset\label{eq:semantics:grfrp:theorems:determinism:sets:export:skip}                       \\
+        \exportSet{stmt^+, \export{x^+}{\sigma}} & = \exportSet{stmt^+}\label{eq:semantics:grfrp:theorems:determinism:sets:export:decl}              \\
+        \exportSet{stmt^+, \import{x}}           & = \exportSet{stmt^+}\label{eq:semantics:grfrp:theorems:determinism:sets:export:import}            \\
+        \exportSet{stmt^+, \export{x}}           & = \{x\} \cup \exportSet{stmt^+}\label{eq:semantics:grfrp:theorems:determinism:sets:export:export}
+    \end{align}
+\end{definition}
+
+\begin{theorem}[Determinism of \GRFRP services]
+    \label{thm:semantics:grfrp:theorems:determinism}
+    Let \service{F}{stmt^+} be a well-typed service in a well-typed and causal program \G with a
+    typing context \tyCtx. If $I_1$ and $I_2$ are input contexts of timestamped streams and
+    \tck is a timestamped clock, then for all output contexts $O_1$ and $O_2$:
+    \begin{multline*}
+        \wedge \begin{array}{l}
+            \serviceDenot{\tck}{I_1}{F}{O_1} \\
+            \serviceDenot{\tck}{I_2}{F}{O_2}
+        \end{array}
+        \; \Rightarrow \\
+        \left[\forall x \in \importSet{\service{F}{stmt^+}}, \, I_1[x] \equiv I_2[x]\right]
+        \; \Rightarrow \\
+        \left[\forall y \in \exportSet{\service{F}{stmt^+}}, \, O_1[y] \equiv O_2[y]\right]
+    \end{multline*}
+\end{theorem}
+\begin{skippableproof}
+    We first prove for all $j \in \N$ the proposition \P{j}: For all well-typed
+    block of $j$ statements $(stmt_1, \dots, stmt_j)$, input contexts $I_1$ and $I_2$, timestamp
+    clock \tck, output contexts $O_1$ and $O_2$, and local contexts $K_1$ and $K_2$ such that:
+    \begin{align*}
+        \forall i \in \{1, \dots, j\}, \,                   & \stmtDenot{\tck}{I_1}{K_1}{stmt_i}{O_1} \\
+        \forall i \in \{1, \dots, j\}, \,                   & \stmtDenot{\tck}{I_2}{K_1}{stmt_i}{O_2} \\
+        \forall x \in \importSet{stmt_1, \dots, stmt_j}, \, & I_1[x] \equiv I_2[x],
+    \end{align*}
+    we have:
+    \begin{align*}
+        \forall y \in \declSet{stmt_1, \dots, stmt_j}, \,   & K_1[y] \equiv K_2[y] \\
+        \forall z \in \exportSet{stmt_1, \dots, stmt_j}, \, & O_1[z] \equiv O_2[z]
+    \end{align*}
+
+    The proof is done by induction on the number of statements.
+    \begin{itemize}
+        \item \textit{Base case:}
+              An empty block (\skp) does not define nor export any flow, then the property
+              \P{0} holds.
+
+        \item \textit{Inductive step:}
+              Suppose that \P{j} holds.
+              Let $(stmt_1, \dots, stmt_j, stmt')$ be a well-typed block of $j+1$ statements, and
+              let $stmt^+$ denote the block $(stmt_1, \dots, stmt_j)$.
+              Let $I_1$ and $I_2$ be input contexts, \tck be a timestamped clock, $O_1$ and $O_2$ be
+              output contexts, and $K_1$ and $K_2$ be local context such that:
+              \begin{align*}
+                  \left(\stmtDenot{\tck}{I_1}{K_1}{stmt}{O_1}\right)^+ &  &  & \stmtDenot{\tck}{I_1}{K_1}{stmt'}{O_1} \\
+                  \left(\stmtDenot{\tck}{I_2}{K_2}{stmt}{O_2}\right)^+ &  &  & \stmtDenot{\tck}{I_2}{K_2}{stmt'}{O_2} \\
+                  \forall x \in \importSet{stmt^+, stmt'},             &  &  & I_1[x] \equiv I_2[x].
+              \end{align*}
+
+              Because $\importSet{stmt^+} \subseteq \importSet{stmt^+, stmt'}$ (\cf \Crefrange
+              {eq:semantics:grfrp:theorems:determinism:sets:import:skip}{eq:semantics:grfrp:%
+                  theorems:determinism:sets:import:export}), we can use the induction hypothesis to
+              state that for all $y \in \declSet{stmt^+}$ we have $K_1[y] \equiv K_2[y]$, and for
+              all $z \in \exportSet{stmt^+}$ we have $O_1[z] \equiv O_2[z]$.
+
+              We continue the proof by case analysis on $stmt'$:
+              \begin{itemize}
+                  \item Suppose $stmt'$ is an import of the identifier $x'$. Let $y \in \declSet
+                            {stmt^+, \import{x'}}$, and let $z \in\exportSet{stmt^+, \import{x'}}$.
+
+                        \Cref{eq:semantics:grfrp:theorems:determinism:sets:decl:import} ensures that
+                        either $y = x'$ or $y \in \declSet{stmt^+}$.
+
+                        If $y \in \declSet{stmt^+}$, the induction hypothesis states that $K_1[y]
+                            \equiv K_2[y]$.
+
+                        If $y = x'$, \Cref{eq:semantics:grfrp:theorems:determinism:sets:import:%
+                            import} states that $x' \in \importSet{stmt^+, stmt'}$, so that we have
+                        $I_1[x'] \equiv I_2[x']$. The rule
+                        \nameref{rule:semantics:grfrp:denot:stmt:import} ensures that we have
+                        $K_1[x'] \equiv I_1[x']$ and $K_2[x'] \equiv I_2[x']$, by symmetry and
+                        transitivity we have $K_1[x'] \equiv K_2[x']$.
+
+                        \Cref{eq:semantics:grfrp:theorems:determinism:sets:export:import} ensures that
+                        $z \in \exportSet{stmt^+}$, then we have $O_1[z] \equiv O_2[z]$ by induction
+                        hypothesis.
+
+                  \item Suppose $stmt'$ is a declaration \decl{y^{\prime +}}{\sigma}. Let $y \in
+                            \declSet{stmt^+, \decl{y^{\prime +}}{\sigma}}$, and let $z \in
+                            \exportSet{stmt^+, \decl{y^{\prime +}}{\sigma}}$.
+
+                        \Cref{eq:semantics:grfrp:theorems:determinism:sets:decl:decl} ensures that
+                        either $y \in \{y^{\prime +}\}$ or $y \in \declSet{stmt^+}$.
+                        %
+                        If we have $y \in \declSet{stmt^+}$, the induction hypothesis states that
+                        $K_1[y] \equiv K_2[y]$.
+                        %
+                        In the case $y \in \{y^{\prime +}\}$, the rule \nameref{rule:semantics:%
+                            grfrp:denot:stmt:decl} ensures there exist streams $\ts_1^+$ and $\ts_2^+$
+                        such that:
+                        \begin{align*}
+                             & \left(K_1[y'] \equiv \ts_1\right)^+      \\
+                             & \left(K_2[y'] \equiv \ts_2\right)^+      \\
+                             & \sigmaDenot{\tck}{K_1}{\sigma}{\ts_1^+}  \\
+                             & \sigmaDenot{\tck}{K_2}{\sigma}{\ts_2^+}.
+                        \end{align*}
+                        %
+                        Because the block $(stmt^+, \decl{y^{\prime +}}{\sigma})$ is well-typed,
+                        $\depSet{\sigma} \subseteq \declSet{stmt^+}$. Then
+                        \Cref{lem:semantics:grfrp:theorems:determinism} ensures that all pairs of streams
+                        $\ts_1$ and $\ts_2$ are equivalent. It implies in particular that we have
+                        $K_1[y] \equiv K_2[y]$.
+
+                        \Cref{eq:semantics:grfrp:theorems:determinism:sets:export:decl} ensures that
+                        $z \in \exportSet{stmt^+}$, then we have $O_1[z] \equiv O_2[z]$ by induction
+                        hypothesis.
+
+                  \item Suppose $stmt'$ is an export of the identifier $z'$. Let $y \in \declSet
+                            {stmt^+, \export{z'}}$, and let $z \in\exportSet{stmt^+, \export{z'}}$.
+
+                        \Cref{eq:semantics:grfrp:theorems:determinism:sets:decl:export} ensures that
+                        $y \in\declSet{stmt^+}$, then we have $K_1[y] \equiv K_2[y]$ by induction
+                        hypothesis.
+
+                        \Cref{eq:semantics:grfrp:theorems:determinism:sets:export:export} ensures that
+                        either $z = z'$ or $z \in \exportSet{stmt^+}$.
+                        %
+                        If $z$ is in $\exportSet{stmt^+}$, the induction hypothesis states that
+                        $O_1[z] \equiv O_2[z]$.
+                        %
+                        If $z = z'$, because the block of statements $(stmt^+, \export{z'})$ is
+                        well-typed, $z'$ is declared by the statements $stmt^+$. We then have $z'
+                            \in \declSet{stmt^+}$, which implies by the induction hypothesis that
+                        $K_1[z'] \equiv K_2[z']$. The rule \nameref{rule:semantics:grfrp:denot:stmt%
+                            :export} ensures that $O_1[z'] \equiv K_1[z']$ and $O_2[z'] \equiv
+                            K_2[z']$, and by symmetry and transitivity we have $O_1[z'] \equiv
+                            O_2[z']$.
+              \end{itemize}
+
+              Then, for all $y$ in $\declSet{stmt^+, stmt'}$ and $z$ in $\exportSet{stmt^+, stmt'}$,
+              we have $K_1[y] \equiv K_2[y]$ and $O_1[z] \equiv O_2[z]$.
+    \end{itemize}
+
+    Consequently, for all well-typed block of statements $stmt^+$, input contexts $I_1$ and $I_2$,
+    timestamped clock \tck, output contexts $O_1$ and $O_2$, and local contexts $K_1$ and $K_2$ such
+    that:
+    \begin{align*}
+         & \left(\stmtDenot{\tck}{I_1}{K_1}{stmt}{O_1}\right)^+       \\
+         & \left(\stmtDenot{\tck}{I_2}{K_2}{stmt}{O_2}\right)^+       \\
+         & \forall x \in \importSet{stmt^+}, \, I_1[x] \equiv I_2[x],
+    \end{align*}
+    we have:
+    \begin{align}
+        \forall y \in \declSet{stmt^+},   & \, K_1[y] \equiv K_2[y] \label{eq:semantics:grfrp:theorems:determinism:aux:1} \\
+        \forall z \in \exportSet{stmt^+}, & \, O_1[z] \equiv O_2[z] \label{eq:semantics:grfrp:theorems:determinism:aux:2}
+    \end{align}
+
+    Let \service{F}{stmt^+} be a well-typed service in a well-typed and causal program \G with a
+    typing context \tyCtx, let $I_1$ and $I_2$ be input contexts of timestamped streams, let
+    \tck be a timestamped clock, and let $O_1$ and $O_2$ be output contexts such that:
+    \begin{align*}
+         & \serviceDenot{\tck}{I_1}{F}{O_1}                                        \\
+         & \serviceDenot{\tck}{I_2}{F}{O_2}                                        \\
+         & \forall x \in \importSet{\service{F}{stmt^+}}, \, I_1[x] \equiv I_2[x].
+    \end{align*}
+
+    The rule \nameref{rule:semantics:grfrp:denot:service} and \Cref{eq:semantics:grfrp:theorems:%
+        determinism:sets:import:service} ensure that there exist local contexts $K_1$ and $K_2$ such
+    that:
+    \begin{align*}
+         & \left(\stmtDenot{\tck}{I_1}{K_1}{stmt}{O_1}\right)^+       \\
+         & \left(\stmtDenot{\tck}{I_2}{K_2}{stmt}{O_2}\right)^+       \\
+         & \forall x \in \importSet{stmt^+}, \, I_1[x] \equiv I_2[x].
+    \end{align*}
+    \Cref{eq:semantics:grfrp:theorems:determinism:aux:1} and \Cref{eq:semantics:grfrp:theorems:%
+        determinism:aux:1} ensure that we have:
+    \begin{align*}
+        \forall y \in \declSet{stmt^+},   & \, K_1[y] \equiv K_2[y]  \\
+        \forall z \in \exportSet{stmt^+}, & \, O_1[z] \equiv O_2[z].
+    \end{align*}
+    \Cref{eq:semantics:grfrp:theorems:determinism:sets:decl:service} and \Cref{eq:semantics:grfrp:%
+        theorems:determinism:sets:export:service} then ensure that:
+    \begin{align*}
+        \forall y \in \declSet{\service{F}{stmt^+}},   & \, K_1[y] \equiv K_2[y]  \\
+        \forall z \in \exportSet{\service{F}{stmt^+}}, & \, O_1[z] \equiv O_2[z],
+    \end{align*}
+    which conclude the proof.
+\end{skippableproof}
+
+\paragraph{Summary}
+In conclusion, this section formally established the determinism of \GRFRP services. The main
+result, presented in \Cref{thm:semantics:grfrp:theorems:determinism}, guarantees that a given input
+history uniquely determines the output history of a service.
+%
+This property was demonstrated through a proof by structural induction. It first established the
+determinism of individual flow operations in \Cref{lem:semantics:grfrp:theorems:determinism}, a
+result that relies on the deterministic semantics of both built-in stream operators from \GReact
+and \GRSync components.
+%
+The proof was then extended to the service level, showing that for any block of statements,
+equivalent inputs produce equivalent declared and exported flows.
+%
+This guarantee of determinism is essential, confirming that the behavior of a service is predictable
+and repeatable, a foundational requirement for building reliable reactive systems.

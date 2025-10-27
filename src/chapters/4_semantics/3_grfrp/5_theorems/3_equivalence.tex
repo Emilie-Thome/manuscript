@@ -1,0 +1,2080 @@
+\subsubsection{Equivalence}
+\label{sec:semantics:grfrp:theorems:equivalence}
+
+\Cref{lem:semantics:grfrp:theorems:equivalence:flowop} and \Cref{thm:semantics:grfrp:theorems:equivalence}
+establish the equivalence between operational simulations and denotational semantics of flow
+operations and services respectively, meaning that the operational semantics of these constructs,
+based on inputs propagation, maintains the flows up to date at every instant.
+
+\newcommand{\getAt}[2]{\ensuremath{\smf{get}(#1, #2)}}
+\newcommand{\from}[2]{\ensuremath{\smf{from}(#1, #2)}}
+
+Timestamped streams only have values during signal updates or event occurrences, so they do not have
+values for every timestamp of the timestamped clock. The notation $\ts[n]$ (used in the proof of
+\Cref{lem:semantics:grfrp:theorems:determinism} to denote the $n^\text{th}$ element of a timestamped
+stream \ts) cannot be used to retrieve their value at every global computation step.
+A better notation is \getAt{\ts}{t}, defined in \Cref{def:semantics:grfrp:theorems:equivalence:getat}, that
+denotes the value of the timestamped stream \ts at the timestamp $t$, and the notation \from{\ts}{t},
+defined in \Cref{def:semantics:grfrp:theorems:equivalence:from}, that denotes the rest of the timestamped
+stream starting from $t$.
+
+\begin{definition}[Values from timestamps]
+    \label{def:semantics:grfrp:theorems:equivalence:getat}
+    The value of a timestamped stream \ts at a timestamp $t$ is denoted by \getAt{\ts}{t} and defined
+    below.
+    \begin{align}
+        \getAt{(t', v) \next \ts}{t} & = v              & \text{if} \; t' & = t \\
+        \getAt{(t', v) \next \ts}{t} & = \getAt{\ts}{t} & \text{if} \; t' & < t \\
+        \getAt{(t', v) \next \ts}{t} & = \bot           & \text{if} \; t' & > t
+    \end{align}
+\end{definition}
+
+\begin{lemma}
+    \label{lem:semantics:grfrp:theorems:equivalence:getat}
+    Let \tck be a timestamped clock, and $\ts_1$ and $\ts_2$ be two timestamped streams on \tck (\ie
+    such that \on{\ts_1}{\tck} and \on{\ts_2}{\tck} holds). We have $\ts_1 \equiv \ts_2$ \iff for
+    all $k$ in \N such that $\tck[k] = (t_k, \true)$ we have
+    $\getAt{\ts_1}{t_k} = \getAt{\ts_2}{t_k}$.
+\end{lemma}
+\begin{skippableproof}
+    Let \tck be a timestamped clock, and $\ts_1$ and $\ts_2$ be two timestamped streams on \tck (\ie
+    such that \on{\ts_1}{\tck} and \on{\ts_2}{\tck} holds), and $(t_k^+)$ a sequence of timestamps such
+    that for all $k \in \N$ we have $\tck[k] = (t_k, \true)$.
+
+    Suppose that $\ts_1 \equiv \ts_2$. The rule \nameref{eq:semantics:streams:equiv} ensures that
+    all timestamps and values on both streams are identical, which implies that for all $k$ in
+    \N we have $\getAt{\ts_1}{t_k} = \getAt{\ts_2}{t_k}$.
+
+    Suppose that for all $k$ in \N we have $\getAt{\ts_1}{t_k} = \getAt{\ts_2}{t_k}$. We proceed by
+    induction on $n$ in \N, proving that $\ts_1 \equiv_{n+1} \ts_2$:\footnote{This is the same
+        equivalence up-to-$n$ that was introduced in
+        \Cref{def:semantics:grsync:theorems:determinism:equiv_upto_n}, in
+        \Cref{sec:semantics:grsync:theorems:determinism}.}
+    \begin{itemize}
+        \item \textit{Base case:} Let $k \in \N$ such that
+              $\ts_1[0] = (t_k, \getAt{\ts_1}{t_k})$. Because timestamps are increasing in
+              timestamped streams, for all $k' < k$ we have $\getAt{\ts_1}{t_{k'}} = \bot$.
+              Therefore, we have the same for $\ts_2$: for all $k' < k$ we have
+              $\getAt{\ts_2}{t_{k'}} = \bot$, and
+              $\getAt{\ts_2}{t_k} = \getAt{\ts_1}{t_k} \neq \bot$. It implies that
+              $\ts_2[0] = (t_k, \getAt{\ts_2}{t_k})$ and thus $\ts_2[0] = \ts_1[0]$.
+              Which in turn implies $\ts_1 \equiv_1 \ts_2$.
+
+        \item \textit{Inductive step:} Let $n \in \N$ such that $\ts_1 \equiv_{n+1} \ts_2$.
+              Let $k_1, k_2 \in \N$ such that
+              $\ts_1[n] = (t_{k_1}, \getAt{\ts_1}{t_{k_1}})$ and
+              $\ts_1[n+1] = (t_{k_2}, \getAt{\ts_1}{t_{k_2}})$.
+              Because timestamps are increasing in timestamped streams, for all $k_1 < k' < k_2$ we
+              have $\getAt{\ts_1}{t_{k'}} = \bot$. Therefore, we have the same for $\ts_2$: for all
+              $k_1 < k' < k_2$ we have $\getAt{\ts_2}{t_{k'}} = \bot$, and
+              $\getAt{\ts_2}{k_2} = \getAt{\ts_1}{k_2} \neq \bot$. It implies that
+              $\ts_2[n+1] = (t_{k_2}, \getAt{\ts_2}{t_{k_2}})$ and thus $\ts_2[n+1] = \ts_1[n+1]$.
+              Which in turn implies $\ts_1 \equiv_{n+2} \ts_2$.
+    \end{itemize}
+    Therefore, we have $\ts_1 \equiv \ts_2$.
+\end{skippableproof}
+
+\begin{definition}[Stream starting from timestamps]
+    \label{def:semantics:grfrp:theorems:equivalence:from}
+    The rest of a timestamped stream \ts starting from a timestamp $t$ is denoted by \from{\ts}{t} and
+    defined below.
+    \begin{align}
+        \from{(t', v) \next \ts}{t} & = \from{\ts}{t}     & \text{if} \; t' & < t   \\
+        \from{(t', v) \next \ts}{t} & = (t', v) \next \ts & \text{if} \; t' & \ge t
+    \end{align}
+\end{definition}
+
+\begin{lemma}[Equivalence of \GRFRP flow operations]
+    \label{lem:semantics:grfrp:theorems:equivalence:flowop}
+    Let $\sigma$ be a well-typed flow operation in a well-typed and causal program \G and a
+    typing context \tyCtx, \tck be a timestamped clock, and $K$ be timestamped stream context on
+    \tck.
+
+    For all timestamped streams $\ts^+$ on \tck, the denotational semantics \sigmaDenot{\tck}{K}
+    {\sigma}{\ts^+} holds \iff there exist a sequence of update contexts $(\gamma_k^+)$, a sequence
+    of states $(s_k^+)$ corresponding to $\sigma$ in its operational semantics, and one of lists of
+    timer resets $([(i_k, T_k)^+]^+)$ such that:
+    \begin{equation*}
+        \begin{array}{ll}
+                                 & (s_0, [(i_0, T_0)^+]) = (\initstate{\sigma}, \inittimer{\sigma}) \\
+            \forall k \in \N, \, &
+            \left\{
+            \begin{array}{l}
+                (t_k, \true) = \tck[k]                                                                     \\
+                \forall x \in \depSet{\sigma}, \, \gamma_k[x] = \getAt{K[x]}{t_k}                          \\
+                \sigmaOpSem{\gamma_k}{s_k}{\sigma}{t_k}{s_{k+1}}{\getAt{\ts}{t_k}^+}{(i_{k+1}, T_{k+1})^+} \\
+                \forall (i, T) \in \{(i_k, T_k)^+\}, \,
+                \left\{
+                \begin{array}{l}
+                    \left[\forall l, \, t_k \le t_l < T \Rightarrow i \notin \{(i_{l+1})^+\} \right]   \\
+                    \qquad \Rightarrow
+                    \left\{\begin{array}{l}
+                               \exists m, \, t_k \le t_m = T \wedge \gamma_m[i] = () \\
+                               \forall m, \, t_k \le t_m < T \Rightarrow \gamma_m[i] = \bot
+                           \end{array}\right.                 \\
+                    \left[\exists l, \, t_k \le t_l < T \wedge i \in \{(i_{l+1})^+\} \right]           \\
+                    \qquad \Rightarrow \forall m, \, t_k \le t_m \le T \Rightarrow \gamma_m[i] = \bot. \\
+                \end{array}
+                \right.
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+\end{lemma}
+\begin{remark}
+    The precondition on the sequence of environments $(\gamma_k^+)$ and the sequence of timer resets
+    $([(i_k, T_k)^+]^+)$ states that those resets are indeed applied: if no further resets appear
+    before the timer $T$ ticks, $T$ is present in the corresponding environment ($t_m = T \wedge
+        \gamma_m[i] = ()$); if another reset appears ($t_l < T \wedge i \in \{(i_{l+1})^+\}$), the
+    timer $T$ is canceled ($t_m = T \Rightarrow \gamma_m[i] = \bot$).
+\end{remark}
+\begin{skippableproof}
+    Let $\sigma$ be a well-typed flow operation in a well-typed and causal program \G and a
+    typing context \tyCtx, \tck be a timestamped clock, and $K$ be timestamped stream context on
+    \tck.
+
+    \paragraph{Operational $\Rightarrow$ Denotational}
+    \label{sec:semantics:grfrp:theorems:equivalence:flowop:proof:op_to_den}
+    Let $(\gamma_k^+)$ be a sequence of update contexts, $\ts^+$ be timestamped streams on \tck,
+    $(s_k^+)$ be a sequence of states corresponding to $\sigma$, and $([(i_k, T_k)^+]^+)$ be a
+    sequence of lists of timer resets such that:
+    \begin{equation*}
+        \begin{array}{ll}
+                                 & (s_0, [(i_0, T_0)^+]) = (\initstate{\sigma}, \inittimer{\sigma}) \\
+            \forall k \in \N, \, &
+            \left\{
+            \begin{array}{l}
+                (t_k, \true) = \tck[k]                                                                     \\
+                \forall x \in \depSet{\sigma}, \, \gamma_k[x] = \getAt{K[x]}{t_k}                          \\
+                \sigmaOpSem{\gamma_k}{s_k}{\sigma}{t_k}{s_{k+1}}{\getAt{\ts}{t_k}^+}{(i_{k+1}, T_{k+1})^+} \\
+                \forall (i, T) \in \{(i_k, T_k)^+\}, \,
+                \left\{
+                \begin{array}{l}
+                    \left[\forall l, \, t_k \le t_l < T \Rightarrow i \notin \{(i_{l+1})^+\} \right]   \\
+                    \qquad \Rightarrow
+                    \left\{\begin{array}{l}
+                               \exists m, \, t_k \le t_m = T \wedge \gamma_m[i] = () \\
+                               \forall m, \, t_k \le t_m < T \Rightarrow \gamma_m[i] = \bot
+                           \end{array}\right.                 \\
+                    \left[\exists l, \, t_k \le t_l < T \wedge i \in \{(i_{l+1})^+\} \right]           \\
+                    \qquad \Rightarrow \forall m, \, t_k \le t_m \le T \Rightarrow \gamma_m[i] = \bot. \\
+                \end{array}
+                \right.
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    In order to prove that the denotational semantics \sigmaDenot{\tck}{K}{\sigma}{\ts^+} holds, we
+    proceed by structural induction on $\sigma$, and relies on the semantics equivalence of \GRSync
+    components that is developed in \Cref{sec:semantics:grsync:theorems:equivalence},
+    \Cref{thm:semantics:grsync:theorems:equivalence}.
+
+    \subparagraph{Identifiers}
+    Suppose $\sigma$ equals $x$, a flow identifier. For all context $\gamma$, the operational
+    semantics of the identifier $x$ returns the value $\gamma[x]$, as described by the rule \nameref
+    {rule:semantics:grfrp:opsem:step:op:ident}. Therefore, the streams $\ts^+$ constitute only one
+    timestamped stream denoted by \ts such that:
+    \begin{equation*}
+        \forall k \in \N, \, (t_k, \true) = \tck[k] \qquad \getAt{\ts}{t_k} = \gamma_k[x].
+    \end{equation*}
+    The identifier $x$ is a dependency of the flow operation $x$ (\Cref{eq:semantics:grfrp:theorems%
+        :determinism:deps:ident}), so the hypothesis on $K$ and $(\gamma_k^+)$ implies that:
+    \begin{equation*}
+        \forall k \in \N, \, (t_k, \true) = \tck[k] \qquad \getAt{\ts}{t_k} = \getAt{K[x]}{t_k},
+    \end{equation*}
+    and because we have \on{\ts}{\tck} and \on{K[x]}{\tck}, \Cref{lem:semantics:grfrp:theorems:equivalence:%
+        getat} implies that $\ts \equiv K[x]$. The rule \nameref{rule:semantics:grfrp:denot:op:ident}
+    ensures that \sigmaDenot{\tck}{K}{x}{\ts}.
+
+    \subparagraph{Component applications}
+    Suppose $\sigma$ equals $f(\sigma^{\prime+})$, the application of the component \component{f}
+    {x_i^+}{x_o^+}{eq^+}{x_m^+ = c^+} on the flow operations $\sigma^{\prime+}$.
+    The rules \nameref{rule:semantics:grfrp:opsem:step:op:app:value} and \nameref{rule:semantics:%
+        grfrp:opsem:step:op:app:propag} ensure that there exist a sequence of states $(s_k^{f +})$
+    corresponding to $f$, for each input $x_i$ (\resp output $x_o$) of $f$ two simple streams
+    $s_i^\explast$ and $s_i$ (\resp $s_o^\explast$ and $s_o$), for each $\sigma'$ a sequence of
+    states $(s_k^{\prime +})$ that corresponds to $\sigma'$, a timestamped stream $\ts'$ on \tck,
+    and a sequence of lists of timer resets $([(i'_k, T'_k)^+]^+)$ such that:
+    \begin{equation*}
+        \begin{array}{ll}
+                                 & (s^f_0, (s_i^\explast[0])^+, (s_o^\explast[0])^+,
+            (s'_0)^+) = (\initsync{f}, v_d^+, v_d^+, (\initstate{\sigma'})^+)        \\
+                                 & ([(i'_0, T'_0)^+])^+ = (\inittimer{\sigma'})^+    \\
+            \forall k \in \N, \, &
+            \left\{
+            \begin{array}{l}
+                s_k = (s^f_k, (s_i^\explast[k])^+, (s_o^\explast[k])^+, s^{\prime +}_k)                                       \\
+                {[(i_{k+1}, T_{k+1})^+] = [((i'_{k+1}, T'_{k+1})^+)^+]}                                                       \\
+                \forall (i, T) \in \{((i'_k, T'_k)^+)^+\}, \,
+                \left\{
+                \begin{array}{l}
+                    \left[\forall l, \, t_k \le t_l < T \Rightarrow i \notin \{((i'_{l+1})^+)^+\} \right] \\
+                    \qquad \Rightarrow
+                    \left\{\begin{array}{ll}
+                               \exists m, \, t_k \le t_m = T \wedge \gamma_m[i] = () \\
+                               \forall m, \, t_k \le t_m < T \Rightarrow \gamma_m[i] = \bot
+                           \end{array}\right.                    \\
+                    \left[\exists l, \, t_k \le t_l < T \wedge i \in \{((i'_{l+1})^+)^+\} \right]         \\
+                    \qquad \Rightarrow \forall m, \, t_k \le t_m \le T \Rightarrow \gamma_m[i] = \bot     \\
+                \end{array}
+                \right.                                                                                                       \\
+                (t_k, \true) = \tck[k]                                                                                        \\
+                \left(\sigmaOpSem{\gamma_k}{s'_k}{\sigma'}{t_k}{s'_{k+1}}{\getAt{\ts'}{t_k}}{(i'_{k+1}, T'_{k+1})^+}\right)^+ \\
+                \exists \getAt{\ts'}{t_k} \neq \bot \Rightarrow
+                \left\{
+                \begin{array}{l}
+                    \left(s_i[k] = \intoVal{\tyCtx[x_i]}{s_i^\explast[k]}{\getAt{\ts'}{t_k}}\right)^+ \\
+                    \compOpsem{s^f_k}{(s_i[k])^+}{f}{s^f_{k+1}}{(s_o[k])^+}                           \\
+                    \left(\getAt{\ts}{t_k} = \intoBot{\tyCtx[x_o]}{s_o^\explast[k]}{s_o[k]}\right)^+  \\
+                    \left(s_i^\explast[k+1] = s_i[k]\right)^+                                         \\
+                    \left(s_o^\explast[k+1] = s_o[k]\right)^+                                         \\
+                \end{array}
+                \right.                                                                                                       \\
+                \left(\getAt{\ts'}{t_k} = \bot\right)^+ \Rightarrow
+                \left\{
+                \begin{array}{l}
+                    \left(s_i[k] = s_i^\explast[k+1] = s_i^\explast[k]\right)^+  \\
+                    \left(s_o[k] = s_o^\explast[k+1] = s_o^\explast[k]\right)^+. \\
+                \end{array}
+                \right.
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+
+    % \left(\on{\ts'}{\tck}\right)^+ \\ ok 
+    % \left(\on{\ts}{\tck}\right)^+ \\ initial hypothesis on \ts
+
+    % G[f] = \component{f}{x_i^+}{x_o^+}{eq^+}{x_m^+ = c^+} \\
+    % \left(\sigmaDenot{\tck}{K}{\sigma'}{\ts'}\right)^+ \\
+    For each $\sigma'$, because $\ts'$ is on \tck and $\depSet{\sigma'} \subseteq \depSet{f(
+            \sigma^{\prime+})}$, the induction hypothesis states that the denotational semantics
+    \sigmaDenot{\tck}{K}{\sigma'}{\ts'} holds.
+
+    Let $x$ be an identifier, let \ts be a timestamped stream on \tck, let $s'_x$ be the simple
+    stream \clocked{\tyCtx[x]}{v_d}{\ts}{\tck} with $v_d$ a default value uniquely defined based on
+    the type of $x$ (the default value of events is \none), $s_x$, $s^{\prime\explast}_x$, and
+    $s^{\explast}_x$ be the streams, $(t_k^{\prime+})$ and $(t_k^+)$ be sequences of timestamps,
+    $(v_k^+)$ be a sequence of values, $(\ts_k^+)$ be a sequence of timestamped streams, and
+    $(\tck_k^+)$ be a sequence of timestamped clocks such that:
+    \begin{equation*}
+        \begin{array}{ll}
+                                 & (s^{\explast}_x[0], \ts_{0}, \tck_{0}) = (v_d, \ts, \tck) \\
+            \forall k \in \N, \, &
+            \left\{
+            \begin{array}{l}
+                s'_x[k] = \clocked{\tyCtx[x]}{s^{\prime\explast}_x[k]}{(t'_k, v_k) \next \ts_{k+1}}{(t_k, \true) \next \tck_{k+1}}[0] \\
+                s_x[k] = \intoVal{\tyCtx[x]}{s^{\explast}_x[k]}{\getAt{\ts_t}{t_k}}                                                   \\
+                s^{\explast}_x[k+1] = s_x[k].                                                                                         \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    Because the timestamped stream \ts is on \tck, we know that its timestamps are included in
+    \tck and are increasing, thus for all $k$ in \N we have $t'_k \ge t_k$.
+    %
+    We want to prove by induction on $k$ in \N that $s'_x[k] = s_x[k]$ and
+    $s^{\prime\explast}_x[k+1] = s^{\explast}_x[k+1]$.
+    \begin{itemize}
+        \item \textit{Base case:} Let $k = 0$.
+              %
+              \begin{itemize}
+                  \item Suppose $x$ is a signal, \ie $\tyCtx[x] = ty$.
+                        %
+                        The definitions of $s'_x$, $s^{\prime\explast}_x$, and \smf{clocked^\#
+                        _{ty}} (\Cref{eq:semantics:grfrp:denot:clocked:update,eq:semantics:grfrp:%
+                            denot:clocked:repeat}) give:
+                        %
+                        \begin{align*}
+                            s^{\prime\explast}_x[0] & = v_d                                          \\
+                            s'_x[0]                 & = \clocked{ty}{v_d}{(t'_0, v_0) \next \ts_{1}}
+                            {(t_0, \true) \next \tck_{1}}[0]                                         \\
+                                                    & = \left\{
+                            \begin{array}{ll}
+                                (v_0 \step \clocked{ty}{v_0}{\ts_{1}}{\tck_{1}})[0]
+                                 & \text{if} \; t'_0 = t_0 \\
+                                (v_d \step \clocked{ty}{v_d}{\ts_{0}}{\tck_{1}})[0]
+                                 & \text{if} \; t'_0 > t_0 \\
+                            \end{array}
+                            \right.                                                                  \\
+                                                    & = \left\{
+                            \begin{array}{ll}
+                                v_0 & \text{if} \; t'_0 = t_0 \\
+                                v_d & \text{if} \; t'_0 > t_0 \\
+                            \end{array}
+                            \right.                                                                  \\
+                            s^{\prime\explast}_x[1] & = \left\{
+                            \begin{array}{ll}
+                                v_0 & \text{if} \; t'_0 = t_0  \\
+                                v_d & \text{if} \; t'_0 > t_0, \\
+                            \end{array}
+                            \right.
+                        \end{align*}
+                        %
+                        and the definitions of $s_x$, $s^{\explast}_x$, and \smf{into\_val_{ty}}
+                        (\Cref{rule:semantics:grfrp:opsem:aux:intoVal:signal}) imply:
+                        %
+                        \begin{align*}
+                            s^{\explast}_x[0]                      & = v_d              \\
+                            \getAt{(t'_0, v_0) \next \ts_{1}}{t_0} & = \left\{
+                            \begin{array}{llll}
+                                v_0  & \text{if} \; t'_0 = t_0 \\
+                                \bot & \text{if} \; t'_0 > t_0
+                            \end{array}
+                            \right.                                                     \\
+                            \intoVal{ty}{v_d}{v_0}                 & = v_0              \\
+                            \intoVal{ty}{v_d}{\bot}                & = v_d              \\
+                            s_x[0]                                 & = \left\{
+                            \begin{array}{llll}
+                                v_0 & \text{if} \; t'_0 = t_0 \\
+                                v_d & \text{if} \; t'_0 > t_0
+                            \end{array}
+                            \right.                                                     \\
+                            s^{\explast}_x[1]                      & = s_x[0] = \left\{
+                            \begin{array}{llll}
+                                v_0 & \text{if} \; t'_0 = t_0  \\
+                                v_d & \text{if} \; t'_0 > t_0.
+                            \end{array}
+                            \right.
+                        \end{align*}
+                        Therefore, we have $s_x[0] = s'_x[0]$ and
+                        $s^{\prime\explast}_x[1] = s^{\explast}_x[1]$.
+
+                  \item Suppose $x$ is an event, \ie $\tyCtx[x] = \mayB{ty}$.
+                        %
+                        The definitions of $s'_x$, $s^{\prime\explast}_x$, and \smf{clocked^\#
+                        _{\mayB{ty}}} (\Cref{eq:semantics:grfrp:denot:clocked:some,eq:semantics:%
+                            grfrp:denot:clocked:none}) give:
+                        \begin{align*}
+                            s^{\prime\explast}_x[0] & = \none                                  \\
+                            s'_x[0]                 & = \clocked{\mayB{ty}}{\none}{(t'_0, v_0)
+                            \next \ts_{1}}{(t_0, \true) \next \tck_{1}}[0]                     \\
+                                                    & = \left\{
+                            \begin{array}{ll}
+                                (\some{v_0} \step \clocked{\mayB{ty}}{\some{v_0}}{\ts_{1}}{\tck_{1}})[0]
+                                 & \text{if} \; t'_0 = t_0 \\
+                                (\none \step \clocked{\mayB{ty}}{\none}{\ts_{0}}{\tck_{1}})[0]
+                                 & \text{if} \; t'_0 > t_0 \\
+                            \end{array}
+                            \right.                                                            \\
+                                                    & = \left\{
+                            \begin{array}{ll}
+                                \some{v_0} & \text{if} \; t'_0 = t_0 \\
+                                \none      & \text{if} \; t'_0 > t_0 \\
+                            \end{array}
+                            \right.                                                            \\
+                            s^{\prime\explast}_x[1] & = \left\{
+                            \begin{array}{ll}
+                                \some{v_0} & \text{if} \; t'_0 = t_0  \\
+                                \none      & \text{if} \; t'_0 > t_0, \\
+                            \end{array}
+                            \right.
+                        \end{align*}
+                        and the definitions of $s_x$, $s^{\explast}_x$, and \smf{into\_val_{\mayB{ty}}}
+                        (\Cref{rule:semantics:grfrp:opsem:aux:intoVal:event}) imply:
+                        \begin{align*}
+                            s^{\explast}_x[0]                      & = \none            \\
+                            \getAt{(t'_0, v_0) \next \ts_{1}}{t_0} & = \left\{
+                            \begin{array}{llll}
+                                v_0  & \text{if} \; t'_0 = t_0 \\
+                                \bot & \text{if} \; t'_0 > t_0
+                            \end{array}
+                            \right.                                                     \\
+                            \intoVal{\mayB{ty}}{\none}{v_0}        & = \some{v_0}       \\
+                            \intoVal{\mayB{ty}}{\none}{\bot}       & = \none            \\
+                            s_x[0]                                 & = \left\{
+                            \begin{array}{llll}
+                                \some{v_0} & \text{if} \; t'_0 = t_0 \\
+                                \none      & \text{if} \; t'_0 > t_0
+                            \end{array}
+                            \right.                                                     \\
+                            s^{\explast}_x[1]                      & = s_x[0] = \left\{
+                            \begin{array}{llll}
+                                \some{v_0} & \text{if} \; t'_0 = t_0  \\
+                                \none      & \text{if} \; t'_0 > t_0.
+                            \end{array}
+                            \right.
+                        \end{align*}
+                        Therefore, we have $s'_x[0] = s_x[0]$ and
+                        $s^{\prime\explast}_x[1] = s^{\explast}_x[1]$.
+              \end{itemize}
+              We conclude that \P{0} holds.
+
+        \item \textit{Inductive step:} Let $k \in \N$ and suppose the property
+              \P{l} holds for all $l \in \{0, \dots, k\}$, so that we have $s'_x[l] =
+                  s_x[l]$ and $s^{\prime\explast}_x[l+1] = s^{\explast}_x[l+1]$. Moreover, from the
+              definition of $s^{\explast}_x$ we can deduce:
+              \begin{equation*}
+                  s^{\prime\explast}_x[l+1] = s^{\explast}_x[l+1] = s'_x[l] = s_x[l]
+              \end{equation*}
+              %
+              \begin{itemize}
+                  \item Suppose $x$ is a signal, \ie $\tyCtx[x] = ty$.
+                        %
+                        The definitions of $s'_x$, $s^{\prime\explast}_x$, and \smf{clocked^\#_{ty}}
+                        (\Cref{eq:semantics:grfrp:denot:clocked:update,eq:semantics:grfrp:denot:clocked:repeat})
+                        give:
+                        %
+                        \begin{align*}
+                            s'_x[k+1]                 & = \clocked{ty}{s^{\prime\explast}_x[k+1]}{(t'_{k+1}, v_{k+1}) \next \ts_{k+2}}{(t_{k+1}, \true) \next \tck_{k+2}}[0] \\
+                                                      & = \left\{
+                            \begin{array}{ll}
+                                (v_{k+1} \step \clocked{ty}{v_{k+1}}{\ts_{k+2}}{\tck_{k+2}})[0]
+                                \\ \qquad \text{if} \; t'_{k+1} = t_{k+1} \\
+                                (s^{\prime\explast}_x[k+1] \step \clocked{ty}{s^{\prime\explast}_x[k+1]}{\ts_{k+1}}{\tck_{k+2}})[0]
+                                \\ \qquad \text{if} \; t'_{k+1} > t_{k+1} \\
+                            \end{array}
+                            \right.                                                                                                                                          \\
+                                                      & = \left\{
+                            \begin{array}{ll}
+                                v_{k+1}                   & \text{if} \; t'_{k+1} = t_{k+1} \\
+                                s^{\prime\explast}_x[k+1] & \text{if} \; t'_{k+1} > t_{k+1} \\
+                            \end{array}
+                            \right.                                                                                                                                          \\
+                            s^{\prime\explast}_x[k+2] & = \left\{
+                            \begin{array}{ll}
+                                v_{k+1}                   & \text{if} \; t'_{k+1} = t_{k+1} \\
+                                s^{\prime\explast}_x[k+1] & \text{if} \; t'_{k+1} > t_{k+1} \\
+                            \end{array}
+                            \right.
+                        \end{align*}
+                        %
+                        and the definitions of $s_x$, $s^{\explast}_x$, and \smf{into\_val_{ty}}
+                        (\Cref{rule:semantics:grfrp:opsem:aux:intoVal:signal}) imply:
+                        %
+                        \begin{align*}
+                            \getAt{\ts_t}{t_{k+1}}                     & = \getAt{(t'_{k+1}, v_{k+1}) \next \ts_{k+2}}{t_{k+1}} \\
+                                                                       & = \left\{
+                            \begin{array}{llll}
+                                v_{k+1} & \text{if} \; t'_{k+1} = t_{k+1} \\
+                                \bot    & \text{if} \; t'_{k+1} > t_{k+1}
+                            \end{array}
+                            \right.                                                                                             \\
+                            \intoVal{ty}{s^{\explast}_x[k+1]}{v_{k+1}} & = v_{k+1}                                              \\
+                            \intoVal{ty}{s^{\explast}_x[k+1]}{\bot}    & = s^{\explast}_x[k+1]                                  \\
+                            s_x[k+1]                                   & = \left\{
+                            \begin{array}{llll}
+                                v_{k+1}             & \text{if} \; t'_{k+1} = t_{k+1} \\
+                                s^{\explast}_x[k+1] & \text{if} \; t'_{k+1} > t_{k+1}
+                            \end{array}
+                            \right.                                                                                             \\
+                            s^{\explast}_x[k+2]                        & = \left\{
+                            \begin{array}{llll}
+                                v_{k+1}             & \text{if} \; t'_{k+1} = t_{k+1} \\
+                                s^{\explast}_x[k+1] & \text{if} \; t'_{k+1} > t_{k+1}
+                            \end{array}
+                            \right.
+                        \end{align*}
+                        The induction hypothesis ensures that
+                        $s^{\explast}_x[k+1] = s^{\prime\explast}_x[k+1]$. Therefore, we have
+                        $s'_x[k+1] = s_x[k+1]$ and $s^{\prime\explast}_x[k+2] = s^{\explast}_x[k+2]$.
+
+                  \item Suppose $x$ is an event, \ie $\tyCtx[x] = \mayB{ty}$.
+                        %
+                        The definitions of $s'_x$, $s^{\prime\explast}_x$, and \smf{clocked^\#_{\mayB{ty}}}
+                        (\Cref{eq:semantics:grfrp:denot:clocked:some,eq:semantics:grfrp:denot:clocked:none})
+                        give:
+                        \begin{align*}
+                            s'_x[k+1]               & = \clocked{\mayB{ty}}{s^{\prime\explast}_x[k+1]}{(t'_{k+1}, v_{k+1}) \next \ts_{k+2}}{(t_{k+1}, \true) \next \tck_{k+2}}[0] \\
+                                                    & = \left\{
+                            \begin{array}{ll}
+                                (\some{v_{k+1}} \step \clocked{\mayB{ty}}{\some{v_{k+1}}}{\ts_{k+2}}{\tck_{k+1}})[0]
+                                \\ \hfill \text{if} \; t'_{k+1} = t_{k+1} \\
+                                (\none \step \clocked{\mayB{ty}}{\none}{\ts_{k+1}}{\tck_{k+1}})[0]
+                                \\ \hfill \text{if} \; t'_{k+1} > t_{k+1} \\
+                            \end{array}
+                            \right.                                                                                                                                               \\
+                                                    & = \left\{
+                            \begin{array}{ll}
+                                \some{v_{k+1}} & \text{if} \; t'_{k+1} = t_{k+1} \\
+                                \none          & \text{if} \; t'_{k+1} > t_{k+1} \\
+                            \end{array}
+                            \right.                                                                                                                                               \\
+                            s^{\prime\explast}_x[1] & = \left\{
+                            \begin{array}{ll}
+                                \some{v_{k+1}} & \text{if} \; t'_{k+1} = t_{k+1}  \\
+                                \none          & \text{if} \; t'_{k+1} > t_{k+1}, \\
+                            \end{array}
+                            \right.
+                        \end{align*}
+                        and the definitions of $s_x$, $s^{\explast}_x$, and \smf{into\_val_{\mayB{ty}}}
+                        (\Cref{rule:semantics:grfrp:opsem:aux:intoVal:event}) imply:
+                        \begin{align*}
+                            \getAt{\ts_t}{t_{k+1}}              & = \getAt{(t'_{k+1}, v_{k+1}) \next \ts_{k+2}}{t_{k+1}} \\
+                                                                & = \left\{
+                            \begin{array}{llll}
+                                v_{k+1} & \text{if} \; t'_{k+1} = t_{k+1} \\
+                                \bot    & \text{if} \; t'_{k+1} > t_{k+1}
+                            \end{array}
+                            \right.                                                                                      \\
+                            \intoVal{\mayB{ty}}{\none}{v_{k+1}} & = \some{v_{k+1}}                                       \\
+                            \intoVal{\mayB{ty}}{\none}{\bot   } & = \none                                                \\
+                            s_x[k+1]                            & = \left\{
+                            \begin{array}{llll}
+                                \some{v_{k+1}} & \text{if} \; t'_{k+1} = t_{k+1} \\
+                                \none          & \text{if} \; t'_{k+1} > t_{k+1}
+                            \end{array}
+                            \right.                                                                                      \\
+                            s^{\explast}_x[k+2]                 & = s_x[k+1] = \left\{
+                            \begin{array}{llll}
+                                \some{v_{k+1}} & \text{if} \; t'_{k+1} = t_{k+1}  \\
+                                \none          & \text{if} \; t'_{k+1} > t_{k+1}.
+                            \end{array}
+                            \right.
+                        \end{align*}
+                        Therefore, we have $s'_x[k+1] = s_x[k+1]$ and
+                        $s^{\prime\explast}_x[k+2] = s^{\explast}_x[k+2]$.
+              \end{itemize}
+              We conclude that \P{{k+1}} holds.
+    \end{itemize}
+    Therefore, for all identifier $x$, all timestamped stream \ts on \tck, and all simple
+    streams $s_x$, $s^{\prime\explast}_x$, and $s^{\explast}_x$ such that:
+    \begin{equation*}
+        \begin{array}{ll}
+                                 & s^{\explast}_x[0] = v_d \\
+            \forall k \in \N, \, &
+            \left\{
+            \begin{array}{l}
+                (t_k, \true) = \tck[k]                                              \\
+                s_x[k] = \intoVal{\tyCtx[x]}{s^{\explast}_x[k]}{\getAt{\ts_t}{t_k}} \\
+                s^{\explast}_x[k+1] = s_x[k],                                       \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    for all $k$ in \N we have $\clocked{\tyCtx[x]}{v_d}{\ts}{\tck}[k] = s_x[k]$, thus
+    $\clocked{\tyCtx[x]}{v_d}{\ts}{\tck} \equiv s_x$.
+
+    % \left(s_i \equiv \clocked{\tyCtx[x_i]}{v_d}{\ts'}{\tck}\right)^+
+    For all input $x_i$, we have:
+    \begin{equation*}
+        \begin{array}{ll}
+                                 & s_i^\explast[0] = v_d \\
+            \forall k \in \N, \, &
+            \left\{
+            \begin{array}{l}
+                (t_k, \true) = \tck[k]                                             \\
+                s_i[k] = \intoVal{\tyCtx[x_i]}{s_i^\explast[k]}{\getAt{\ts'}{t_k}} \\
+                s_i^\explast[k+1] = s_i[k],
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    therefore we have $\clocked{\tyCtx[x_i]}{v_d}{\ts'}{\tck} \equiv s_i$.
+
+    % \left(s_o \equiv \clocked{\tyCtx[x_o]}{v_d}{\ts}{\tck}\right)^+
+    We can remark that for all identifier $x$, all values $v$ and $v^\explast$, we have
+    \begin{equation*}
+        \intoVal{\tyCtx[x]}{v^\explast}{\intoBot{\tyCtx[x]}{v^\explast}{v}} = v.
+    \end{equation*}
+    This is simply proved by case analysis:
+    \begin{itemize}
+        \item If $\tyCtx[x] = ty$ and $v = v^\explast$, then we have:
+              \begin{align*}
+                  \intoBot{ty}{v^\explast}{v}    & = \bot       \\
+                  \intoVal{ty}{v^\explast}{\bot} & = v^\explast \\
+                                                 & = v.
+              \end{align*}
+        \item If $\tyCtx[x] = ty$ and $v \neq v^\explast$, then we have:
+              \begin{align*}
+                  \intoBot{ty}{v^\explast}{v} & = v  \\
+                  \intoVal{ty}{v^\explast}{v} & = v.
+              \end{align*}
+        \item If $\tyCtx[x] = \mayB{ty}$ and $v = \none$, then we have:
+              \begin{align*}
+                  \intoBot{ty}{v^\explast}{\none} & = \bot  \\
+                  \intoVal{ty}{v^\explast}{\bot}  & = \none \\
+                                                  & = v.
+              \end{align*}
+        \item If $\tyCtx[x] = \mayB{ty}$ and $v = \some{v'}$, then we have:
+              \begin{align*}
+                  \intoBot{ty}{v^\explast}{\some{v'}} & = v'        \\
+                  \intoVal{ty}{v^\explast}{v'}        & = \some{v'} \\
+                                                      & = v.
+              \end{align*}
+    \end{itemize}
+    Then, for all output $x_o$, we have:
+    \begin{equation*}
+        \begin{array}{ll}
+                                 & s_o^\explast[0] = v_d \\
+            \forall k \in \N, \, &
+            \left\{
+            \begin{array}{l}
+                (t_k, \true) = \tck[k] \\
+                \exists \getAt{\ts'}{t_k} \neq \bot \Rightarrow
+                \left\{
+                \begin{array}{l}
+                    \getAt{\ts}{t_k} = \intoBot{\tyCtx[x_o]}{s_o^\explast[k]}{s_o[k]} \\
+                    s_o^\explast[k+1] = s_o[k]                                        \\
+                \end{array}
+                \right.                \\
+                \left(\getAt{\ts'}{t_k} = \bot\right)^+ \Rightarrow
+                \left\{
+                \begin{array}{l}
+                    s_o[k] = s_o^\explast[k+1] = s_o^\explast[k], \\
+                \end{array}
+                \right.
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    which implies by the previous point:
+    \begin{equation*}
+        \begin{array}{ll}
+                                 & s_o^\explast[0] = v_d \\
+            \forall k \in \N, \, &
+            \left\{
+            \begin{array}{l}
+                (t_k, \true) = \tck[k]                                            \\
+                \intoVal{\tyCtx[x_o]}{s_o^\explast[k]}{\getAt{\ts}{t_k}} = s_o[k] \\
+                s_o^\explast[k+1] = s_o[k]
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    therefore we have $\clocked{\tyCtx[x_o]}{v_d}{\ts}{\tck} \equiv s_o$.
+
+    In the case no input stream has a value update, \ie when their step functions give $\bot$,
+    \Cref{thm:semantics:grsync:theorems:oversampling} ensures that the step function of the
+    component $f$ will not produce any changes in the output values, therefore we have:
+    \begin{equation*}
+        \begin{array}{ll}
+                                 & s^f_0 = \initsync{f} \\
+            \forall k \in \N, \, &
+            \left\{
+            \begin{array}{l}
+                (t_k, \true) = \tck[k]                                   \\
+                \compOpsem{s^f_k}{(s_i[k])^+}{f}{s^f_{k+1}}{(s_o[k])^+}. \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+
+    % \compDenot{\clock{\tck}}{f}{s_i^+}{s_o^+}
+    The equivalence of components semantics, defined in \Cref{sec:semantics:grsync:theorems:equivalence}
+    and proved by \Cref{thm:semantics:grsync:theorems:equivalence}, ensures that \compDenot{\clock{\tck}}
+    {f}{s_i^+}{s_o^+} holds.
+    %
+    And finally, the rule for component application in \GRFRP \nameref{rule:semantics:grfrp:denot:%
+        op:app} ensures that \sigmaDenot{\tck}{K}{f(\sigma^+)}{s_o^+} holds.
+
+    \subparagraph{Scan}
+    Suppose $\sigma$ equals \scan{\sigma'}{T}, the flow operation that scans the signal $\sigma'$
+    every $T$ milliseconds. The rules
+    \nameref{rule:semantics:grfrp:opsem:step:op:scan:value},
+    \dots, and
+    \nameref{rule:semantics:grfrp:opsem:step:op:scan:bot}
+    ensure that there exist a sequence of states
+    $(s_k^{\prime +})$ corresponding to $\sigma'$, timestamped streams $\ts'$, $\ts'_\bot$, and
+    $\ts^{\prime\explast}$ on \tck,
+    and a sequence of lists of timer resets $([(i'_k, T'_k)^+]^+)$ such that:
+    \begin{equation*}
+        \begin{array}{ll}
+                                 & (\getAt{\ts'_\bot}{t_0}, \getAt{\ts^{\prime\explast}}{t_0}, s'_0) = (\bot, v_d, \initstate{\sigma'})                                    \\
+                                 & [(i_0, T_0)^+] = [(i_T, T), (i'_0, T'_0)^+] = (i_T, T) :: \inittimer{\sigma'}                                                           \\
+
+                                 & \left[\forall l, \, t_l < T \Rightarrow i_T \notin \{(i_{l+1})^+\} \right] \Rightarrow
+            \left\{\begin{array}{ll}
+                       \exists m, \, t_m = T \wedge \gamma_m[i_T] = () \\
+                       \forall m, \, t_m < T \Rightarrow \gamma_m[i_T] = \bot
+                   \end{array}\right.                                                                                                   \\
+                                 & \left[\exists l, \, t_l < T \wedge i_T \in \{(i_{l+1})^+\} \right] \Rightarrow \forall m, \, t_m \le T \Rightarrow \gamma_m[i_T] = \bot \\
+            \forall k \in \N, \, &
+            \left\{
+            \begin{array}{l}
+                (t_k, \true) = \tck[k]                                                                         \\
+                s_k = (\getAt{\ts'_\bot}{t_k}, \getAt{\ts^{\prime\explast}}{t_k}, s'_k)                        \\
+                \sigmaOpSem{\gamma_k}{s'_k}{\sigma'}{t_k}{s'_{k+1}}{\getAt{\ts'}{t_k}}{(i'_{k+1}, T'_{k+1})^+} \\
+
+                \forall (i, T) \in \{(i'_k, T'_k)^+\},                                                         \\
+                \qquad \left\{
+                \begin{array}{l}
+                    \left[\forall l, \, t_k \le t_l < T \Rightarrow i \notin \{(i'_{l+1})^+\} \right]
+                    \Rightarrow
+                    \left\{\begin{array}{ll}
+                               \exists m, \, t_k \le t_m = T \wedge \gamma_m[i] = () \\
+                               \forall m, \, t_k \le t_m < T \Rightarrow \gamma_m[i] = \bot
+                           \end{array}\right.          \\
+                    \left[\exists l, \, t_k \le t_l < T \wedge i \in \{((i'_{l+1})^+)^+\} \right]
+                    \Rightarrow \forall m, \, t_k \le t_m \le T \Rightarrow \gamma_m[i] = \bot. \\
+                \end{array}
+                \right.                                                                                        \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+
+    \begin{multline}\label{proof:semantics:grfrp:theorems:equivalence:op:scan:3}
+        \forall k \in \N, \,
+        \gamma_k[i_T]{t_k} = \bot \wedge \getAt{\ts'}{t_k} \neq \bot \wedge \getAt{\ts'}{t_k} \neq \getAt{\ts^{\prime\explast}}{t_k} \Rightarrow \\
+        \left\{
+        \begin{array}{l}
+            \getAt{\ts'_\bot}{t_{k+1}} = \getAt{\ts'}{t_k}                            \\
+            \getAt{\ts^{\prime\explast}}{t_{k+1}} = \getAt{\ts^{\prime\explast}}{t_k} \\
+            \getAt{\ts}{t_k} = \bot                                                   \\
+            {[(i_{k+1}, T_{k+1})^+] = [(i'_{k+1}, T'_{k+1})^+]}                       \\
+        \end{array}
+        \right.
+    \end{multline}
+    \begin{multline}\label{proof:semantics:grfrp:theorems:equivalence:op:scan:4}
+        \forall k \in \N, \,
+        \gamma_k[i_T]{t_k} = \bot \wedge \getAt{\ts'}{t_k} \neq \bot \wedge \getAt{\ts'}{t_k} = \getAt{\ts^{\prime\explast}}{t_k} \Rightarrow \\
+        \left\{
+        \begin{array}{l}
+            \getAt{\ts'_\bot}{t_{k+1}} = \bot                                         \\
+            \getAt{\ts^{\prime\explast}}{t_{k+1}} = \getAt{\ts^{\prime\explast}}{t_k} \\
+            \getAt{\ts}{t_k} = \bot                                                   \\
+            {[(i_{k+1}, T_{k+1})^+] = [(i'_{k+1}, T'_{k+1})^+]}                       \\
+        \end{array}
+        \right.
+    \end{multline}
+    \begin{multline}\label{proof:semantics:grfrp:theorems:equivalence:op:scan:0}
+        \forall k \in \N, \,
+        \gamma_k[i_T]{t_k} = \bot \wedge \getAt{\ts'}{t_k} = \bot \Rightarrow
+        \left\{
+        \begin{array}{l}
+            \getAt{\ts'_\bot}{t_{k+1}} = \getAt{\ts'_\bot}{t_k}                       \\
+            \getAt{\ts^{\prime\explast}}{t_{k+1}} = \getAt{\ts^{\prime\explast}}{t_k} \\
+            \getAt{\ts}{t_k} = \bot                                                   \\
+            {[(i_{k+1}, T_{k+1})^+] = [(i'_{k+1}, T'_{k+1})^+]}                       \\
+        \end{array}
+        \right.
+    \end{multline}
+    \begin{multline}\label{proof:semantics:grfrp:theorems:equivalence:op:scan:6}
+        \forall k \in \N, \,
+        \gamma_k[i_T]{t_k} = () \wedge \getAt{\ts'}{t_k} \neq \bot \wedge \getAt{\ts'}{t_k} = \getAt{\ts^{\prime\explast}}{t_k} \Rightarrow \\
+        \left\{
+        \begin{array}{l}
+            \getAt{\ts'_\bot}{t_{k+1}} = \bot                                                \\
+            \getAt{\ts^{\prime\explast}}{t_{k+1}} = \getAt{\ts^{\prime\explast}}{t_k}        \\
+            \getAt{\ts}{t_k} = \bot                                                          \\
+            {[(i_{k+1}, T_{k+1})^+] = [(i_T, t_k + T), (i'_{k+1}, T'_{k+1})^+]}              \\
+            \left[\forall l, \, t_k < t_l < t_k + T \Rightarrow i_T \notin \{(i_{l+1})^+\} \right]
+            \Rightarrow
+            \left\{\begin{array}{ll}
+                       \exists m, \, t_k < t_m = t_k + T \wedge \gamma_m[i_T] = () \\
+                       \forall m, \, t_k < t_m < t_k + T \Rightarrow \gamma_m[i_T] = \bot
+                   \end{array}\right.         \\
+            \left[\exists l, \, t_k < t_l < t_k + T \wedge i_T \in \{(i_{l+1})^+\} \right]
+            \Rightarrow \forall m, \, t_k < t_m \le t_k + T \Rightarrow \gamma_m[i_T] = \bot \\
+        \end{array}
+        \right.
+    \end{multline}
+    \begin{multline}\label{proof:semantics:grfrp:theorems:equivalence:op:scan:5}
+        \forall k \in \N, \,
+        \gamma_k[i_T]{t_k} = () \wedge \getAt{\ts'}{t_k} \neq \bot \wedge \getAt{\ts'}{t_k} \neq \getAt{\ts^{\prime\explast}}{t_k} \Rightarrow \\
+        \left\{
+        \begin{array}{l}
+            \getAt{\ts'_\bot}{t_{k+1}} = \bot                                                \\
+            \getAt{\ts^{\prime\explast}}{t_{k+1}} = \getAt{\ts'}{t_k}                        \\
+            \getAt{\ts}{t_k} = \getAt{\ts'}{t_k}                                             \\
+            {[(i_{k+1}, T_{k+1})^+] = [(i_T, t_k + T), (i'_{k+1}, T'_{k+1})^+]}              \\
+            \left[\forall l, \, t_k < t_l < t_k + T \Rightarrow i_T \notin \{(i_{l+1})^+\} \right]
+            \Rightarrow
+            \left\{\begin{array}{ll}
+                       \exists m, \, t_k < t_m = t_k + T \wedge \gamma_m[i_T] = () \\
+                       \forall m, \, t_k < t_m < t_k + T \Rightarrow \gamma_m[i_T] = \bot
+                   \end{array}\right.         \\
+            \left[\exists l, \, t_k < t_l < t_k + T \wedge i_T \in \{(i_{l+1})^+\} \right]
+            \Rightarrow \forall m, \, t_k < t_m \le t_k + T \Rightarrow \gamma_m[i_T] = \bot \\
+        \end{array}
+        \right.
+    \end{multline}
+    \begin{multline}\label{proof:semantics:grfrp:theorems:equivalence:op:scan:2}
+        \forall k \in \N, \,
+        \gamma_k[i_T]{t_k} = () \wedge \getAt{\ts'}{t_k} = \bot \wedge \getAt{\ts'_\bot}{t_k} = \bot \Rightarrow \\
+        \left\{
+        \begin{array}{l}
+            \getAt{\ts'_\bot}{t_{k+1}} = \bot                                                \\
+            \getAt{\ts^{\prime\explast}}{t_{k+1}} = \getAt{\ts^{\prime\explast}}{t_k}        \\
+            \getAt{\ts}{t_k} = \bot                                                          \\
+            {[(i_{k+1}, T_{k+1})^+] = [(i_T, t_k + T), (i'_{k+1}, T'_{k+1})^+]}              \\
+            \left[\forall l, \, t_k < t_l < t_k + T \Rightarrow i_T \notin \{(i_{l+1})^+\} \right]
+            \Rightarrow
+            \left\{\begin{array}{ll}
+                       \exists m, \, t_k < t_m = t_k + T \wedge \gamma_m[i_T] = () \\
+                       \forall m, \, t_k < t_m < t_k + T \Rightarrow \gamma_m[i_T] = \bot
+                   \end{array}\right.         \\
+            \left[\exists l, \, t_k < t_l < t_k + T \wedge i_T \in \{(i_{l+1})^+\} \right]
+            \Rightarrow \forall m, \, t_k < t_m \le t_k + T \Rightarrow \gamma_m[i_T] = \bot \\
+        \end{array}
+        \right.
+    \end{multline}
+    \begin{multline}\label{proof:semantics:grfrp:theorems:equivalence:op:scan:1}
+        \forall k \in \N, \,
+        \gamma_k[i_T]{t_k} = () \wedge \getAt{\ts'}{t_k} = \bot \wedge \getAt{\ts'_\bot}{t_k} \neq \bot \Rightarrow \\
+        \left\{
+        \begin{array}{l}
+            \getAt{\ts'_\bot}{t_{k+1}} = \bot                                                \\
+            \getAt{\ts^{\prime\explast}}{t_{k+1}} = \getAt{\ts'_\bot}{t_k}                   \\
+            \getAt{\ts}{t_k} = \getAt{\ts'_\bot}{t_k}                                        \\
+            {[(i_{k+1}, T_{k+1})^+] = [(i_T, t_k + T), (i'_{k+1}, T'_{k+1})^+]}              \\
+            \left[\forall l, \, t_k < t_l < t_k + T \Rightarrow i_T \notin \{(i_{l+1})^+\} \right]
+            \Rightarrow
+            \left\{\begin{array}{ll}
+                       \exists m, \, t_k < t_m = t_k + T \wedge \gamma_m[i_T] = () \\
+                       \forall m, \, t_k < t_m < t_k + T \Rightarrow \gamma_m[i_T] = \bot
+                   \end{array}\right.         \\
+            \left[\exists l, \, t_k < t_l < t_k + T \wedge i_T \in \{(i_{l+1})^+\} \right]
+            \Rightarrow \forall m, \, t_k < t_m \le t_k + T \Rightarrow \gamma_m[i_T] = \bot \\
+        \end{array}
+        \right.
+    \end{multline}
+
+    % \sigmaDenot{\tck}{K}{\sigma'}{\ts'}
+    Because $\ts'$ is on \tck and $\depSet{\sigma'} \subseteq \depSet{\scan{\sigma'}{T}}$, the
+    induction hypothesis states that the denotational semantics \sigmaDenot{\tck}{K}{\sigma'}{\ts'}
+    holds.
+
+    % \scanAux{\ts'}{T}{T}{\bot}{v_d} \equiv s
+    Let $(\ts^{\prime+}_k)$ be a sequence of timestamped streams, $(t_{T, k}^+)$ be a sequence of
+    timestamps, $(v_{\bot k}^+)$ be a sequence of bottom values, and $(v^{\explast+}_k)$ be a
+    sequence of values such that:
+    \begin{equation*}
+        \begin{array}{l}
+            \forall k \in \N, \,
+            \left\{
+            \begin{array}{lll}
+                \ts'_k       & = \from{\ts'}{t_k}                   &                                          \\
+                t_{T, k}     & = t                                  & \text{if} \, \exists l \le k, \, \left\{
+                \begin{array}{ll}
+                           & (i_T, t) \in \{(i_l, T_l)^+\}                \\
+                    \wedge & \forall l < m \le k, \, i_T \notin \{i_m^+\}
+                \end{array}
+                \right.                                                                                        \\
+                v_{\bot k}   & = \getAt{\ts'_\bot}{t_k}             &                                          \\
+                v^\explast_k & = \getAt{\ts^{\prime\explast}}{t_k}. &                                          \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    Because $(i_T, T) \in \{(i_0, T_0)^+\}$ (\Cref{eq:semantics:grfrp:opsem:init:op:scan:timer}),
+    the sequence $(t_{T, k}^+)$ is well-defined. Moreover, if a timer reset occurs at time $t_k$ then it
+    is set to tick at $t_k + T$ (\Cref{%
+        proof:semantics:grfrp:theorems:equivalence:op:scan:2,%
+        proof:semantics:grfrp:theorems:equivalence:op:scan:1,%
+        proof:semantics:grfrp:theorems:equivalence:op:scan:6,%
+        proof:semantics:grfrp:theorems:equivalence:op:scan:5%
+    }), and because either it is reset before $t_k + T$
+    or it ticks at $t_k + T$ and reset, for all $l$ such that $t_k < t_l \le t_k + T$ we have
+    $t_{T, l} \le t_k + T$, thus $t_l \le t_{T, l}$. Therefore, for all $k \in \N$, we have $t_k \le
+        t_{T, k}$.
+
+    We prove by coinduction that for all $k$ in \N, we have:
+    \begin{equation*}
+        \from{\ts}{t_k} \equiv \scanAux{\ts'_k}{T}{t_{T, k}}{v_{\bot k}}{v^\explast_k}
+    \end{equation*}
+    Let $k$ in \N. We proceed by case analysis:
+    \begin{itemize}
+        \item \textit{If $t_k \neq t_{T, k}$:} There exists $l \le k$ such that $(i_T, t_{T, k})
+                  \in \{(i_l, T_l)^+\}$ and for all $m$ such that $l \le m < k$ we have
+              $i_T \notin \{i_{m+1}^+\}$. The hypothesis on resets and environments,
+              \Cref{%
+                  proof:semantics:grfrp:theorems:equivalence:op:scan:2,%
+                  proof:semantics:grfrp:theorems:equivalence:op:scan:1,%
+                  proof:semantics:grfrp:theorems:equivalence:op:scan:6,%
+                  proof:semantics:grfrp:theorems:equivalence:op:scan:5%
+              }, ensures that for all $m$ such that
+              $t_l \le t_m < t_{T, k}$ we have $\gamma_m[i_T] = \bot$. Because
+              $t_l \le t_k < t_{T, k}$, we have $\gamma_k[i_T] = \bot$.
+
+              \begin{itemize}
+                  \item \textit{If there exists a value $v$ such that $\getAt{\ts'}{t_k} = v$
+                        (implying $\ts'_k \equiv (t_k, v) \next \ts'_{k+1}$) and $v \neq v^\explast_k$:}
+                        In that case, we apply \Cref{eq:semantics:grfrp:denot:op:scan:aux:3}:
+                        \begin{align*}
+                            \scanAux{\ts'_k}{T}{t_{T, k}}{v_{\bot k}}{v^\explast_k} & \equiv
+                            \scanAux{(t_k, v) \next \ts'_{k+1}}{T}{t_{T, k}}{v_{\bot k}}{v^\explast_k} \\
+                                                                                    & \equiv
+                            \scanAux{\ts'_{k+1}}{T}{t_{T, k}}{v}{v^\explast_k}
+                        \end{align*}
+
+                        \Cref{proof:semantics:grfrp:theorems:equivalence:op:scan:3} ensures that:
+                        \begin{align*}
+                            [(i_{k+1}, T_{k+1})^+] = [(i'_{k+1}, T'_{k+1})^+] \quad \Rightarrow
+                            \quad i_T        & \notin \{(i_{k+1}^+)\} \quad \Rightarrow \quad
+                            t_{T, k+1} = t_{T, k}                                                                                         \\
+                            v_{\bot k+1}     & = \getAt{\ts'_\bot}{t_{k+1}} = \getAt{\ts'}{t_k} = v                                       \\
+                            v^\explast_{k+1} & = \getAt{\ts^{\prime\explast}}{t_{k+1}} = \getAt{\ts^{\prime\explast}}{t_k} = v^\explast_k \\
+                            \getAt{\ts}{t_k} & = \bot,
+                        \end{align*}
+                        which implies:
+                        \begin{equation*}
+                            \scanAux{\ts'_{k+1}}{T}{t_{T, k}}{v}{v^\explast_k} \equiv
+                            \scanAux{\ts'_{k+1}}{T}{t_{T, k+1}}{v_{\bot k+1}}{v^\explast_{k+1}}.
+                        \end{equation*}
+
+                        The coinduction hypothesis states:
+                        \begin{equation*}
+                            \from{\ts}{t_{k+1}} \equiv \scanAux{\ts'_{k+1}}{T}{t_{T, k+1}}{v_{\bot k+1}}{v^\explast_{k+1}}.
+                        \end{equation*}
+
+                        Knowing that $\getAt{\ts}{t_k} = \bot$ ensures:
+                        \begin{align*}
+                            \from{\ts}{t_k} & \equiv \from{\ts}{t_{k+1}}                                                 \\
+                                            & \equiv \scanAux{\ts'_{k+1}}{T}{t_{T, k+1}}{v_{\bot k+1}}{v^\explast_{k+1}} \\
+                                            & \equiv \scanAux{\ts'_k}{T}{t_{T, k}}{v_{\bot k}}{v^\explast_k},
+                        \end{align*}
+                        which conclude this case.
+
+                  \item \textit{If there exists a value $v$ such that $\getAt{\ts'}{t_k} = v$
+                        (implying $\ts'_k \equiv (t_k, v) \next \ts'_{k+1}$) and $v = v^\explast_k$:}
+                        In that case, we apply \Cref{eq:semantics:grfrp:denot:op:scan:aux:4}:
+                        \begin{align*}
+                            \scanAux{\ts'_k}{T}{t_{T, k}}{v_{\bot k}}{v^\explast_k} & \equiv
+                            \scanAux{(t_k, v) \next \ts'_{k+1}}{T}{t_{T, k}}{v_{\bot k}}{v^\explast_k} \\
+                                                                                    & \equiv
+                            \scanAux{\ts'_{k+1}}{T}{t_{T, k}}{\bot}{v^\explast_k}
+                        \end{align*}
+
+                        \Cref{proof:semantics:grfrp:theorems:equivalence:op:scan:4} ensures that:
+                        \begin{align*}
+                            [(i_{k+1}, T_{k+1})^+] = [(i'_{k+1}, T'_{k+1})^+] \quad \Rightarrow
+                            \quad i_T        & \notin \{(i_{k+1}^+)\} \quad \Rightarrow \quad
+                            t_{T, k+1} = t_{T, k}                                                                                         \\
+                            v_{\bot k+1}     & = \getAt{\ts'_\bot}{t_{k+1}} = \bot                                                        \\
+                            v^\explast_{k+1} & = \getAt{\ts^{\prime\explast}}{t_{k+1}} = \getAt{\ts^{\prime\explast}}{t_k} = v^\explast_k \\
+                            \getAt{\ts}{t_k} & = \bot,
+                        \end{align*}
+                        which implies:
+                        \begin{equation*}
+                            \scanAux{\ts'_{k+1}}{T}{t_{T, k}}{\bot}{v^\explast_k} \equiv
+                            \scanAux{\ts'_{k+1}}{T}{t_{T, k+1}}{v_{\bot k+1}}{v^\explast_{k+1}}.
+                        \end{equation*}
+
+                        The coinduction hypothesis states:
+                        \begin{equation*}
+                            \from{\ts}{t_{k+1}} \equiv \scanAux{\ts'_{k+1}}{T}{t_{T, k+1}}{v_{\bot k+1}}{v^\explast_{k+1}}.
+                        \end{equation*}
+
+                        Knowing that $\getAt{\ts}{t_k} = \bot$ ensures:
+                        \begin{align*}
+                            \from{\ts}{t_k} & \equiv \from{\ts}{t_{k+1}}                                                 \\
+                                            & \equiv \scanAux{\ts'_{k+1}}{T}{t_{T, k+1}}{v_{\bot k+1}}{v^\explast_{k+1}} \\
+                                            & \equiv \scanAux{\ts'_k}{T}{t_{T, k}}{v_{\bot k}}{v^\explast_k},
+                        \end{align*}
+                        which conclude this case.
+
+                  \item \textit{If $\getAt{\ts'}{t_k} = \bot$ (then $\ts'_k \equiv \ts'_{k+1}$):}
+                        \Cref{proof:semantics:grfrp:theorems:equivalence:op:scan:0} ensures that:
+                        \begin{align*}
+                            [(i_{k+1}, T_{k+1})^+] = [(i'_{k+1}, T'_{k+1})^+] \quad \Rightarrow
+                            \quad i_T        & \notin \{(i_{k+1}^+)\} \quad \Rightarrow \quad
+                            t_{T, k+1} = t_{T, k}                                                                                         \\
+                            v_{\bot k+1}     & = \getAt{\ts'_\bot}{t_{k+1}} = \getAt{\ts'_\bot}{t_k} = v_{\bot k}                         \\
+                            v^\explast_{k+1} & = \getAt{\ts^{\prime\explast}}{t_{k+1}} = \getAt{\ts^{\prime\explast}}{t_k} = v^\explast_k \\
+                            \getAt{\ts}{t_k} & = \bot,
+                        \end{align*}
+                        which implies:
+                        \begin{equation*}
+                            \scanAux{\ts'_k}{T}{t_{T, k}}{v_{\bot k}}{v^\explast_k} \equiv
+                            \scanAux{\ts'_{k+1}}{T}{t_{T, k+1}}{v_{\bot k+1}}{v^\explast_{k+1}}.
+                        \end{equation*}
+
+                        Knowing that $\getAt{\ts}{t_k} = \bot$ ensures:
+                        \begin{align*}
+                            \from{\ts}{t_k} & \equiv \from{\ts}{t_{k+1}}                                                 \\
+                                            & \equiv \scanAux{\ts'_{k+1}}{T}{t_{T, k+1}}{v_{\bot k+1}}{v^\explast_{k+1}} \\
+                                            & \equiv \scanAux{\ts'_k}{T}{t_{T, k}}{v_{\bot k}}{v^\explast_k},
+                        \end{align*}
+                        which conclude this case.
+              \end{itemize}
+
+        \item \textit{If $t_k = t_{T, k}$:} There exists $l \le k$ such that $(i_T, t_k)
+                  \in \{(i_l, T_l)^+\}$ and for all $m$ such that $l \le m < k$ we have
+              $i_T \notin \{i_{m+1}^+\}$, which ensures that $\gamma_k[i_T] = ()$ (\cf the
+              hypothesis on resets and environments, \Cref{%
+                  proof:semantics:grfrp:theorems:equivalence:op:scan:2,%
+                  proof:semantics:grfrp:theorems:equivalence:op:scan:1,%
+                  proof:semantics:grfrp:theorems:equivalence:op:scan:6,%
+                  proof:semantics:grfrp:theorems:equivalence:op:scan:5%
+              }).
+
+              \begin{itemize}
+                  \item \textit{If there exists a value $v$ such that $\getAt{\ts'}{t_k} = v$
+                        (implying $\ts'_k \equiv (t_k, v) \next \ts'_{k+1}$) and $v = v^\explast_k$:}
+                        In that case, we apply \Cref{eq:semantics:grfrp:denot:op:scan:aux:4} and
+                        then \Cref{eq:semantics:grfrp:denot:op:scan:aux:2}:
+                        \begin{align*}
+                            \scanAux{\ts'_k}{T}{t_{T, k}}{v_{\bot k}}{v^\explast_k} & \equiv
+                            \scanAux{(t_k, v) \next \ts'_{k+1}}{T}{t_{T, k}}{v_{\bot k}}{v^\explast_k} \\
+                                                                                    & \equiv
+                            \scanAux{\ts'_{k+1}}{T}{t_{T, k}}{\bot}{v^\explast_k}                      \\
+                                                                                    & \equiv
+                            \scanAux{\ts'_{k+1}}{T}{t_{T, k} + T}{\bot}{v^\explast_k}
+                        \end{align*}
+
+                        \Cref{proof:semantics:grfrp:theorems:equivalence:op:scan:6} ensures that:
+                        \begin{align*}
+                            [(i_{k+1}, T_{k+1})^+] & = [(i_T, t_k + T), (i'_{k+1}, T'_{k+1})^+]
+                            \quad \Rightarrow \quad t_{T, k+1} = t_{T, k} + T                                                                   \\
+                            v_{\bot k+1}           & = \getAt{\ts'_\bot}{t_{k+1}} = \bot                                                        \\
+                            v^\explast_{k+1}       & = \getAt{\ts^{\prime\explast}}{t_{k+1}} = \getAt{\ts^{\prime\explast}}{t_k} = v^\explast_k \\
+                            \getAt{\ts}{t_k}       & = \bot,
+                        \end{align*}
+                        which implies:
+                        \begin{equation*}
+                            \scanAux{\ts'_{k+1}}{T}{t_{T, k} + T}{\bot}{v^\explast_k} \equiv
+                            \scanAux{\ts'_{k+1}}{T}{t_{T, k+1}}{v_{\bot k+1}}{v^\explast_{k+1}}.
+                        \end{equation*}
+
+                        The coinduction hypothesis states:
+                        \begin{equation*}
+                            \from{\ts}{t_{k+1}} \equiv \scanAux{\ts'_{k+1}}{T}{t_{T, k+1}}{v_{\bot k+1}}{v^\explast_{k+1}}.
+                        \end{equation*}
+
+                        Knowing that $\getAt{\ts}{t_k} = \bot$ ensures:
+                        \begin{align*}
+                            \from{\ts}{t_k} & \equiv \from{\ts}{t_{k+1}}                                                 \\
+                                            & \equiv \scanAux{\ts'_{k+1}}{T}{t_{T, k+1}}{v_{\bot k+1}}{v^\explast_{k+1}} \\
+                                            & \equiv \scanAux{\ts'_k}{T}{t_{T, k}}{v_{\bot k}}{v^\explast_k},
+                        \end{align*}
+                        which conclude this case.
+
+                  \item \textit{If there exists a value $v_u$ such that $\getAt{\ts'}{t_k} = v_u$
+                        (implying $\ts'_k \equiv (t_k, v_u) \next \ts'_{k+1}$) and $v_u \neq v^\explast_k$:}
+                        In that case, we apply \Cref{eq:semantics:grfrp:denot:op:scan:aux:3} and
+                        then \Cref{eq:semantics:grfrp:denot:op:scan:aux:1}:
+                        \begin{align*}
+                            \scanAux{\ts'_k}{T}{t_{T, k}}{v_{\bot k}}{v^\explast_k} & \equiv
+                            \scanAux{(t_k, v_u) \next \ts'_{k+1}}{T}{t_{T, k}}{v_{\bot k}}{v^\explast_k} \\
+                                                                                    & \equiv
+                            \scanAux{\ts'_{k+1}}{T}{t_{T, k}}{v_u}{v^\explast_k}                         \\
+                                                                                    & \equiv
+                            (t_{T, k}, v_u) \next \scanAux{\ts'_{k+1}}{T}{t_{T, k} + T}{\bot}{v_u}
+                        \end{align*}
+
+                        \Cref{proof:semantics:grfrp:theorems:equivalence:op:scan:5} ensures that:
+                        \begin{align*}
+                            [(i_{k+1}, T_{k+1})^+] & = [(i_T, t_k + T), (i'_{k+1}, T'_{k+1})^+]
+                            \quad \Rightarrow \quad t_{T, k+1} = t_{T, k} + T                                          \\
+                            v_{\bot k+1}           & = \getAt{\ts'_\bot}{t_{k+1}} = \bot                               \\
+                            v^\explast_{k+1}       & = \getAt{\ts^{\prime\explast}}{t_{k+1}} = \getAt{\ts'}{t_k} = v_u \\
+                            \getAt{\ts}{t_k}       & = \getAt{\ts'}{t_k} = v_u,
+                        \end{align*}
+                        which implies:
+                        \begin{equation*}
+                            (t_{T, k}, v_u) \next \scanAux{\ts'_{k+1}}{T}{t_{T, k} + T}{\bot}{v_u} \equiv
+                            (t_k, v_u) \next \scanAux{\ts'_{k+1}}{T}{t_{T, k+1}}{v_{\bot k+1}}{v^\explast_{k+1}}.
+                        \end{equation*}
+
+                        The coinduction hypothesis states:
+                        \begin{equation*}
+                            \from{\ts}{t_{k+1}} \equiv \scanAux{\ts'_{k+1}}{T}{t_{T, k+1}}{v_{\bot k+1}}{v^\explast_{k+1}}.
+                        \end{equation*}
+
+                        Knowing that $\getAt{\ts}{t_k} = v_u$ and $t_k = t_{T, k}$ ensures:
+                        \begin{align*}
+                            \from{\ts}{t_k} & \equiv (t_k, v_u) \next \from{\ts}{t_{k+1}}                                                 \\
+                                            & \equiv (t_k, v_u) \next \scanAux{\ts'_{k+1}}{T}{t_{T, k+1}}{v_{\bot k+1}}{v^\explast_{k+1}} \\
+                                            & \equiv \scanAux{\ts'_k}{T}{t_{T, k}}{v_{\bot k}}{v^\explast_k},
+                        \end{align*}
+                        which conclude this case.
+
+                  \item \textit{If $\getAt{\ts'}{t_k} = \bot$ (then $\ts'_k \equiv \ts'_{k+1}$) and
+                        $\getAt{\ts'_\bot}{t_k} = \bot$:} In that case, we apply
+                        \Cref{eq:semantics:grfrp:denot:op:scan:aux:2}:
+                        \begin{align*}
+                            \scanAux{\ts'_k}{T}{t_{T, k}}{v_{\bot k}}{v^\explast_k} & \equiv
+                            \scanAux{\ts'_{k+1}}{T}{t_{T, k}}{\bot}{v^\explast_k}            \\
+                                                                                    & \equiv
+                            \scanAux{\ts'_{k+1}}{T}{t_{T, k} + T}{\bot}{v^\explast_k}
+                        \end{align*}
+
+                        \Cref{proof:semantics:grfrp:theorems:equivalence:op:scan:2} ensures that:
+                        \begin{align*}
+                            [(i_{k+1}, T_{k+1})^+] & = [(i_T, t_k + T), (i'_{k+1}, T'_{k+1})^+]
+                            \quad \Rightarrow \quad t_{T, k+1} = t_{T, k} + T                                                                   \\
+                            v_{\bot k+1}           & = \getAt{\ts'_\bot}{t_{k+1}} = \bot                                                        \\
+                            v^\explast_{k+1}       & = \getAt{\ts^{\prime\explast}}{t_{k+1}} = \getAt{\ts^{\prime\explast}}{t_k} = v^\explast_k \\
+                            \getAt{\ts}{t_k}       & = \bot,
+                        \end{align*}
+                        which implies:
+                        \begin{equation*}
+                            \scanAux{\ts'_{k+1}}{T}{t_{T, k} + T}{\bot}{v^\explast_k} \equiv
+                            \scanAux{\ts'_{k+1}}{T}{t_{T, k+1}}{v_{\bot k+1}}{v^\explast_{k+1}}.
+                        \end{equation*}
+
+                        The coinduction hypothesis states:
+                        \begin{equation*}
+                            \from{\ts}{t_{k+1}} \equiv \scanAux{\ts'_{k+1}}{T}{t_{T, k+1}}{v_{\bot k+1}}{v^\explast_{k+1}}.
+                        \end{equation*}
+
+                        Knowing that $\getAt{\ts}{t_k} = \bot$ ensures:
+                        \begin{align*}
+                            \from{\ts}{t_k} & \equiv \from{\ts}{t_{k+1}}                                                 \\
+                                            & \equiv \scanAux{\ts'_{k+1}}{T}{t_{T, k+1}}{v_{\bot k+1}}{v^\explast_{k+1}} \\
+                                            & \equiv \scanAux{\ts'_k}{T}{t_{T, k}}{v_{\bot k}}{v^\explast_k},
+                        \end{align*}
+                        which conclude this case.
+
+                  \item \textit{If $\getAt{\ts'}{t_k} = \bot$ (then $\ts'_k \equiv \ts'_{k+1}$) and
+                        $\getAt{\ts'_\bot}{t_k} \neq \bot$:} There exists a value $v_u$ such that
+                        $v_{\bot k} = \getAt{\ts'_\bot}{t_k} = v_u$. In that case, we apply
+                        \Cref{eq:semantics:grfrp:denot:op:scan:aux:1}:
+                        \begin{align*}
+                            \scanAux{\ts'_k}{T}{t_{T, k}}{v_{\bot k}}{v^\explast_k} & \equiv
+                            \scanAux{\ts'_{k+1}}{T}{t_{T, k}}{v_u}{v^\explast_k}             \\
+                                                                                    & \equiv
+                            (t_{T, k}, v_u) \next \scanAux{\ts'_{k+1}}{T}{t_{T, k} + T}{\bot}{v_u}
+                        \end{align*}
+
+                        \Cref{proof:semantics:grfrp:theorems:equivalence:op:scan:1} ensures that:
+                        \begin{align*}
+                            [(i_{k+1}, T_{k+1})^+] & = [(i_T, t_k + T), (i'_{k+1}, T'_{k+1})^+]
+                            \quad \Rightarrow \quad t_{T, k+1} = t_{T, k} + T                                               \\
+                            v_{\bot k+1}           & = \getAt{\ts'_\bot}{t_{k+1}} = \bot                                    \\
+                            v^\explast_{k+1}       & = \getAt{\ts^{\prime\explast}}{t_{k+1}} = \getAt{\ts'_\bot}{t_k} = v_u \\
+                            \getAt{\ts}{t_k}       & = \getAt{\ts'_\bot}{t_k} = v_u,
+                        \end{align*}
+                        which implies:
+                        \begin{equation*}
+                            (t_{T, k}, v_u) \next \scanAux{\ts'_{k+1}}{T}{t_{T, k} + T}{\bot}{v_u} \equiv
+                            (t_k, v_u) \next \scanAux{\ts'_{k+1}}{T}{t_{T, k+1}}{v_{\bot k+1}}{v^\explast_{k+1}}.
+                        \end{equation*}
+
+                        The coinduction hypothesis states:
+                        \begin{equation*}
+                            \from{\ts}{t_{k+1}} \equiv \scanAux{\ts'_{k+1}}{T}{t_{T, k+1}}{v_{\bot k+1}}{v^\explast_{k+1}}.
+                        \end{equation*}
+
+                        Knowing that $\getAt{\ts}{t_k} = v_u$ and $t_k = t_{T, k}$ ensures:
+                        \begin{align*}
+                            \from{\ts}{t_k} & \equiv (t_k, v_u) \next \from{\ts}{t_{k+1}}                                                 \\
+                                            & \equiv (t_k, v_u) \next \scanAux{\ts'_{k+1}}{T}{t_{T, k+1}}{v_{\bot k+1}}{v^\explast_{k+1}} \\
+                                            & \equiv \scanAux{\ts'_k}{T}{t_{T, k}}{v_{\bot k}}{v^\explast_k},
+                        \end{align*}
+                        which conclude this case.
+              \end{itemize}
+    \end{itemize}
+    Therefore, for all $k$ in \N, we have $\from{\ts}{t_k} \equiv \scanAux{\ts'_k}{T}{t_{T, k}}
+        {v_{\bot k}}{v^\explast_k}$. In particular, we have:
+    \begin{equation*}
+        s \equiv \from{\ts}{t_0}
+        \equiv \scanAux{\ts'_0}{T}{t_{T, 0}}{v_{\bot 0}}{v^\explast_0}
+        \equiv \scanAux{\ts'}{T}{T}{\bot}{v_d}
+    \end{equation*}
+
+    The rule \nameref{rule:semantics:grfrp:denot:op:scan} then ensures that we have
+    \sigmaDenot{\tck}{K}{\scan{\sigma'}{T}}{\ts}.
+
+    \subparagraph{Other flow operations}
+
+    The proof of other flow operators follows the same principle as the proof of the
+    \scan{\sigma'}{T} operation:
+
+    \begin{enumerate}
+        \item The different operational semantics rules for the flow operation ensure the existence
+              of sequences of states corresponding to the inner flow operations ($\sigma'$ for the
+              \scan{\sigma'}{T} operation), timestamped streams on \tck for each inner flow
+              operations ($\ts'$ for the \scan{\sigma'}{T} operation), timestamped streams for each
+              state element of the flow operation ($\ts'_\bot$ and $\ts^{\prime\explast}$ for the
+              \scan{\sigma'}{T} operation), and sequence of lists of timer resets for each inner
+              flow operations ($[(i'_k, T'_k)^+]^+$ for the \scan{\sigma'}{T} operation) such that
+              they correspond to the simulation of the flow operation.
+        \item The induction hypothesis can be used on the inner flow operations.
+        \item The recursive calls to the auxiliary function corresponding to the flow operation used
+              in the denotational semantics (\scanAux{\ts'}{T}{T}{\bot}{v_d} for the \scan{\sigma'}{T}
+              operation) construct sequences of inputs ($(s_k^{\prime+})$, $(t_{T, k}^+)$,
+              $(v_{\bot k}^+)$, and $(v^{\explast+}_k)$ for the \scan{\sigma'}{T} operation).
+        \item We prove by coinduction on $k \in \N$ that the timestamped stream corresponding to the
+              execution of the flow operation from the timestamp $t_k$ (\from{\ts}{t_k}) is equivalent
+              to the $k^\text{th}$ call to the auxiliary function (\scanAux{\ts'_k}{T}{t_{T, k}}
+              {v_{\bot k}}{v^\explast_k} for the \scan{\sigma'}{T} operation).
+        \item The initial call to the auxiliary function corresponds to the timestamped stream
+              returned by the denotational semantics rule for the flow operation. It implies that
+              the timestamped stream corresponding to the execution of the flow operation satisfies
+              the denotational semantics.
+    \end{enumerate}
+
+    \setcounter{subparagraph}{0}
+
+    \paragraph{Denotational $\Rightarrow$ Operational}
+    \label{sec:semantics:grfrp:theorems:equivalence:flowop:proof:den_to_op}
+    Let $\ts^+$ be streams such that the denotational semantics \sigmaDenot{K}{\tck}{\sigma}{\ts^+}
+    holds.
+
+    The productivity of \GRFRP operations (\Cref{lem:semantics:grfrp:theorems:productivity:flowop})
+    ensures that for all propagation context $\gamma$ the step function of $\sigma$ in $\gamma$ at
+    any timestamp $t$ from any state $s$ that corresponds to $\sigma$ produces a new compatible
+    state $s'$, bottom values $[v_\bot^+]$, and timer resets $[(i_T, t_T)^+]$:
+    \begin{equation*}
+        \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{v_\bot^+}{(i_T, t_T)^+}.
+    \end{equation*}
+
+    It is then possible to construct a sequence of update contexts $(\gamma_k^+)$, a sequence of
+    states $(s_k^+)$, a sequence of timer resets $((i_k, T_k)^+)$, and streams $\ts^{\prime+}$ such
+    that:
+    \begin{equation*}
+        \begin{array}{ll}
+                                 & (s_0, (i_0, T_0)^+) = (\initstate{\sigma}, \inittimer{\sigma}) \\
+            \forall k \in \N, \, &
+            \left\{
+            \begin{array}{l}
+                (t_k, \true) = \tck[k]                                                                        \\
+                \forall x \in \depSet{\sigma}, \, \gamma_k[x] = \getAt{K[x]}{t_k}                             \\
+                \sigmaOpSem{\gamma_k}{s_k}{\sigma}{t_k}{s_{k+1}}{(\getAt{\ts'}{t_k})^+}{(i_{k+1}, T_{k+1})^+} \\
+                \forall (i, T) \in \{(i_k, T_k)^+\},                                                          \\
+                \quad \left\{
+                \begin{array}{l}
+                    \left[\forall l, \, t_k \le t_l < T \Rightarrow i \notin \{(i_{l+1})^+\} \right]
+                    \Rightarrow
+                    \left\{\begin{array}{l}
+                               \exists m, \, t_k \le t_m = T \wedge \gamma_m[i] = () \\
+                               \forall m, \, t_k \le t_m < T \Rightarrow \gamma_m[i] = \bot
+                           \end{array}\right.          \\
+                    \left[\exists l, \, t_k \le t_l < T \wedge i \in \{(i_{l+1})^+\} \right]
+                    \Rightarrow \forall m, \, t_k \le t_m \le T \Rightarrow \gamma_m[i] = \bot. \\
+                \end{array}
+                \right.
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+
+    Paragraph~\ref{sec:semantics:grfrp:theorems:equivalence:flowop:proof:op_to_den} states the streams
+    $\ts^{\prime+}$ satisfy the denotational semantics \sigmaDenot{K}{\tck}{\sigma}{\ts^{\prime+}}.
+    \Cref{lem:semantics:grfrp:theorems:determinism} ensures $\ts^{\prime+}$ and $\ts^+$ are equivalent.
+    The simulation of $\sigma$ can then be rewritten as:
+    \begin{equation*}
+        \begin{array}{ll}
+                                 & (s_0, (i_0, T_0)^+) = (\initstate{\sigma}, \inittimer{\sigma}) \\
+            \forall k \in \N, \, &
+            \left\{
+            \begin{array}{l}
+                (t_k, \true) = \tck[k]                                                                       \\
+                \forall x \in \depSet{\sigma}, \, \gamma_k[x] = \getAt{K[x]}{t_k}                            \\
+                \sigmaOpSem{\gamma_k}{s_k}{\sigma}{t_k}{s_{k+1}}{(\getAt{\ts}{t_k})^+}{(i_{k+1}, T_{k+1})^+} \\
+                \forall (i, T) \in \{(i_k, T_k)^+\},                                                         \\
+                \quad \left\{
+                \begin{array}{l}
+                    \left[\forall l, \, t_k \le t_l < T \Rightarrow i \notin \{(i_{l+1})^+\} \right]
+                    \Rightarrow
+                    \left\{\begin{array}{l}
+                               \exists m, \, t_k \le t_m = T \wedge \gamma_m[i] = () \\
+                               \forall m, \, t_k \le t_m < T \Rightarrow \gamma_m[i] = \bot
+                           \end{array}\right.          \\
+                    \left[\exists l, \, t_k \le t_l < T \wedge i \in \{(i_{l+1})^+\} \right]
+                    \Rightarrow \forall m, \, t_k \le t_m \le T \Rightarrow \gamma_m[i] = \bot. \\
+                \end{array}
+                \right.
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    which concludes the proof.
+
+    \setcounter{paragraph}{0}
+\end{skippableproof}
+
+\newcommand{\nextMess}[2]{\ensuremath{\smf{next\_message}(#1, #2)}}
+\newcommand{\nextContext}[2]{\ensuremath{\smf{next\_context}(#1, #2)}}
+
+The equivalence theorem statement relies on auxiliary functions to create the next messages and
+contexts from an input timestamped stream context and a timer queue. It is done in \Cref{def:semant%
+    ics:grfrp:theorems:equivalence:nextMess,def:semantics:grfrp:theorems:equivalence:nextContext},
+adaptations of \getMess{L}{\tau} and \nextList{L}{\tau} defined in \Cref{def:semantics:grfrp:%
+    theorems:equivalence:nextMess,def:semantics:grfrp:theorems:productivity:observe:aux:nextList}.
+
+\begin{definition}[Next message]
+    \label{def:semantics:grfrp:theorems:equivalence:nextMess}
+    The earliest message from a timestamped stream context $I$ and a timer queue $\tau$ is denoted
+    by \nextMess{I}{\tau} and corresponds to the one with the smallest timestamp. It is defined as
+    follows.
+
+    \scalebox{0.8}{\begin{minipage}{1.2\textwidth}
+            \begin{align}
+                \nextMess{[((t_i, v_i) \next \ts_i / i)^+]}{\emptytimer}              & = (\inputMess{j}{v_j}, t_j) &  & \text{if} \, \exists j, \, t_j = \ttf{min}(\{t_i^+\})
+                \label{eq:semantics:grfrp:theorems:equivalence:aux:nextMess:empty}                                                                                                     \\
+                \nextMess{[((t_i, v_i) \next \ts_i / i)^+]}{(i_T, t_T) \diamond \tau} & = (\inputMess{j}{v_j}, t_j) &  & \text{if} \, \exists j, \, t_j = \ttf{min}(\{t_i^+\}) \le t_T
+                \label{eq:semantics:grfrp:theorems:equivalence:aux:nextMess:input}                                                                                                     \\
+                \nextMess{[((t_i, v_i) \next \ts_i / i)^+]}{(i_T, t_T) \diamond \tau} & = (\timerMess{i_T}, t_T)    &  & \text{if} \, \forall i, \, t_i > t_T
+                \label{eq:semantics:grfrp:theorems:equivalence:aux:nextMess:timer}
+            \end{align}
+        \end{minipage}}
+\end{definition}
+
+\begin{definition}[Next input context]
+    \label{def:semantics:grfrp:theorems:equivalence:nextContext}
+    The remaining timestamped stream context, after getting the earliest message from a timestamped
+    stream context $I$ and a timer queue $\tau$, is denoted by \nextContext{I}{\tau}. It is
+    defined as follows.
+
+    \scalebox{0.8}{\begin{minipage}{1.2\textwidth}
+            \begin{align}
+                \nextContext{[((t_i, v_i) \next \ts_i / i)^+]}{\emptytimer}              & = [((t_i, v_i) \next \ts_i / i)^+_{i \neq j}, (s_j/j)] &  & \text{if} \, \exists j, \, t_j = \ttf{min}(\{t_i^+\})
+                \label{eq:semantics:grfrp:theorems:equivalence:aux:nextContext:empty}                                                                                                                                \\
+                \nextContext{[((t_i, v_i) \next \ts_i / i)^+]}{(i_T, t_T) \diamond \tau} & = [((t_i, v_i) \next \ts_i / i)^+_{i \neq j}, (s_j/j)] &  & \text{if} \, \exists j, \, t_j = \ttf{min}(\{t_i^+\}) \le t_T
+                \label{eq:semantics:grfrp:theorems:equivalence:aux:nextContext:input}                                                                                                                                \\
+                \nextContext{[((t_i, v_i) \next \ts_i / i)^+]}{(i_T, t_T) \diamond \tau} & = [((t_i, v_i) \next \ts_i / i)^+]                     &  & \text{if} \, \forall i, \, t_i > t_T
+                \label{eq:semantics:grfrp:theorems:equivalence:aux:nextContext:timer}
+            \end{align}
+        \end{minipage}}
+\end{definition}
+
+In order to state the equivalence between the denotational semantics and the operational semantics
+of \GRFRP services, we need to extend the definition of flow operations dependencies to statements.
+It is done in \Cref{def:semantics:grfrp:theorems:equivalence:deps}.
+
+\begin{definition}[Dependencies of statements]
+    \label{def:semantics:grfrp:theorems:equivalence:deps}
+
+    For all statement $stmt$, the set of its dependencies is denoted by \depSet{stmt} and
+    is defined in \Crefrange{eq:semantics:grfrp:theorems:equivalence:deps:skip}{eq:semantics:grfrp%
+        :theorems:equivalence:deps:decl}.
+    %
+    \begin{align}
+        \depSet{\skp}                       & = \emptyset \label{eq:semantics:grfrp:theorems:equivalence:deps:skip}                                                 \\
+        \depSet{\import{x}, stmt^+}         & = \depSet{stmt^+} \backslash \{x\} \label{eq:semantics:grfrp:theorems:equivalence:deps:import}                        \\
+        \depSet{\export{x}, stmt^+}         & = \{x\} \cup \depSet{stmt^+} \label{eq:semantics:grfrp:theorems:equivalence:deps:export}                              \\
+        \depSet{\decl{x^+}{\sigma}, stmt^+} & = \depSet{\sigma} \cup (\depSet{stmt^+} \backslash \{x^+\}) \label{eq:semantics:grfrp:theorems:equivalence:deps:decl}
+    \end{align}
+\end{definition}
+
+\begin{theorem}[Equivalence]\label{thm:semantics:grfrp:theorems:equivalence}
+    Let \service{F}{stmt^+} be a well-typed service in a well-typed and causal program \G and a
+    typing context \tyCtx, \tck be a timestamped clock, and $I$ be a context of timestamped
+    streams on \tck.
+
+    For all timestamped streams context $O$ on \tck, the denotational semantics of the service
+    \serviceDenot{\tck}{I}{F}{O} holds \iff there exist a sequence of states $(s_k^+)$
+    corresponding to $F$, a sequence of timer queues $(\tau_k^+)$, a sequence of timestamped streams
+    contexts $(I_k^+)$, a sequence of timestamps $(t_k^+)$, a sequence of messages $(\mess_k^+)$, and
+    a sequence of lists of output identifiers and values $([(x_k, v_k)^+]^+)$ such that:
+    \begin{equation*}
+        \begin{array}{ll}
+            I_0    & = I             \\
+            s_0    & = \initstate{F} \\
+            \tau_0 & = \inittimer{F} \\
+        \end{array} \qquad
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+            (t_k, \true) = \tck[k]                                                         \\
+            (\mess_k, t_k) = \nextMess{I_k}{\tau_k}                                        \\
+            \serviceOpSem{s_k}{\tau_k}{F}{\mess_k}{t_k}{s_{k+1}}{\tau_{k+1}}{(x_k, v_k)^+} \\
+            I_{k+1} = \nextContext{I_k}{\tau_k}                                            \\
+            \forall x_k, \, \getAt{O[x_k]}{t_k}=v_k.
+        \end{array}
+        \right.
+    \end{equation*}
+\end{theorem}
+\begin{skippableproof}
+    The equivalence is proved in two stages: we first prove that a simulation of the operational
+    semantics complies to the constraints of the denotational semantics; then we prove that from a
+    denotational semantics can be derived a simulation of the operational semantics.
+
+    \paragraph{Operational $\Rightarrow$ Denotational.}
+    Let \P{n} be the following property:
+    {\itshape
+    For all well-typed blocks of $n$ statements $stmt^+ = \{stmt_1, \dots, stmt_n\}$
+    defined in a well-typed and causal program \G and a typing context \tyCtx, for all
+    timestamped clock \tck, all timestamped streams contexts $I$, $K$ and $O$ on \tck, the
+    denotational semantics \stmtDenot{\tck}{I}{K}{stmt_k}{O} holds for all $k$ in $\{1, \dots, n\}$
+    \iff there exist a sequence of states $(s_k^+)$ corresponding to $stmt^+$, two sequences of
+    update contexts $(\gamma_k^+)$ and $(\gamma_k^{\prime+})$, a sequence of timestamps $(t_k^+)$, a
+    sequence of input identifiers and values $((i_k, v_k)^+)$, a sequence of lists of output
+    identifiers and values $([(x_{o, k}, v_{o, k})^+]^+)$, and a sequence of lists of timer
+    identifiers and timestamps $([(i_{T, k}, t_{T, k})^+]^+)$ such that:
+    \begin{equation*}
+        \begin{array}{ll}
+                                 & (s_0, (i_{T, 0}, t_{T, 0})^+) = (\initstate{stmt^+}, \inittimer{stmt^+}) \\
+            \forall k \in \N, \, &
+            \left\{
+            \begin{array}{ll}
+                (t_k, \true) = \tck[k]                                                                                                   \\
+                \forall x \in \depSet{stmt^+}, \, \gamma_k[x] = \getAt{K[x]}{t_k}                                                        \\
+                \forall x \in \importSet{stmt^+}, \,
+                \left\{\begin{array}{ll}
+                           i_k = x \Rightarrow v_k = \gamma'_k[x] = \getAt{I[x]}{t_k} \\
+                           i_k \neq x \Rightarrow \bot = \gamma'_k[x] = \getAt{I[x]}{t_k}
+                       \end{array}\right.                          \\
+                \forall x \in \declSet{stmt^+}, \, \gamma'_k[x] = \getAt{K[x]}{t_k}                                                      \\
+                \forall x \in \exportSet{stmt^+}, \,
+                \left\{\begin{array}{ll}
+                           \exists v, \, (x, v) \in \{(x_{o, k}, v_{o, k})\} \Rightarrow v = \getAt{O[x]}{t_k} \\
+                           x \notin \{x_{o, k}^+\} \Rightarrow \bot = \getAt{O[x]}{t_k}
+                       \end{array}\right.    \\
+                \stmtOpSem{\gamma_k}{s_k}{stmt^+}{i_k, t_k, v_k}{\gamma'_k}{s_{k+1}}{(x_{o, k}, v_{o, k})^+}{(i_{T, k+1}, t_{T, k+1})^+} \\
+                \forall (i, T) \in \{(i_{T, k}, t_{T, k})^+\},                                                                           \\
+                \quad
+                \left\{
+                \begin{array}{l}
+                    \left[\forall l, \, t_k \le t_l < T \Rightarrow i \notin \{(i_{l+1})^+\} \right]
+                    \Rightarrow
+                    \left\{\begin{array}{l}
+                               \exists m, \, t_k \le t_m = T \wedge \gamma_m[i] = () \\
+                               \forall m, \, t_k \le t_m < T \Rightarrow \gamma_m[i] = \bot
+                           \end{array}\right.          \\
+                    \left[\exists l, \, t_k \le t_l < T \wedge i \in \{(i_{l+1})^+\} \right]
+                    \Rightarrow \forall m, \, t_k \le t_m \le T \Rightarrow \gamma_m[i] = \bot. \\
+                \end{array}
+                \right.                                                                                                                  \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+    }
+
+    We prove \P{n} for all $n$ in \N by induction.
+    \begin{itemize}
+        \item \textit{Base case:}
+              The rule \nameref{rule:semantics:grfrp:denot:service} ensures that all empty blocks of
+              statement satisfy the denotational semantics.
+
+        \item \textit{Inductive step:}
+              Let $\{stmt_0, stmt^+\}$ be a well-typed block of $n+1$ statements defined in a well-typed
+              and causal program \G and a typing context \tyCtx, let \tck be a timestamped
+              clock, let $I$, $K$ and $O$ be timestamped streams contexts on \tck, let $(s_k^+)$
+              be a sequence of states corresponding to $\{stmt_0, stmt^+\}$, let $(\gamma_k^+)$ and
+              $(\gamma_k^{\prime+})$ be two sequences of update contexts, let $(t_k^+)$ be a
+              sequence of timestamps, let $((i_k, v_k)^+)$ be a sequence of input identifiers and
+              values, let $([(x_{o, k}, v_{o, k})^+]^+)$ be a sequence of lists of output identifiers and
+              values, and let $([(i_{T, k}, t_{T, k})^+]^+)$ be a sequence of lists of timer
+              identifiers and timestamps such that:
+              \begin{equation*}
+                  \begin{array}{l}
+                      (s_0, (i_{T, 0}, t_{T, 0})^+) = (\initstate{stmt_0, stmt^+}, \inittimer{stmt_0, stmt^+}) \\
+                      \forall k \in \N, \,                                                                     \\
+                      \quad \left\{
+                      \begin{array}{l}
+                          (t_k, \true) = \tck[k]                                                                                                           \\
+                          \forall x \in \depSet{stmt_0, stmt^+}, \, \gamma_k[x] = \getAt{K[x]}{t_k}                                                        \\
+                          \forall x \in \importSet{stmt_0, stmt^+}, \,
+                          \left\{\begin{array}{l}
+                                     i_k = x \Rightarrow v_k = \gamma'_k[x] = \getAt{I[x]}{t_k} \\
+                                     i_k \neq x \Rightarrow \bot = \gamma'_k[x] = \getAt{I[x]}{t_k}
+                                 \end{array}\right.                                  \\
+                          \forall x \in \declSet{stmt_0, stmt^+}, \, \gamma'_k[x] = \getAt{K[x]}{t_k}                                                      \\
+                          \forall x \in \exportSet{stmt_0, stmt^+}, \,
+                          \left\{\begin{array}{l}
+                                     \exists v, \, (x, v) \in \{(x_{o, k}, v_{o, k})\} \Rightarrow v = \getAt{O[x]}{t_k} \\
+                                     x \notin \{x_{o, k}^+\} \Rightarrow \bot = \getAt{O[x]}{t_k}
+                                 \end{array}\right.            \\
+                          \stmtOpSem{\gamma_k}{s_k}{stmt_0, stmt^+}{i_k, t_k, v_k}{\gamma'_k}{s_{k+1}}{(x_{o, k}, v_{o, k})^+}{(i_{T, k+1}, t_{T, k+1})^+} \\
+                          \forall (i, T) \in \{(i_{T, k}, t_{T, k})^+\},                                                                                   \\
+                          \quad
+                          \left\{
+                          \begin{array}{l}
+                              \left[\forall l, \, t_k \le t_l < T \Rightarrow i \notin \{(i_{l+1})^+\} \right]
+                              \Rightarrow
+                              \left\{\begin{array}{l}
+                                         \exists m, \, t_k \le t_m = T \wedge \gamma_m[i] = () \\
+                                         \forall m, \, t_k \le t_m < T \Rightarrow \gamma_m[i] = \bot
+                                     \end{array}\right.          \\
+                              \left[\exists l, \, t_k \le t_l < T \wedge i \in \{(i_{l+1})^+\} \right]
+                              \Rightarrow \forall m, \, t_k \le t_m \le T \Rightarrow \gamma_m[i] = \bot. \\
+                          \end{array}
+                          \right.                                                                                                                          \\
+                      \end{array}
+                      \right.
+                  \end{array}
+              \end{equation*}
+
+              We proceed by case analysis on the statement $stmt_0$:
+              \begin{itemize}
+                  \item Suppose $stmt_0 = \import{y}$.
+
+                        \Cref{eq:semantics:grfrp:opsem:init:stmt:import:state,eq:semantics:grfrp:%
+                            opsem:init:stmt:import:timer} state $s_0 = \initstate{stmt^+}$ and
+                        $(i_{T, 0}, t_{T, 0})^+ = \inittimer{stmt^+}$.
+
+                        \Cref{eq:semantics:grfrp:theorems:determinism:sets:import:import} ensures
+                        $\importSet{\import{y}, stmt^+} = \{y\} \cup \importSet{stmt^+}$, so that
+                        for all $k$ in \N we have:
+                        \begin{equation*}
+                            \left\{\begin{array}{l}
+                                i_k = y \Rightarrow v_k = \gamma'_k[y] = \getAt{I[y]}{t_k}     \\
+                                i_k \neq y \Rightarrow \bot = \gamma'_k[y] = \getAt{I[y]}{t_k} \\
+                                \forall x \in \importSet{stmt^+}, \,
+                                \left\{\begin{array}{l}
+                                           i_k = x \Rightarrow v_k = \gamma'_k[x] = \getAt{I[x]}{t_k} \\
+                                           i_k \neq x \Rightarrow \bot = \gamma'_k[x] = \getAt{I[x]}{t_k}.
+                                       \end{array}\right.
+                            \end{array}\right.
+                        \end{equation*}
+
+                        \Cref{eq:semantics:grfrp:theorems:determinism:sets:decl:import} ensures
+                        $\declSet{\import{y}, stmt^+} = \{y\} \cup \declSet{stmt^+}$, so that for
+                        all $k$ in \N we have:
+                        \begin{equation*}
+                            \gamma'_k[y] = \getAt{K[y]}{t_k} \qquad
+                            \forall x \in \declSet{stmt^+}, \, \gamma'_k[x] = \getAt{K[x]}{t_k}.
+                        \end{equation*}
+
+                        \Cref{eq:semantics:grfrp:theorems:equivalence:deps:import} ensures that
+                        \depSet{\import{y}, stmt^+} equals $\depSet{stmt^+} \backslash \{y\}$, so
+                        that for all $k$ in \N we have:
+                        \begin{equation*}
+                            \forall x \in \depSet{stmt^+} \backslash \{y\}, \, \gamma_k[x] = \getAt{K[x]}{t_k},
+                        \end{equation*}
+                        and the previous point ensures that we have for all $k$ in \N we have:
+                        \begin{equation*}
+                            \begin{array}{l}
+                                y = i_k \Rightarrow v_k = \gamma'_k[x] = \getAt{I[x]}{t_k} = \getAt{K[x]}{t_k} \\
+                                y \neq i_k \Rightarrow \bot = \gamma'_k[x] = \getAt{I[x]}{t_k} = \getAt{K[x]}{t_k},
+                            \end{array}
+                        \end{equation*}
+                        so that $I[y]$ and $K[y]$ are equivalent.
+
+                        The rules \nameref{rule:semantics:grfrp:opsem:step:stmt:import:present} and
+                        \nameref{rule:semantics:grfrp:opsem:step:stmt:import:absent} ensure that for
+                        all $k$ in \N we have:
+                        \begin{equation*}
+                            \begin{array}{l}
+                                i_k = y \Rightarrow                                                                     \\
+                                \qquad \stmtOpSem{\gamma_k \ctxconcat [v_k/y]}{s_k}{stmt^+}
+                                {i_k, t_k, v_k}{\gamma'_k}{s_{k+1}}{(x_{o, k}, v_{o, k})^+}{(i_{T, k+1}, t_{T, k+1})^+} \\
+                                i_k \neq y \Rightarrow \stmtOpSem{\gamma_k}{s_k}{stmt^+}
+                                {i_k, t_k, v_k}{\gamma'_k}{s_{k+1}}{(x_{o, k}, v_{o, k})^+}{(i_{T, k+1}, t_{T, k+1})^+}
+                            \end{array}
+                        \end{equation*}
+
+                        \Cref{eq:semantics:grfrp:theorems:determinism:sets:export:import} ensures
+                        $\exportSet{\import{y}, stmt^+} = \exportSet{stmt^+}$, so that for all $k$
+                        in \N we have:
+                        \begin{equation*}
+                            \forall x \in \exportSet{stmt^+}, \,
+                            \left\{\begin{array}{l}
+                                \exists v, \, (x, v) \in \{(x_{o, k}, v_{o, k})\} \Rightarrow v = \getAt{O[x]}{t_k} \\
+                                x \notin \{x_{o, k}^+\} \Rightarrow \bot = \getAt{O[x]}{t_k}.
+                            \end{array}\right.
+                        \end{equation*}
+
+                        Therefore we can summarize the information as follows:
+
+                        \begin{equation*}
+                            \begin{array}{l}
+                                (s_0, (i_{T, 0}, t_{T, 0})^+) = (\initstate{stmt^+}, \inittimer{stmt^+}) \\
+                                \forall k \in \N, \,                                                     \\
+                                \left\{
+                                \begin{array}{l}
+                                    (t_k, \true) = \tck[k]                                                                                                     \\
+                                    \forall x \in \depSet{stmt^+}, \,
+                                    \left\{\begin{array}{ll}
+                                               i_k = y    & \Rightarrow (\gamma_k \ctxconcat [v_k/y])[x] = \getAt{K[x]}{t_k} \\
+                                               i_k \neq y & \Rightarrow \gamma_k[x] = \getAt{K[x]}{t_k}
+                                           \end{array}\right.            \\
+                                    \forall x \in \importSet{stmt^+}, \,
+                                    \left\{\begin{array}{ll}
+                                               i_k = x    & \Rightarrow v_k = \gamma'_k[x] = \getAt{I[x]}{t_k}  \\
+                                               i_k \neq x & \Rightarrow \bot = \gamma'_k[x] = \getAt{I[x]}{t_k}
+                                           \end{array}\right.                         \\
+                                    \forall x \in \declSet{stmt^+}, \, \gamma'_k[x] = \getAt{K[x]}{t_k}                                                        \\
+                                    \forall x \in \exportSet{stmt^+}, \,
+                                    \left\{\begin{array}{ll}
+                                               \exists v, \, (x, v) \in \{(x_{o, k}, v_{o, k})\} & \Rightarrow v = \getAt{O[x]}{t_k}    \\
+                                               x \notin \{x_{o, k}^+\}                           & \Rightarrow \bot = \getAt{O[x]}{t_k}
+                                           \end{array}\right. \\
+                                    i_k = y \Rightarrow                                                                                                        \\
+                                    \quad \stmtOpSem{\gamma_k \ctxconcat [v_k/y]}{s_k}{stmt^+}
+                                    {i_k, t_k, v_k}{\gamma'_k}{s_{k+1}}{(x_{o, k}, v_{o, k})^+}{(i_{T, k+1}, t_{T, k+1})^+}                                    \\
+                                    i_k \neq y \Rightarrow \stmtOpSem{\gamma_k}{s_k}{stmt^+}
+                                    {i_k, t_k, v_k}{\gamma'_k}{s_{k+1}}{(x_{o, k}, v_{o, k})^+}{(i_{T, k+1}, t_{T, k+1})^+}                                    \\
+                                    \forall (i, T) \in \{(i_{T, k}, t_{T, k})^+\},                                                                             \\
+                                    \quad
+                                    \left\{
+                                    \begin{array}{l}
+                                        \left[\forall l, \, t_k \le t_l < T \Rightarrow i \notin \{(i_{l+1})^+\} \right]
+                                        \Rightarrow
+                                        \left\{\begin{array}{l}
+                                                   \exists m, \, t_k \le t_m = T \wedge \gamma_m[i] = () \\
+                                                   \forall m, \, t_k \le t_m < T \Rightarrow \gamma_m[i] = \bot
+                                               \end{array}\right.          \\
+                                        \left[\exists l, \, t_k \le t_l < T \wedge i \in \{(i_{l+1})^+\} \right]
+                                        \Rightarrow \forall m, \, t_k \le t_m \le T \Rightarrow \gamma_m[i] = \bot. \\
+                                    \end{array}
+                                    \right.                                                                                                                    \\
+                                \end{array}
+                                \right.
+                            \end{array}
+                        \end{equation*}
+
+                        We apply the induction hypothesis to state that for all statement $stmt$
+                        from the block $stmt^+$ we have \stmtDenot{\tck}{I}{K}{stmt}{O} holds.
+
+                        Furthermore, because we have $K[y] \equiv I[y]$, the rule
+                        \nameref{rule:semantics:grfrp:denot:stmt:import} ensures that the judgement
+                        \stmtDenot{\tck}{I}{K}{\import{y}}{O}
+                        holds.
+
+                  \item Suppose $stmt_0 = \export{y}$.
+
+                        \Cref{eq:semantics:grfrp:opsem:init:stmt:export:state,eq:semantics:grfrp:%
+                            opsem:init:stmt:export:timer} state $s_0 = \initstate{stmt^+}$ and
+                        $(i_{T, 0}, t_{T, 0})^+ = \inittimer{stmt^+}$.
+
+                        \Cref{eq:semantics:grfrp:theorems:determinism:sets:import:export} ensures
+                        $\importSet{\export{y}, stmt^+} = \importSet{stmt^+}$, so that for all $k$
+                        in \N we have:
+                        \begin{equation*}
+                            \forall x \in \importSet{stmt^+}, \,
+                            \left\{\begin{array}{l}
+                                i_k = x \Rightarrow v_k = \gamma'_k[x] = \getAt{I[x]}{t_k} \\
+                                i_k \neq x \Rightarrow \bot = \gamma'_k[x] = \getAt{I[x]}{t_k}.
+                            \end{array}\right.
+                        \end{equation*}
+
+                        \Cref{eq:semantics:grfrp:theorems:equivalence:deps:export} ensures that
+                        $\depSet{\export{y}, stmt^+} = \{y\} \cup \depSet{stmt^+}$, so that for all
+                        $k$ in \N we have:
+                        \begin{equation*}
+                            \gamma_k[y] = \getAt{K[y]}{t_k} \qquad
+                            \forall x \in \depSet{stmt^+}, \, \gamma_k[x] = \getAt{K[x]}{t_k}.
+                        \end{equation*}
+
+                        \Cref{eq:semantics:grfrp:theorems:determinism:sets:decl:export} ensures
+                        $\declSet{\export{y}, stmt^+} = \declSet{stmt^+}$, so that for all $k$ in \N
+                        we have:
+                        \begin{equation*}
+                            \forall x \in \declSet{stmt^+}, \, \gamma'_k[x] = \getAt{K[x]}{t_k}.
+                        \end{equation*}
+
+                        The rules \nameref{rule:semantics:grfrp:opsem:step:stmt:export:bottom} and
+                        \nameref{rule:semantics:grfrp:opsem:step:stmt:export:value} ensure that for
+                        all $k$ in \N we have:
+                        \begin{equation*}
+                            \begin{array}{l}
+                                \gamma_k[y] = v \Rightarrow \exists [(x'_{o, k}, v'_{o, k})^+], \,
+                                [(x_{o, k}, v_{o, k})^+] = [(x'_{o, k}, v'_{o, k})^+, (y, v)] \, \wedge \\
+                                \qquad \stmtOpSem{\gamma_k}{s_k}{stmt^+}{i_k, t_k, v_k}{\gamma'_k}
+                                {s_{k+1}}{(x'_{o, k}, v'_{o, k})^+}{(i_{T, k+1}, t_{T, k+1})^+}         \\
+                                \gamma_k[y] = \bot \Rightarrow
+                                \stmtOpSem{\gamma_k}{s_k}{stmt^+}{i_k, t_k, v_k}{\gamma'_k}
+                                {s_{k+1}}{(x_{o, k}, v_{o, k})^+}{(i_{T, k+1}, t_{T, k+1})^+}
+                            \end{array}
+                        \end{equation*}
+
+                        \Cref{eq:semantics:grfrp:theorems:determinism:sets:export:export} ensures
+                        $\exportSet{\export{y}, stmt^+} = \{y\} \cup \exportSet{stmt^+}$, so that
+                        for all $k$ in \N we have:
+                        \begin{equation*}
+                            \begin{array}{l}
+                                \exists v, \, (y, v) \in \{(x_{o, k}, v_{o, k})\} \Rightarrow v = \getAt{O[y]}{t_k} \\
+                                y \notin \{x_{o, k}^+\} \Rightarrow \bot = \getAt{O[y]}{t_k}                        \\
+                                \forall x \in \exportSet{stmt^+}, \,
+                                \left\{\begin{array}{l}
+                                           \exists v, \, (x, v) \in \{(x_{o, k}, v_{o, k})\} \Rightarrow v = \getAt{O[x]}{t_k} \\
+                                           x \notin \{x_{o, k}^+\} \Rightarrow \bot = \getAt{O[x]}{t_k},
+                                       \end{array}\right.
+                            \end{array}
+                        \end{equation*}
+                        and the previous point ensures that we have for all $k$ in \N we have:
+                        \begin{equation*}
+                            \begin{array}{l}
+                                \gamma_k[y] = v \Rightarrow
+                                \left\{
+                                \begin{array}{l}
+                                    v = \getAt{O[y]}{t_k}                                         \\
+                                    \exists [(x'_{o, k}, v'_{o, k})^+], \,
+                                    [(x_{o, k}, v_{o, k})^+] = [(x'_{o, k}, v'_{o, k})^+, (y, v)] \\
+                                    \forall x \in \exportSet{stmt^+},                             \\
+                                    \quad \left\{\begin{array}{l}
+                                                     \exists v, \, (x, v) \in \{(x'_{o, k}, v'_{o, k})\} \Rightarrow v = \getAt{O[x]}{t_k} \\
+                                                     x \notin \{x_{o, k}^{\prime+}\} \Rightarrow \bot = \getAt{O[x]}{t_k}
+                                                 \end{array}\right.
+                                \end{array}
+                                \right. \\
+                                \gamma_k[y] = \bot \Rightarrow \left\{
+                                \begin{array}{l}
+                                    \bot = \getAt{O[y]}{t_k}          \\
+                                    \forall x \in \exportSet{stmt^+}, \\
+                                    \quad \left\{\begin{array}{l}
+                                                     \exists v, \, (x, v) \in \{(x_{o, k}, v_{o, k})\} \Rightarrow v = \getAt{O[x]}{t_k} \\
+                                                     x \notin \{x_{o, k}^{\prime+}\} \Rightarrow \bot = \getAt{O[x]}{t_k},
+                                                 \end{array}\right.
+                                \end{array}
+                                \right.
+                            \end{array}
+                        \end{equation*}
+                        so that for all $k$ in \N we have $\gamma_k[y] = \getAt{O[y]}{t_k}$, and the
+                        point on the dependencies set ensures that $\gamma_k[y] = \getAt{K[y]}
+                            {t_k}$, which implies that $O[y]$ is equivalent to $K[y]$.
+
+                        Therefore we can summarize the information as follows:
+
+                        \begin{equation*}
+                            \begin{array}{l}
+                                (s_0, (i_{T, 0}, t_{T, 0})^+) = (\initstate{stmt^+}, \inittimer{stmt^+}) \\
+                                \forall k \in \N, \,                                                     \\
+                                \left\{
+                                \begin{array}{l}
+                                    (t_k, \true) = \tck[k]                                                                             \\
+                                    \forall x \in \depSet{stmt^+}, \, \gamma_k[x] = \getAt{K[x]}{t_k}                                  \\
+                                    \forall x \in \importSet{stmt^+}, \,
+                                    \left\{\begin{array}{ll}
+                                               i_k = x    & \Rightarrow v_k = \gamma'_k[x] = \getAt{I[x]}{t_k}  \\
+                                               i_k \neq x & \Rightarrow \bot = \gamma'_k[x] = \getAt{I[x]}{t_k}
+                                           \end{array}\right. \\
+                                    \forall x \in \declSet{stmt^+}, \, \gamma'_k[x] = \getAt{K[x]}{t_k}                                \\
+                                    \forall x \in \exportSet{stmt^+},                                                                  \\
+                                    \quad \left\{\begin{array}{l}
+                                                     \gamma_k[y] = v \Rightarrow
+                                                     \left\{\begin{array}{l}
+                                                   \exists [(x'_{o, k}, v'_{o, k})^+], \, [(x_{o, k}, v_{o, k})^+] = [(x'_{o, k}, v'_{o, k})^+, (y, v)] \\
+                                                   \exists v, \, (x, v) \in \{(x'_{o, k}, v'_{o, k})\} \Rightarrow v = \getAt{O[x]}{t_k}                \\
+                                                   x \notin \{x_{o, k}^{\prime+}\} \Rightarrow \bot = \getAt{O[x]}{t_k}
+                                               \end{array}\right. \\
+                                                     \gamma_k[y] = \bot \Rightarrow
+                                                     \left\{\begin{array}{l}
+                                                   \exists v, \, (x, v) \in \{(x_{o, k}, v_{o, k})\} \Rightarrow v = \getAt{O[x]}{t_k} \\
+                                                   x \notin \{x_{o, k}^{\prime+}\} \Rightarrow \bot = \getAt{O[x]}{t_k}
+                                               \end{array}\right.
+                                                 \end{array}\right.                                             \\
+                                    \gamma_k[y] = v \Rightarrow \exists [(x'_{o, k}, v'_{o, k})^+], \,
+                                    [(x_{o, k}, v_{o, k})^+] = [(x'_{o, k}, v'_{o, k})^+, (y, v)] \, \wedge                            \\
+                                    \qquad \stmtOpSem{\gamma_k}{s_k}{stmt^+}{i_k, t_k, v_k}{\gamma'_k}
+                                    {s_{k+1}}{(x'_{o, k}, v'_{o, k})^+}{(i_{T, k+1}, t_{T, k+1})^+}                                    \\
+                                    \gamma_k[y] = \bot \Rightarrow                                                                     \\
+                                    \qquad \stmtOpSem{\gamma_k}{s_k}{stmt^+}{i_k, t_k, v_k}{\gamma'_k}
+                                    {s_{k+1}}{(x_{o, k}, v_{o, k})^+}{(i_{T, k+1}, t_{T, k+1})^+}                                      \\
+                                    \forall (i, T) \in \{(i_{T, k}, t_{T, k})^+\},                                                     \\
+                                    \quad
+                                    \left\{
+                                    \begin{array}{l}
+                                        \left[\forall l, \, t_k \le t_l < T \Rightarrow i \notin \{(i_{l+1})^+\} \right]
+                                        \Rightarrow
+                                        \left\{\begin{array}{l}
+                                                   \exists m, \, t_k \le t_m = T \wedge \gamma_m[i] = () \\
+                                                   \forall m, \, t_k \le t_m < T \Rightarrow \gamma_m[i] = \bot
+                                               \end{array}\right.          \\
+                                        \left[\exists l, \, t_k \le t_l < T \wedge i \in \{(i_{l+1})^+\} \right]
+                                        \Rightarrow \forall m, \, t_k \le t_m \le T \Rightarrow \gamma_m[i] = \bot. \\
+                                    \end{array}
+                                    \right.                                                                                            \\
+                                \end{array}
+                                \right.
+                            \end{array}
+                        \end{equation*}
+
+                        We apply the induction hypothesis to state that for all statement $stmt$
+                        from the block $stmt^+$ we have \stmtDenot{\tck}{I}{K}{stmt}{O} holds.
+
+                        Furthermore, because we have $K[y] \equiv O[y]$, the rule
+                        \nameref{rule:semantics:grfrp:denot:stmt:export} ensures that the judgement
+                        \stmtDenot{\tck}{I}{K}{\export{y}}{O} holds.
+
+                  \item Suppose $stmt_0 = \decl{y^+}{\sigma}$.
+
+                        \Cref{eq:semantics:grfrp:opsem:init:stmt:decl:state,eq:semantics:grfrp:%
+                            opsem:init:stmt:decl:timer} state:
+                        \begin{equation*}
+                            s_0 = (\initstate{\sigma}, \initstate{stmt^+}) \qquad
+                            (i_{T, 0}, t_{T, 0})^+ = \inittimer{\sigma} \lstconcat \inittimer{stmt^+}.
+                        \end{equation*}
+
+                        \Cref{eq:semantics:grfrp:theorems:determinism:sets:import:decl} ensures
+                        $\importSet{\decl{y^+}{\sigma}, stmt^+} = \importSet{stmt^+}$,
+                        so that for all $k$ in \N we have:
+                        \begin{equation*}
+                            \forall x \in \importSet{stmt^+}, \,
+                            \left\{\begin{array}{l}
+                                i_k = x \Rightarrow v_k = \gamma'_k[x] = \getAt{I[x]}{t_k} \\
+                                i_k \neq x \Rightarrow \bot = \gamma'_k[x] = \getAt{I[x]}{t_k}.
+                            \end{array}\right.
+                        \end{equation*}
+
+                        \Cref{eq:semantics:grfrp:theorems:determinism:sets:decl:decl} ensures
+                        $\declSet{\decl{y^+}{\sigma}, stmt^+} = \{y^+\} \cup \declSet{stmt^+}$, so
+                        that for all $k$ in \N we have:
+                        \begin{equation*}
+                            \forall y, \, \gamma'_k[y] = \getAt{K[y]}{t_k} \qquad
+                            \forall x \in \declSet{stmt^+}, \, \gamma'_k[x] = \getAt{K[x]}{t_k}.
+                        \end{equation*}
+
+                        \Cref{eq:semantics:grfrp:theorems:determinism:sets:export:decl} ensures
+                        $\exportSet{\decl{y^+}{\sigma}, stmt^+} = \exportSet{stmt^+}$, so that for
+                        all $k$ in \N we have:
+                        \begin{equation*}
+                            \forall x \in \exportSet{stmt^+}, \,
+                            \left\{\begin{array}{l}
+                                \exists v, \, (x, v) \in \{(x_{o, k}, v_{o, k})\} \Rightarrow v = \getAt{O[x]}{t_k} \\
+                                x \notin \{x_{o, k}^+\} \Rightarrow \bot = \getAt{O[x]}{t_k}.
+                            \end{array}\right.
+                        \end{equation*}
+
+                        The rules \nameref{rule:semantics:grfrp:opsem:step:stmt:decl} ensures that
+                        there exist a sequence of states $(s_{\sigma, k}^+)$ corresponding to
+                        $\sigma$, a sequence of states $(s_k^{\prime+})$ corresponding to $stmt^+$,
+                        timestamped streams $\ts^+$, and two sequences of timer lists
+                        $([(i_{\sigma, k},t_{\sigma, k})^+]^+)$ and $([(i'_{T, k}, t'_{T, k})^+]^+)$
+                        such that for all $k$ in \N we have:
+                        \begin{equation*}
+                            \begin{array}{l}
+                                s_k = (s_{\sigma, k}, s'_k)                                                               \\
+                                {[(i_{T, k}, t_{T, k})^+] = [(i_{\sigma, k}, t_{\sigma, k})^+, (i'_{T, k}, t'_{T, k})^+]} \\
+                                \sigmaOpSem{\gamma_k}{s_{\sigma, k}}{\sigma}{t_k}{s_{\sigma, k+1}}{\getAt{\ts}{t_k}^+}
+                                {(i_{\sigma, k}, t_{\sigma, k})^+}                                                        \\
+                                \mathfoot{\stmtOpSem{\gamma_k \ctxconcat [(\getAt{\ts}{t_k}/y)^+]}{s'_k}{stmt^+}{i_k, t_k, v_k}{\gamma'_k}
+                                {s'_{k+1}}{(x_{o, k}, v_{o, k})^+}{(i'_{T, k}, t'_{T, k})^+}}                             \\
+                            \end{array}
+                        \end{equation*}
+
+                        \Cref{eq:semantics:grfrp:theorems:equivalence:deps:decl} states
+                        $\depSet{\decl{y^+}{\sigma}, stmt^+} = \depSet{\sigma} \cup \depSet{stmt^+}
+                            \backslash \{y^+\}$, so that for all $k$ in \N we have:
+                        \begin{equation*}
+                            \begin{array}{l}
+                                \forall x \in \depSet{\sigma}, \, \gamma_k[x] = \getAt{K[x]}{t_k}                                                          \\
+                                \forall x \in \depSet{stmt^+} \backslash \{y^+\}, \, (\gamma_k \ctxconcat [(\getAt{\ts}{t_k}/y)^+])[x] = \getAt{K[x]}{t_k} \\
+                                \forall y, \, (\gamma_k \ctxconcat [(\getAt{\ts}{t_k}/y)^+])[y] = \getAt{\ts}{t_k},
+                            \end{array}
+                        \end{equation*}
+                        the point on the declaration set ensures that we have for all $k$ in \N we have:
+                        \begin{equation*}
+                            \forall y, \, \gamma'_k[y] = \getAt{K[y]}{t_k},
+                        \end{equation*}
+                        and because the block of statements is well-typed, we have $\gamma'_k[y] =
+                            \getAt{\ts}{t_k}$ for all $k$ in \N, so that for all $y$ we have $K[y]
+                            \equiv s$ and for all $k$ in \N:
+                        \begin{equation*}
+                            (\gamma_k \ctxconcat [(\getAt{\ts}{t_k}/y)^+])[y] = \getAt{K[y]}{t_k}.
+                        \end{equation*}
+
+                        Therefore we can summarize the information as follows:
+
+                        \begin{equation*}
+                            \begin{array}{l}
+                                (s'_0, (i'_{T, 0}, t'_{T, 0})^+) = (\initstate{stmt^+}, \inittimer{stmt^+}) \\
+                                \forall k \in \N, \,                                                        \\
+                                \left\{
+                                \begin{array}{l}
+                                    (t_k, \true) = \tck[k]                                                                                                     \\
+                                    \forall x \in \depSet{stmt^+}, \, (\gamma_k \ctxconcat [(\getAt{\ts}{t_k}/y)^+])[x] = \getAt{K[x]}{t_k}                    \\
+                                    \forall x \in \importSet{stmt^+}, \,
+                                    \left\{\begin{array}{ll}
+                                               i_k = x    & \Rightarrow v_k = \gamma'_k[x] = \getAt{I[x]}{t_k}  \\
+                                               i_k \neq x & \Rightarrow \bot = \gamma'_k[x] = \getAt{I[x]}{t_k}
+                                           \end{array}\right.                         \\
+                                    \forall x \in \declSet{stmt^+}, \, \gamma'_k[x] = \getAt{K[x]}{t_k}                                                        \\
+                                    \forall x \in \exportSet{stmt^+}, \,
+                                    \left\{\begin{array}{ll}
+                                               \exists v, \, (x, v) \in \{(x_{o, k}, v_{o, k})\} & \Rightarrow v = \getAt{O[x]}{t_k}    \\
+                                               x \notin \{x_{o, k}^+\}                           & \Rightarrow \bot = \getAt{O[x]}{t_k}
+                                           \end{array}\right. \\
+                                    \mathfoot{\stmtOpSem{\gamma_k \ctxconcat [(\getAt{\ts}{t_k}/y)^+]}{s'_k}{stmt^+}{i_k, t_k, v_k}{\gamma'_k}
+                                    {s'_{k+1}}{(x_{o, k}, v_{o, k})^+}{(i'_{T, k}, t'_{T, k})^+}}                                                              \\
+                                    \forall (i, T) \in \{(i'_{T, k}, t'_{T, k})^+\},                                                                           \\
+                                    \quad
+                                    \left\{
+                                    \begin{array}{l}
+                                        \left[\forall l, \, t_k \le t_l < T \Rightarrow i \notin \{(i_{l+1})^+\} \right]
+                                        \Rightarrow
+                                        \left\{\begin{array}{l}
+                                                   \exists m, \, t_k \le t_m = T \wedge \gamma_m[i] = () \\
+                                                   \forall m, \, t_k \le t_m < T \Rightarrow \gamma_m[i] = \bot
+                                               \end{array}\right.          \\
+                                        \left[\exists l, \, t_k \le t_l < T \wedge i \in \{(i_{l+1})^+\} \right]
+                                        \Rightarrow \forall m, \, t_k \le t_m \le T \Rightarrow \gamma_m[i] = \bot. \\
+                                    \end{array}
+                                    \right.                                                                                                                    \\
+                                \end{array}
+                                \right.
+                            \end{array}
+                        \end{equation*}
+
+                        We apply the induction hypothesis to state that for all statement $stmt$
+                        from the block $stmt^+$ we have \stmtDenot{\tck}{I}{K}{stmt}{O} holds.
+
+                        For the flow operation $\sigma$:
+
+                        \begin{equation*}
+                            \begin{array}{l}
+                                (s_{\sigma, 0}, (i_{\sigma, 0}, t_{\sigma, 0})^+) = (\initstate{\sigma}, \inittimer{\sigma}) \\
+                                \forall k \in \N, \,                                                                         \\
+                                \left\{
+                                \begin{array}{l}
+                                    (t_k, \true) = \tck[k]                                            \\
+                                    \forall x \in \depSet{\sigma}, \, \gamma_k[x] = \getAt{K[x]}{t_k} \\
+                                    \sigmaOpSem{\gamma_k}{s_{\sigma, k}}{\sigma}{t_k}{s_{\sigma, k+1}}{\getAt{\ts}{t_k}^+}
+                                    {(i_{\sigma, k}, t_{\sigma, k})^+}                                \\
+                                    \forall (i, T) \in \{(i_{\sigma, k}, t_{\sigma, k})^+\},          \\
+                                    \quad
+                                    \left\{
+                                    \begin{array}{l}
+                                        \left[\forall l, \, t_k \le t_l < T \Rightarrow i \notin \{(i_{l+1})^+\} \right]
+                                        \Rightarrow
+                                        \left\{\begin{array}{l}
+                                                   \exists m, \, t_k \le t_m = T \wedge \gamma_m[i] = () \\
+                                                   \forall m, \, t_k \le t_m < T \Rightarrow \gamma_m[i] = \bot
+                                               \end{array}\right.          \\
+                                        \left[\exists l, \, t_k \le t_l < T \wedge i \in \{(i_{l+1})^+\} \right]
+                                        \Rightarrow \forall m, \, t_k \le t_m \le T \Rightarrow \gamma_m[i] = \bot. \\
+                                    \end{array}
+                                    \right.                                                           \\
+                                \end{array}
+                                \right.
+                            \end{array}
+                        \end{equation*}
+
+                        We apply \Cref{lem:semantics:grfrp:theorems:equivalence:flowop} to state that
+                        \sigmaDenot{\tck}{K}{\sigma}{\ts^+} holds.
+
+                        Furthermore, because we have $(K[x] \equiv s)^+$, the rule
+                        \nameref{rule:semantics:grfrp:denot:stmt:decl} ensures that the judgment
+                        \stmtDenot{\tck}{I}{K}{\decl{y^+}{\sigma}}{O} holds.
+              \end{itemize}
+              Therefore, we have \stmtDenot{\tck}{I}{K}{stmt_0, stmt^+}{O} in every cases.
+    \end{itemize}
+
+    Let \service{F}{stmt^+} be a well-typed service in a well-typed and causal program \G and a
+    typing context \tyCtx, \tck be a timestamped clock, $I$ and $O$ be timestamped stream
+    contexts on \tck, let $(s_k^+)$ be a sequence of states corresponding to $F$, let $(\tau_k^+)$
+    be a sequence of timer queues, let $(I_k^+)$ be a sequence of timestamped streams contexts, let
+    $(t_k^+)$ be a sequence of timestamps, let $(\mess_k^+)$ be a sequence of messages, and let
+    $([(x_{o, k}, v_{o, k})^+]^+)$ be a sequence of lists of output identifiers and values such that:
+    \begin{equation*}
+        \begin{array}{ll}
+            I_0    & = I             \\
+            s_0    & = \initstate{F} \\
+            \tau_0 & = \inittimer{F} \\
+        \end{array} \qquad
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+            (t_k, \true) = \tck[k]                                                                   \\
+            (\mess_k, t_k) = \nextMess{I_k}{\tau_k}                                                  \\
+            \serviceOpSem{s_k}{\tau_k}{F}{\mess_k}{t_k}{s_{k+1}}{\tau_{k+1}}{(x_{o, k}, v_{o, k})^+} \\
+            I_{k+1} = \nextContext{I_k}{\tau_k}                                                      \\
+            \forall x_{o, k}, \, \getAt{O[x_{o, k}]}{t_k} = v_{o, k}.
+        \end{array}
+        \right.
+    \end{equation*}
+
+    \Crefrange{eq:semantics:grfrp:theorems:equivalence:aux:nextMess:empty}{eq:semantics:grfrp:%
+        theorems:equivalence:aux:nextMess:timer} and the rules \nameref{rule:semantics:grfrp:opsem:%
+        step:service:input} and \nameref{rule:semantics:grfrp:opsem:step:service:timer} ensures that
+    a timer reset $(i_T, t_T)$ will create a timer message \timerMess{i_T} at time $t_T$ \iff there
+    is no other reset of $i_T$ until $t_T$.
+
+    The rules \nameref{rule:semantics:grfrp:opsem:step:service:input} and \nameref{rule:semantics:%
+        grfrp:opsem:step:service:timer} also ensures that there exist two sequences of update
+    contexts $(\gamma_k^+)$ and $(\gamma_k^{\prime+})$, a sequence of input identifiers and values
+    $((i_k, v_k)^+)$, and a sequence of lists of timer identifiers and timestamps $([(i_{T, k},
+                t_{T, k})^+]^+)$ such that:
+    \begin{equation*}
+        \begin{array}{ll}
+                                 & (s_0, (i_{T, 0}, t_{T, 0})^+) = (\initstate{stmt^+}, \inittimer{stmt^+}) \\
+            \forall k \in \N, \, &
+            \left\{
+            \begin{array}{ll}
+                (t_k, \true) = \tck[k]                                                                                                   \\
+                % \forall x \in \depSet{stmt^+}, \, \gamma_k[x] = \getAt{K[x]}{t_k}                                                        \\
+                \forall x \in \importSet{stmt^+}, \,
+                \left\{\begin{array}{ll}
+                           i_k = x \Rightarrow v_k = \gamma'_k[x] = \getAt{I[x]}{t_k} \\
+                           i_k \neq x \Rightarrow \bot = \gamma'_k[x] = \getAt{I[x]}{t_k}
+                       \end{array}\right.                          \\
+                % \forall x \in \declSet{stmt^+}, \, \gamma'_k[x] = \getAt{K[x]}{t_k}                                                      \\
+                \forall x \in \exportSet{stmt^+}, \,
+                \left\{\begin{array}{ll}
+                           \exists v, \, (x, v) \in \{(x_{o, k}, v_{o, k})\} \Rightarrow v = \getAt{O[x]}{t_k} \\
+                           x \notin \{x_{o, k}^+\} \Rightarrow \bot = \getAt{O[x]}{t_k}
+                       \end{array}\right.    \\
+                \stmtOpSem{\gamma_k}{s_k}{stmt^+}{i_k, t_k, v_k}{\gamma'_k}{s_{k+1}}{(x_{o, k}, v_{o, k})^+}{(i_{T, k+1}, t_{T, k+1})^+} \\
+                \forall (i, T) \in \{(i_{T, k}, t_{T, k})^+\},                                                                           \\
+                \quad
+                \left\{
+                \begin{array}{l}
+                    \left[\forall l, \, t_k \le t_l < T \Rightarrow i \notin \{(i_{l+1})^+\} \right]
+                    \Rightarrow
+                    \left\{\begin{array}{l}
+                               \exists m, \, t_k \le t_m = T \wedge \gamma_m[i] = () \\
+                               \forall m, \, t_k \le t_m < T \Rightarrow \gamma_m[i] = \bot
+                           \end{array}\right.          \\
+                    \left[\exists l, \, t_k \le t_l < T \wedge i \in \{(i_{l+1})^+\} \right]
+                    \Rightarrow \forall m, \, t_k \le t_m \le T \Rightarrow \gamma_m[i] = \bot. \\
+                \end{array}
+                \right.                                                                                                                  \\
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+
+    We construct a stream context $K$ such that for all $x$ in \declSet{stmt^+} we have
+    $\gamma'_k[x] = \getAt{K[x]}{t_k}$.
+    Because the service is well-typed, the set \depSet{stmt^+} is empty.
+    Let $n$ be the number of statements in $stmt^+$, then we can apply \P{n} to state that
+    for all statement $stmt$ in $stmt^+$ the semantics \stmtDenot{\tck}{I}{K}{stmt}{O} holds.
+    The rule \nameref{rule:semantics:grfrp:denot:service} ensures that the semantics
+    \serviceDenot{\tck}{I}{F}{O} holds.
+
+    \paragraph{Denotational $\Rightarrow$ Operational.}
+    Let \service{F}{stmt^+} be a well-typed service in a well-typed and causal program \G and a
+    typing context \tyCtx, \tck be a timestamped clock, and $I$ be a timestamped streams context
+    on \tck.
+
+    Let $O$ be a timestamped streams context on \tck such that the denotational semantics of the
+    service \serviceDenot{\tck}{I}{F}{O} holds.
+
+    \Cref{thm:semantics:grfrp:theorems:productivity} ensures that the service is productive and that
+    there exist a streams context $O'$, a sequence of states $(s_k^+)$ corresponding to $F$,
+    a sequence of timer queues $(\tau_k^+)$, a sequence of timestamped streams contexts $(I_k^+)$, a
+    sequence of timestamps $(t_k^+)$, a sequence of messages $(\mess_k^+)$, and a sequence of lists
+    of output identifiers and values $([(x_k, v_k)^+]^+)$ such that:
+    \begin{equation*}
+        \begin{array}{ll}
+            I_0    & = I             \\
+            s_0    & = \initstate{F} \\
+            \tau_0 & = \inittimer{F} \\
+        \end{array} \qquad
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+            (t_k, \true) = \tck[k]                                                         \\
+            (\mess_k, t_k) = \nextMess{I_k}{\tau_k}                                        \\
+            \serviceOpSem{s_k}{\tau_k}{F}{\mess_k}{t_k}{s_{k+1}}{\tau_{k+1}}{(x_k, v_k)^+} \\
+            I_{k+1} = \nextContext{I_k}{\tau_k}                                            \\
+            \forall x_k, \, \getAt{O'[x_k]}{t_k}=v_k.
+        \end{array}
+        \right.
+    \end{equation*}
+    %
+    The previous paragraph states that \serviceDenot{\tck}{I}{F}{O'} holds.
+    %
+    \Cref{thm:semantics:grfrp:theorems:determinism} ensures the determinism of the service, so that:
+    \begin{equation*}
+        \wedge \begin{array}{l}
+            \serviceDenot{\tck}{I}{F}{O} \\
+            \serviceDenot{\tck}{I}{F}{O'}
+        \end{array} \Rightarrow
+        \left[\forall y \in \exportSet{\service{F}{stmt^+}}, \, O[y] \equiv O'[y]\right],
+    \end{equation*}
+    which implies the following:
+    \begin{equation*}
+        \begin{array}{ll}
+            I_0    & = I             \\
+            s_0    & = \initstate{F} \\
+            \tau_0 & = \inittimer{F} \\
+        \end{array} \qquad
+        \forall k \in \N, \,
+        \left\{
+        \begin{array}{ll}
+            (t_k, \true) = \tck[k]                                                         \\
+            (\mess_k, t_k) = \nextMess{I_k}{\tau_k}                                        \\
+            \serviceOpSem{s_k}{\tau_k}{F}{\mess_k}{t_k}{s_{k+1}}{\tau_{k+1}}{(x_k, v_k)^+} \\
+            I_{k+1} = \nextContext{I_k}{\tau_k}                                            \\
+            \forall x_k, \, \getAt{O[x_k]}{t_k}=v_k.
+        \end{array}
+        \right.
+    \end{equation*}
+
+    \setcounter{paragraph}{0}
+\end{skippableproof}
+
+\paragraph{Summary}
+In conclusion, this section formally established the equivalence between the operational and
+denotational semantics of \GRFRP.
+%
+The main result, presented in \Cref{thm:semantics:grfrp:theorems:equivalence}, demonstrates that the
+step-by-step, message-driven execution of a service is consistent with its abstract, stream-based
+interpretation.
+%
+This property was proved by structural induction over the language constructs, relying on a
+foundational lemma (\Cref{lem:semantics:grfrp:theorems:equivalence:flowop}) that establishes the
+same equivalence for individual flow operations.
+%
+This equivalence theorem is a critical soundness result, confirming that the concrete execution
+model is a faithful implementation of the abstract specification. It ensures that the behavior of a
+service is both mathematically well-defined and correctly implemented by the event-driven
+operational model.

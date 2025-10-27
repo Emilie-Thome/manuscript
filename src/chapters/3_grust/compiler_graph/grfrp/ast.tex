@@ -1,0 +1,53 @@
+\documentclass{standalone}
+\usepackage{tikz}
+
+\begin{document}
+\begin{tikzpicture}[
+                level distance=1.5cm, sibling distance=3cm,
+                treenode/.style = {rectangle, rounded corners, draw, fill=blue!10, align=center}
+        ]
+        \node[treenode] {Program}
+        child [sibling distance=6.7cm] { node[treenode] {Import}
+                        child [sibling distance=2.2cm] { node[treenode] {Flow: event} }
+                        child [sibling distance=2.2cm] { node[treenode] {Identifier:\\\texttt{hazard\_}\\\texttt{button\_}\\\texttt{pressed}} }
+                        child [sibling distance=2.2cm] { node[treenode] {Type: unit} }
+                }
+        child [sibling distance=6.5cm] { node[treenode] {Export}
+                        child [sibling distance=2.2cm] { node[treenode] {Flow: signal} }
+                        child [sibling distance=2.2cm] { node[treenode] {Identifier:\\\texttt{hazard\_}\\\texttt{lights\_}\\\texttt{on}} }
+                        child [sibling distance=2.2cm] { node[treenode] {Type: bool} }
+                }
+        child [sibling distance=6cm] { node[treenode] {Service}
+                        child [sibling distance=3cm] { node[treenode] {Identifier:\\\texttt{hazard\_}\\\texttt{light\_}\\\texttt{controller}} }
+                        child [sibling distance=3cm] { node[treenode] {Body}
+                                        child [sibling distance=5.2cm] { node[treenode] {Let Statement}
+                                                        child [sibling distance=4.2cm] { node[treenode] {Typed Identifier}
+                                                                        child [sibling distance=2.2cm] { node[treenode] {Flow: event} }
+                                                                        child [sibling distance=2.2cm] { node[treenode] {Identifier:\\\texttt{auto\_}\\\texttt{off\_}\\\texttt{trigger}} }
+                                                                        child [sibling distance=2.2cm] { node[treenode] {Type: unit} }
+                                                                }
+                                                        child [sibling distance=4.2cm] { node[treenode] {Operation}
+                                                                        child { node[treenode] {Timeout}
+                                                                                        child [sibling distance=2.2cm] { node[treenode] {Identifier:\\\texttt{hazard\_}\\\texttt{button\_}\\\texttt{pressed}} }
+                                                                                        child [sibling distance=2.2cm] { node[treenode] {Literal:\\300000} }
+                                                                                }
+                                                                }
+                                                }
+                                        child [sibling distance=5.2cm] { node[treenode] {Instantiation}
+                                                        child [sibling distance=2.2cm] { node[treenode] {Identifier:\\\texttt{hazard\_}\\\texttt{lights\_}\\\texttt{on}} }
+                                                        child [sibling distance=2.2cm] { node[treenode] {Operation}
+                                                                        child { node[treenode] {Call}
+                                                                                        child [sibling distance=2.2cm] { node[treenode] {Identifier:\\\texttt{toggle}} }
+                                                                                        child [sibling distance=2.2cm] { node[treenode] {Operation}
+                                                                                                        child { node[treenode] {Merge}
+                                                                                                                        child [sibling distance=2.2cm] { node[treenode] {Identifier:\\\texttt{hazard\_}\\\texttt{button\_}\\\texttt{pressed}} }
+                                                                                                                        child [sibling distance=2.2cm] { node[treenode] {Identifier:\\\texttt{auto\_}\\\texttt{off\_}\\\texttt{trigger}} }
+                                                                                                                }
+                                                                                                }
+                                                                                }
+                                                                }
+                                                }
+                                }
+                };
+\end{tikzpicture}
+\end{document}

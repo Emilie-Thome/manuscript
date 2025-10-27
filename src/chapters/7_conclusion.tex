@@ -1,0 +1,272 @@
+This manuscript addresses the software development challenges for critical reactive systems that
+arise from the transition of the automotive industry to Software-Defined Vehicles (\sdv). This
+architectural shift replaces distributed networks of specialized \ecus---which communicate over
+hardware-centric buses like CAN, designed for small control messages---with centralized computing
+platforms. These platforms use high-bandwidth networks, such as Ethernet, capable of managing the
+large volumes of data from advanced sensors and applications.
+%
+This transition, however, introduces significant software challenges. Communication, once handled
+efficiently by dedicated hardware, now imposes computational overhead through complex software
+protocols. Early experiments at \ampere demonstrated this concretely: attempting to broadcast
+messages at fixed intervals---a common practice in legacy systems---quickly saturated the
+communication bus. This finding established a critical requirement for \sdv architectures: data must
+be transmitted only when its value changes, mandating an event-driven execution model.
+%
+Concurrently, the industry-wide pursuit of greater cybersecurity and memory safety has led
+manufacturers like \ampere to adopt the \Rust programming language. Unlike traditional languages
+such as \Ci, \Rust provides compile-time guarantees against entire classes of common
+vulnerabilities, including buffer overflows and data races, which are critical for building secure
+and reliable automotive systems.
+%
+However, the adoption of \Rust introduces a new challenge: its low-level nature and steep learning
+curve create a significant gap for control engineers, who are accustomed to high-level, model-based
+design tools like \Simulink.
+
+To bridge this gap, we introduce \GRust, a domain-specific language designed to reconcile
+traditional modeling practices with modern software development needs.
+%
+\GRust achieves this by combining the strengths of two paradigms. It grounds its design in a
+\emph{synchronous dataflow} model~\cite{%
+    DBLP:conf/ifip/Kahn74,%
+    DBLP:conf/popl/CaspiPHP87,%
+    DBLP:conf/tase/ColacoPP17%
+}, which provides the deterministic, step-based semantics familiar to control engineers. This
+foundation is then enriched with concepts from \emph{functional reactive programming} (\frp)~\cite{%
+    DBLP:conf/icfp/ElliottH97,%
+    DBLP:conf/haskell/Elliott09,%
+    DBLP:conf/padl/WanTH02%
+}. The \frp constructs offer a declarative and compositional way to express the asynchronous,
+event-driven behavior required by \sdv architectures. This synthesis realizes a \emph{Globally
+    Asynchronous, Locally Synchronous} (GALS) architecture~\cite{DBLP:phd/us/Chapiro85}, resulting
+in a familiar yet powerful paradigm for system modeling.
+%
+Furthermore, verifying the safety of high-integrity systems is a critical requirement. The \GRust
+ecosystem addresses this through \GReusot, a tool that extends the formal verifier
+\Creusot~\cite{DBLP:conf/icfem/DenisJM22}. While \Creusot operates on the generated \Rust code,
+\GReusot enables developers to specify and prove safety properties directly within their high-level
+\GRust models. This approach ensures that formal verification remains aligned with the engineer's
+design intent, preserving the abstraction benefits of the modeling language.
+
+This thesis provides a comprehensive and formal presentation of \GRust, from its design and
+theoretical foundations to its practical validation. The primary contributions are as follows.
+%
+First, we present the design of the \GRust language and its prototype compiler. The compiler
+translates high-level, model-based specifications into safe and asynchronous \Rust code that avoids
+dynamic memory allocation, ensuring predictable resource usage and bridging the gap between control
+engineering and modern software development practices.
+%
+Second, we establish the theoretical foundations of the language through formal operational and
+denotational semantics. These models enable proofs of key properties essential for critical systems:
+\emph{productivity}, \emph{determinism}, and the \emph{equivalence} between the two semantic
+definitions.
+%
+Third, we resolve a fundamental conflict between the event-driven execution of services and the
+synchronous semantics of components. This conflict leads to a problem we term \emph{oversampling}: a
+component can be re-evaluated due to an external trigger, even when its own declared inputs have not
+changed. Such re-evaluations can break determinism by causing unintended state updates or producing
+spurious outputs.
+%
+To address this, we introduce a novel \emph{reactive type system}. It statically distinguishes
+between two kinds of flows: \emph{continuous flows}, which are inherently tied to the execution
+step, and \emph{discrete flows}, which are driven by explicit input changes. The type system ensures
+that stateful computations and event-driven logic inside \texttt{when} clauses depend only on
+discrete flows. This mechanism acts as a discretization boundary, making component logic resilient
+to oversampling. We formalize this guarantee with the \emph{oversampling theorem}. It proves that
+for any component typed as \emph{reactive}, an oversampling event does not alter its internal memory
+or discrete outputs, thus formally validating the safety and compositional soundness of the
+event-driven model.
+%
+Finally, we demonstrate the practicality of the approach through performance benchmarks. By
+evaluating \GRust on representative academic and industrial use cases, we validate its suitability
+for real-world deployment in \sdv.
+
+\section{Limitations}
+\label{sec:conclusion:limitations}
+
+While this thesis establishes the theoretical foundations and practical viability of \GRust, it is
+important to acknowledge the boundaries of the current work. These limitations, which directly
+inform the future research directions, are as follows.
+
+First, the prototype compiler, while functional, does not yet implement all features of the language
+design. Most notably, the \emph{reactive type system}, which is formally defined, has not been
+integrated into the compiler. Consequently, the crucial compile-time guarantees against oversampling
+are not yet enforced in practice.
+
+Second, the formal verification of the language semantics was conducted by hand. Although this
+approach is sufficient to establish the core properties of the language, the proofs have not been
+machine-checked in a formal proof assistant like Rocq~\cite{rocq} or
+Isabelle~\cite{DBLP:books/sp/NipkowPW02}. Such a formalization provides a higher degree of
+confidence but was outside the scope of this project.
+
+Finally, the verification capabilities of \GReusot face a key limitation in the compositional
+reasoning of stateful components. While properties of a component's own state can be verified,
+it is not possible to prove a \texttt{requires} clause of a sub-component if that clause depends on
+its internal state. Because the state of sub-components is treated as opaque, their invariants
+cannot be used in proofs, which restricts the verification of complex, hierarchical models. This
+directly motivates the future work on introducing a public \texttt{invariant} clause.
+
+These limitations clearly define the scope of the contributions and set the stage for the
+subsequent development required to transition \GRust from a research prototype to a
+production-ready toolchain.
+
+\section{Perspectives}
+\label{sec:conclusion:perspectives}
+
+The findings of this thesis suggest that a domain-specific language for modeling offers an effective
+path to producing high-quality software for \sdv. The alternative, that is
+implementing complex asynchronous logic by hand directly in \Rust, presents considerable obstacles.
+Although \Rust provides critical safety guarantees, its low-level nature and the demands of
+asynchronous programming require expert-level skills and impose a significant cognitive load on
+developers. This approach necessitates a substantial time investment, not only for initial
+implementation but also for the extensive testing and qualification phases required in automotive
+software. The resulting complexity can compromise code quality and developer productivity, leading
+to software that is difficult to maintain and evolve.
+
+A \dsl such as \GRust addresses these challenges by raising the level of abstraction. It allows
+engineers to focus on the functional behavior of the system, rather than on the intricate details of
+asynchronous programming and memory management in \Rust. As benchmarks on existing \ampere code
+suggest (\Cref{sec:grust:benchmarks:grust_vs_rust}), this shift can lead to significant productivity
+gains. Furthermore, by making the system design explicit and readable, \GRust enhances long-term
+maintainability. The model itself serves as a form of documentation, which facilitates review,
+debugging, and modification.
+%
+This perspective is further strengthened by the promising results from the \GRust prototype, which
+exhibits minimal overhead compared to manually implemented code at \ampere
+(\Cref{sec:grust:benchmarks:grust_vs_rust}). The prototype compiler was developed with a focus on
+demonstrating the practical usability of the language, not on performance optimization. The
+efficiency of this unoptimized prototype indicates that the abstraction layer does not impose a
+significant performance penalty. This outcome leaves ample room for future optimizations, should
+they be required for particularly demanding applications at \ampere.
+
+While this thesis is rooted in the automotive domain, its approach is shaped by the unique
+challenges emerging from the architectural shift in the industry. In the transition to \sdv
+architectures, the automotive industry is consolidating functions with different safety levels onto
+shared hardware, losing the physical isolation of separate \ecus. This trend introduces a
+significant risk: a fault in a non-critical component could corrupt a safety-critical one.
+The compile-time memory safety guarantees of \Rust are a key enabler in this context, providing
+strong software-based isolation to prevent such interference.
+%
+This specific automotive need makes \Rust adoption compelling, but the \GRust modeling approach has
+broader applications. Other domains, such as robotics, have a long history of asynchronous
+programming with frameworks like the Robot Operating System (ROS). In ROS, developers manually
+implement event propagation by writing nodes, publishers, and subscribers. \GRust offers a
+fundamentally different method: it automates the generation of this complex and often error-prone
+code from a high-level, declarative model. This suggests that a \GRust-like methodology could
+significantly simplify development and improve the maintainability of complex robotic systems.
+
+Ultimately, the choice of a programming paradigm is a strategic decision. Investing in the
+development and adoption of a high-level modeling language like \GRust, complemented by a robust
+qualification toolchain as discussed in the following section, represents a forward-thinking
+strategy. It provides a scalable and sustainable methodology for managing the increasing complexity
+of modern automotive software, ensuring that safety, reliability, and maintainability remain central
+to the development process.
+
+\section{Future Work}
+\label{sec:conclusion:future_work}
+
+The limitations identified in the previous section naturally define a roadmap for future work.
+Building on the foundation established in this thesis, the following steps are designed to address
+these gaps and enhance the capabilities, safety assurances, and industrial applicability of the
+language, transforming the \GRust prototype into a production-ready toolchain for \sdv.
+
+\subsection{Language and Compiler Evolution}
+
+The first priority is to ensure that the practical implementation of the \GRust compiler fully
+aligns with its formal specification.
+
+\paragraph{Implementation of the Reactive Type System}
+A primary objective for future work is the full implementation of the \emph{reactive type system}
+detailed in \Cref{sec:semantics:grsync:react_typing,sec:semantics:grfrp:react_typing}. While the
+formal design is complete, the current prototype compiler does not yet enforce its rules. This type
+system is critical for guaranteeing the soundness of the execution model at the heart of \GRust. Its
+central purpose is to statically distinguish between \emph{continuous} flows (those dependent on
+execution time, like \timeop) and \emph{discrete} flows (those only driven by input changes). By
+implementing these typing rules, the compiler could formally prove that a component is
+\emph{reactive}---that is, resilient to oversampling and safe for use in an event-driven context.
+Integrating this system is the necessary step to provide the full safety and predictability
+guarantees promised by the \GRust language design.
+
+\subsection{Verification, Validation, and Safety Assurance}
+
+To meet the stringent demands of safety-critical systems, future work must focus on strengthening
+the formal verification and validation capabilities of the entire \GRust ecosystem, from high-level
+models to the underlying runtime.
+
+\paragraph{Enhancements to \GReusot}
+The \GReusot verification wrapper provides a crucial link between the high-level \GRust model and
+low-level formal proofs. Future work must address its most significant current limitation: the
+verification of stateful components. This would involve introducing a compositional
+\texttt{invariant} clause for components. The compiler would then generate inductive proof
+obligations to ensure the invariant is established at initialization and preserved at every
+subsequent step. To improve usability, support for local assertions within a component body should
+also be added. This would allow engineers to guide the prover with intermediate lemmas without
+cluttering the public interface. Together, these enhancements would enable the formal verification
+of complex, hierarchical models over time, a critical capability for certifying high-\Asil systems.
+
+\paragraph{Integrated Testing and Validation Framework}
+To ensure functional correctness and facilitate regression testing, a dedicated testing framework
+for \GRust is essential. Inspired by the native test suite of \Rust, this framework would allow
+developers to write and run unit tests for components and services directly within the modeling
+environment. Engineers could define test cases by providing input streams and asserting expected
+output streams, enabling validation at the abstract model level. The compiler would be responsible
+for generating and executing these tests, creating a seamless workflow for validating functional
+requirements and simplifying the creation of a comprehensive test suite.
+
+\paragraph{Formal Verification of an Asynchronous Runtime for \Rust}
+The formal guarantees of productivity and determinism established in this work apply at the level of
+individual services. To provide end-to-end assurance, these properties must be extended to the
+system as a whole. This requires formally verifying the asynchronous runtime responsible for
+orchestrating the execution of \GRust services. The proof must demonstrate that the runtime
+correctly preserves the semantics of individual services, ensuring that no data is lost in task
+queues and that all temporal constraints are met. A verified runtime would guarantee that the global
+system behavior remains predictable and free from concurrency hazards like deadlocks, thus
+completing the chain of formal guarantees from model to execution.
+
+\paragraph{Worst-Case Execution Time (WCET) Analysis Integration}
+For safety-critical systems, meeting hard real-time deadlines is essential. Future work must
+therefore focus on integrating Worst-Case Execution Time (\wcet) analysis into the \GRust toolchain.
+By statically analyzing the compiler output---either the generated \Rust code or the underlying LLVM
+Intermediate Representation---such tools can compute a sound upper bound for the execution time of a
+service reaction. This analysis would provide the formal evidence needed to verify that the system
+can meet its timing constraints, a foundational requirement for \iso compliance.
+
+\subsection{Industrialization and Ecosystem Development}
+
+Transitioning \GRust from a research prototype to an industrial asset requires a focus on ecosystem
+development and practical validation against another class of real-world demands.
+
+\paragraph{Toolchain for ISO 26262 Qualification}
+Supporting industrial adoption requires a toolchain that actively assists with \iso certification.
+Future work should enhance the compiler to generate a suite of supporting artifacts. This includes
+automatically producing traceability matrices that link requirements to model elements and then to
+the generated code. Furthermore, the compiler could parse documentation comments within the \GRust
+code to auto-generate design documents. These features would reduce the manual burden of
+documentation and provide the verifiable evidence required for safety audits and compiler
+qualification.
+
+\paragraph{Benchmarking on Complex Use Cases}
+To validate the performance and scalability of \GRust for industrial applications, future work must
+focus on benchmarking more complex and computationally intensive systems. Implementing a
+representative Advanced Driver-Assistance System (ADAS) would serve as a crucial validation case.
+Performance analysis should extend beyond CPU usage to include end-to-end latency, memory footprint,
+and communication bus load. Such benchmarks are essential to quantitatively demonstrate the
+advantages of the event-driven code generated by \GRust in resource-intensive scenarios, especially
+when compared to the traditional, periodic execution models.
+
+\section{Concluding Remarks}
+\label{sec:conclusion:remarks}
+
+In summary, this thesis has argued for, and demonstrated the feasibility of, a new approach to
+developing software for \sdv. By creating \GRust, we have shown that it is possible to build upon
+the well-established foundation of synchronous modeling, which is familiar to control engineers, by
+unifying its deterministic rigor with the expressive power of reactive programming.
+%
+This synthesis provides a bridge from established design principles to the modern demands of safe,
+asynchronous, and maintainable systems. By embedding the language directly within the \Rust
+toolchain, \GRust makes this bridge a practical reality, enabling a direct translation from
+high-level models to safe and performant native code.
+%
+The formal foundations and practical validation presented here offer a concrete step toward a future
+where the complexity of automotive software is managed not by adding layers of manual effort, but by
+raising the level of abstraction. This work champions a model-driven methodology, essential for
+building the next generation of safe and reliable critical systems.

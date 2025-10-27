@@ -1,0 +1,939 @@
+\subsubsection{Oversampling}
+\label{sec:semantics:grsync:theorems:oversampling}
+
+Components are compiled into synchronous state machines, but their execution within a service
+involves an additional optimization: computations are performed only when the inputs have changed.
+The typing of component applications in services ensures that only \emph{reactive} components are
+used (see \Cref{sec:semantics:grsync:react_typing}).
+%
+A reactive component emits events and uses memory and time-dependent expressions only when an event
+has occurred or a signal has changed. This restriction is enforced by the reactive type system
+described in \Cref{sec:semantics:grsync:react_typing}.
+\Cref{thm:semantics:grsync:theorems:oversampling} states
+that for components satisfying this type system, it is sufficient to propagate only input changes.
+Therefore, additional evaluations of the components, referred to as \emph{oversampling} their
+executions, do not alter the values of their outputs. This property enables a shift from periodic
+to event-driven computations without risking inconsistency.
+
+Similar to the previous theorems on components, the proof of
+\Cref{thm:semantics:grsync:theorems:oversampling} proceeds by structural induction on the syntax of
+\GRSync. Due to the presence of component calls within expressions, the proof is mutually recursive
+with the proofs of the intermediate \Cref{%
+    lem:semantics:grsync:theorems:oversampling:e,%
+    lem:semantics:grsync:theorems:oversampling:pat,%
+    lem:semantics:grsync:theorems:oversampling:epat,%
+    lem:semantics:grsync:theorems:oversampling:eq%
+}. These lemmas establish the oversampling property for each syntactic construct of \GRSync
+(expressions, patterns, event patterns, and equations). This mutual recursion is well-founded
+because, while expressions can contain component calls, the components themselves are not mutually
+recursive, ensuring that the induction remains valid.
+
+\begin{remark}
+    Let $sty$ be a sampling type, and let $v$ and $v'$ be two values of type $sty$ (\eg if $sty$ is
+    \intTY or \mayB{\intTY}, then the values are integers).
+    %
+    We use the notation $v' = \intoVal{sty}{v}{\bot}$ to express that the value $v'$ is an
+    \emph{oversampling} of $v$.
+
+    To understand this encoding, consider the two possible cases for $sty$:
+    %
+    \begin{itemize}
+        \item If $sty$ is a signal type, then the definition of \smf{into\_val_{sty}}
+              (\Cref{rule:semantics:grfrp:opsem:aux:intoVal:signal}) yields $v' = v$. This
+              represents the absence of change for the signal, which is the expected behavior in the
+              case of oversampling.
+
+        \item If $sty$ is an event type, then the definition of \smf{into\_val_{sty}}
+              (\Cref{rule:semantics:grfrp:opsem:aux:intoVal:event}) yields $v' = \none$. This
+              represents the absence of the event, which is the expected behavior in the case of
+              oversampling.
+    \end{itemize}
+\end{remark}
+
+\begin{lemma}[Oversampling of \GRSync reactive expressions]
+    \label{lem:semantics:grsync:theorems:oversampling:e}
+    Let $e$ be an expression in a program \G and typing context \tyCtx, let $sty^+$ be types, let
+    $\rType^+$ be reactive types, and let $\Theta$ be a reactive typing context such that:
+    \begin{equation*}
+        \exprTyped{e}{sty^+} \qquad \exprTypedReact{\Theta}{e}{\rType^+}.
+    \end{equation*}
+    For all states $s_1$, $s_2$, and $s_3$ corresponding to $e$, all contexts $\rho_1$ and $\rho_2$,
+    and all values $v_1^+$ and $v_2^+$ such that:
+    \begin{equation*}
+        \exprOpsem{\rho_1}{s_1}{e}{s_2}{v_1^+} \qquad \exprOpsem{\rho_2}{s_2}{e}{s_3}{v_2^+},
+    \end{equation*}
+    we have:
+    \begin{multline*}
+        \left(\forall x \in \deps{e}, \; \Theta[x] = \dType \Rightarrow \rho_2[x] = \intoVal{\tyCtx[x]}{\rho_1[x]}{\bot}\right) \\
+        \Rightarrow
+        s_3 = s_2 \wedge \left(\rType = \dType \Rightarrow v_2 = \intoVal{sty}{v_1}{\bot}\right)^+.
+    \end{multline*}
+
+    This lemma formalizes the behavior of an expression during an oversampling step.
+    It states that if an expression $e$ is evaluated in two consecutive steps, and all of its
+    discrete dependencies (of type \dType) are oversampled in the second step, then the
+    computation is stable: the state of the expression does not change ($s_3 = s_2$), and
+    its discrete outputs are themselves oversampled versions of their previous values.
+\end{lemma}
+\begin{skippableproof}
+    Let $e$ be an expression in a program \G and typing context \tyCtx, let $sty^+$ be types, let
+    $\rType^+$ be reactive types, and let $\Theta$ be a reactive typing context such that:
+    \begin{equation*}
+        \exprTyped{e}{sty^+} \qquad \exprTypedReact{\Theta}{e}{\rType^+}.
+    \end{equation*}
+    Let $s_1$, $s_2$, and $s_3$ be states corresponding to $e$, $\rho_1$ and $\rho_2$ be contexts,
+    and $v_1^+$ and $v_2^+$ be values such that:
+    \begin{equation*}
+        \begin{array}{ccc}
+            \exprOpsem{\rho_1}{s_1}{e}{s_2}{v_1^+}        &             & \exprOpsem{\rho_2}{s_2}{e}{s_3}{v_2^+}            \\
+            \forall x \in \deps{e}, \; \Theta[x] = \dType & \Rightarrow & \rho_2[x] = \intoVal{\tyCtx[x]}{\rho_1[x]}{\bot},
+        \end{array}
+    \end{equation*}
+
+    We proceed by structural induction on expressions and induction of component calls (recursive
+    components are forbidden).
+
+    \paragraph{Constants}
+    Suppose $e$ is the constant expression $c$.
+    Then we have $s_3 = s_2 = ()$ (\Cref{eq:semantics:grsync:opsem:init:e:const}), and
+    the rule \nameref{rule:semantics:grsync:opsem:step:e:const} ensures that $v_1 = v_2 = c$.
+
+    \paragraph{Identifiers}
+    Suppose $e$ is the identifier expression $x$.
+    Then we have $s_3 = s_2 = ()$ (\Cref{eq:semantics:grsync:opsem:init:e:ident}), and
+    the rule \nameref{rule:semantics:grsync:opsem:step:e:ident} ensures that $v_1 =
+        \rho_1[x]$ and $v_2 = \rho_2[x]$. Because $x$ is in \deps{x}
+    (\Cref{rule:semantics:grsync:causality:dependencies:deps:e:ident}) and $\rType =
+        \Theta[x]$ by the rule \nameref{rule:semantics:grsync:react_typing:e:ident}, if
+    $\Theta[x] = \dType$ then we have $\rho_2[x] = \intoVal{\tyCtx[x]}{\rho_1[x]}
+        {\bot}$ and therefore $v_2 = \intoVal{\tyCtx[x]}{v_1}{\bot}$.
+
+    \paragraph{Last memories}
+    Suppose $e$ is the memory expression \last{x}.
+    Then we have $s_3 = s_2 = ()$ (\Cref{eq:semantics:grsync:opsem:init:e:last}).
+    Because $\rType = \cType$ by the rule \nameref{rule:semantics:grsync:react_typing:e:last}, the
+    proof is complete.
+
+    \paragraph{Event emissions}
+    Suppose $e$ is the event emission \emit{e'}.
+    The states $s_1$, $s_2$, and $s_3$ correspond to $e'$ (\Cref{eq:semantics:grsync:opsem:init:e:emit}).
+    %
+    The rule \nameref{rule:semantics:grsync:opsem:step:e:emit:value} ensures there exist values
+    $v_1'$ and $v_2'$ such that:
+    \begin{align*}
+        \exprOpsem{\rho_1}{s_1}{e'}{s_2}{v'_1} &  & v_1 & = \some{v'_1}  \\
+        \exprOpsem{\rho_2}{s_2}{e'}{s_3}{v'_2} &  & v_2 & = \some{v'_2}.
+    \end{align*}
+    %
+    The rule \nameref{rule:grust:typing:grsync:expr:emit} ensures that there exist a signal type
+    $ty$ such that $sty^+ = \mayB{ty}$ and \exprTyped{e'}{ty}.
+    %
+    For all $x$ in \deps{e'}, we have $x$ in \deps{\emit{e'}}
+    (\Cref{rule:semantics:grsync:causality:dependencies:deps:e:emit}), thus if $\Theta[x] = \dType$
+    then we have $\rho_2[x] = \intoVal{\tyCtx[x]}{\rho_1[x]}{\bot}$.
+    %
+    The structural induction hypothesis ensures that $s_3 = s_2$.
+
+    Because $\rType = \cType$ by the rule \nameref{rule:semantics:grsync:react_typing:e:emit}, the
+    proof is complete.
+
+    \paragraph{Operations}
+    Suppose $e$ is the operation expression $op(e^{\prime+})$.
+    For each expression $e'$, there exist states $s_1'$, $s_2'$, and $s_3'$
+    corresponding to $e'$, such that $s_1 = (s_1^{\prime+})$, $s_2 = (s_2^{\prime+})$, and
+    $s_3 = (s_3^{\prime+})$ (\Cref{eq:semantics:grsync:opsem:init:e:op}).
+    %
+    The rule \nameref{rule:semantics:grsync:opsem:step:e:op:value} ensures there exist values
+    $v_1'$ and $v_2'$ such that:
+    \begin{align*}
+        \left(\exprOpsem{\rho_1}{s'_1}{e'}{s'_2}{v'_1}\right)^+ &  & v_1 & = op(v_1^{\prime+})  \\
+        \left(\exprOpsem{\rho_2}{s'_2}{e'}{s'_3}{v'_2}\right)^+ &  & v_2 & = op(v_2^{\prime+}).
+    \end{align*}
+    %
+    The rule \nameref{rule:grust:typing:grsync:expr:op} ensures that there exist signal types
+    $ty^+$ such that $sty^+ = ty^+$, and for each $e'$ there exist a signal type $ty'$
+    such that we have \exprTyped{e'}{ty'}.
+    %
+    For all $x$ in \deps{e'}, we have $x$ in \deps{op(e^{\prime+})} (\Cref{rule:semantics%
+        :grsync:causality:dependencies:deps:e:op}), thus if $\Theta[x] = \dType$ then we
+    have $\rho_2[x] = \intoVal{\tyCtx[x]}{\rho_1[x]}{\bot}$.
+
+    \begin{itemize}
+        \item Suppose that for all expression $e'$, we have \exprTypedReact{\Theta}{e'}
+              {\dType}. The rule \nameref{rule:semantics:grsync:react_typing:e:op:%
+                  value} ensures that \exprTypedReact{\Theta}{op(e^{\prime+})}
+              {\dType}.
+              %
+              The structural induction hypothesis ensures that $s'_3 = s'_2$ and $v'_2 =
+                  \intoVal{ty'}{v'_1}{\bot}= v'_1$.
+              %
+              Therefore:
+              \begin{equation*}
+                  \left(v_2 = op(v_2^{\prime+}) = op(v_1^{\prime+}) = v_1 = \intoVal{ty}{v_1}{\bot}\right)^+.
+              \end{equation*}
+
+        \item Suppose that there exists an expression $e'$ such that \exprTypedReact
+              {\Theta}{e'}{\cType}. Rule \nameref{rule:semantics:grsync:%
+                  react_typing:e:op:time} ensures that $\rType = \cType$.
+              %
+              The structural induction hypothesis ensures that $s'_3 = s'_2$, which
+              ensures that $s_3 = s_2$.
+    \end{itemize}
+    %
+    Therefore we have $s_3 = s_2$, and if $\rType = \dType$ then $(v_2 = \intoVal{ty}{v_1}
+        {\bot})^+$.
+
+    \paragraph{Component applications}
+    Suppose $e$ is the component application
+    $f(e^{\prime+})$. For each expression $e'$, there exist states $s_1'$, $s_2'$, and
+    $s_3'$ corresponding to $e'$, and there exist states $s^f_1$, $s^f_2$, and $s^f_3$
+    corresponding to $f$ such that $s_1 = (s^f_1, s_1^{\prime+})$, $s_2 = (s^f_2,
+        s_2^{\prime+})$, and $s_3 = (s^f_3, s_3^{\prime+})$
+    (\Cref{eq:semantics:grsync:opsem:init:e:app}).
+    %
+    The rule \nameref{rule:semantics:grsync:opsem:step:e:app:value} ensures there exist values
+    $v_1'$ and $v_2'$ such that:
+    \\\noindent\scalebox{0.8}{\begin{minipage}{1.2\textwidth}
+            \begin{equation*}
+                \begin{array}{llcll}
+                     & \left(\exprOpsem{\rho_1}{s'_1}{e'}{s'_2}{v'_1}\right)^+ & \quad &
+                     & \compOpsem{s^f_1}{v_1^{\prime+}}{f}{s^f_2}{v_1^+}                 \\
+                     & \left(\exprOpsem{\rho_2}{s'_2}{e'}{s'_3}{v'_2}\right)^+ & \quad &
+                     & \compOpsem{s^f_2}{v_2^{\prime+}}{f}{s^f_3}{v_2^+}.
+                \end{array}
+            \end{equation*}
+        \end{minipage}}\\\noindent
+    %
+    The rule \nameref{rule:grust:typing:grsync:expr:compapp} ensures that for each $e'$ there
+    exist a type $sty'$ such that we have \exprTyped{e'}{sty'}.
+    %
+    For all $x$ in \deps{e'}, we have $x$ in\deps{f(e^{\prime+})} (\Cref{rule:semantics:%
+        grsync:causality:dependencies:deps:e:app}), thus if $\Theta[x] = \dType$ then
+    we have $\rho_2[x] = \intoVal{\tyCtx[x]}{\rho_1[x]}{\bot}$.
+
+    The rule \nameref{rule:semantics:grsync:react_typing:e:app} ensures that for each $e'$
+    there exist a reactive type $\rType'$ such that \exprTypedReact{\Theta}{e}
+    {\rType'} and \compTypedReact{f}{\rType^{\prime+}}{\rType^+}.
+    %
+    The structural induction hypothesis ensures that $s'_3 = s'_2$, and if $\rType' =
+        \dType$ then $v'_2 = \intoVal{sty'}{v'_1}{\bot}$.
+
+    By induction on component calls, applying \Cref{thm:semantics:grsync:theorems:%
+        oversampling}, we have $s_3 = s_2$, and if $\rType = \dType$ then $(v_2 = \intoVal
+        {sty}{v_1}{\bot})^+$.
+
+    \setcounter{paragraph}{0}
+\end{skippableproof}
+
+\begin{lemma}[Oversampling of \GRSync reactive patterns]
+    \label{lem:semantics:grsync:theorems:oversampling:pat}
+    Let \guarded{pat^+}{e_g} be a guarded pattern in a program \G and typing context \tyCtx, let
+    $sty^+$ be types, let $\rType^+$ be reactive types, and let $\Theta$ be a reactive typing
+    context such that:
+    \begin{equation*}
+        \patTyped{pat^+}{sty^+} \qquad \exprTyped{e_g}{\kwf{bool}} \qquad \patTypedReact{\Theta}{\guarded{pat^+}{e_g}}{\rType^+}.
+    \end{equation*}
+    For all contexts $\rho_1$, $\rho'_1$, $\rho_2$ and $\rho'_2$, all values $v_1^+$ and $v_2^+$,
+    and all booleans $b_1$ and $b_2$ such that:
+    \begin{equation*}
+        \patOpsem{\rho_1}{\guarded{pat^+ = v_1^+}{e_g}}{b_1}{\rho'_1} \qquad
+        \patOpsem{\rho_2}{\guarded{pat^+ = v_2^+}{e_g}}{b_2}{\rho'_2},
+    \end{equation*}
+    we have:
+    \begin{multline*}
+        \left(\rType = \dType \Rightarrow v_2 = \intoVal{sty}{v_1}{\bot}\right)^+ \Rightarrow \\
+        \left(\forall x \in \deps{e_g} \backslash \defs{pat^+}, \; \Theta[x] = \dType \Rightarrow \rho_2[x] = \intoVal{\tyCtx[x]}{\rho_1[x]}{\bot}\right) \Rightarrow \\
+        b_2 = b_1 \wedge \left(\forall y \in \defs{pat^+}, \; \Theta[y] = \dType \Rightarrow \rho'_2[y] = \intoVal{\tyCtx[y]}{\rho'_1[y]}{\bot}\right).
+    \end{multline*}
+
+    This lemma extends the oversampling property to guarded patterns. It states that if a
+    guarded pattern is evaluated in two consecutive steps where its discrete inputs are
+    oversampled---both the values being matched and the dependencies of the guard
+    expression---then the outcome is stable: the boolean result of the match remains the
+    same ($b_2 = b_1$), and any variables bound by the pattern are themselves correctly
+    oversampled.
+\end{lemma}
+\begin{skippableproof}
+    Let \guarded{pat^+}{e_g} be a guarded pattern in a program \G and typing context \tyCtx, let
+    $sty^+$ be types, let $\rType^+$ be reactive types, and let $\Theta$ be a reactive typing
+    context such that:
+    \begin{equation*}
+        \patTyped{pat^+}{sty^+} \qquad \exprTyped{e_g}{\kwf{bool}} \qquad \patTypedReact{\Theta}{\guarded{pat^+}{e_g}}{\rType^+}.
+    \end{equation*}
+    Let $\rho_1$, $\rho'_1$, $\rho_2$ and $\rho'_2$ be contexts, let $v_1^+$ and $v_2^+$ be values,
+    and let $b_1$ and $b_2$ be booleans such that:
+    \begin{equation*}
+        \begin{array}{c}
+            \patOpsem{\rho_1}{\guarded{pat^+ = v_1^+}{e_g}}{b_1}{\rho'_1} \qquad \patOpsem{\rho_2}{\guarded{pat^+ = v_2^+}{e_g}}{b_2}{\rho'_2} \\
+            \left(\rType = \dType \Rightarrow v_2 = \intoVal{sty}{v_1}{\bot}\right)^+                                                          \\
+            \forall x \in \deps{e_g} \backslash \defs{pat^+}, \; \Theta[x] = \dType \Rightarrow \rho_2[x] = \intoVal{\tyCtx[x]}{\rho_1[x]}{\bot}.
+        \end{array}
+    \end{equation*}
+
+    We proceed by structural induction on patterns.
+
+    \paragraph{Guarded patterns}
+    The rule \nameref{rule:semantics:grsync:opsem:step:pats:bool}
+    ensures there exist booleans $b_{g1}$ and $b_{g2}$, for each pattern $pat$ booleans
+    $b'_1$ and $b'_2$, and for each pattern $pat$ contexts $\rho^{\prime\prime}_1$ and
+    $\rho^{\prime\prime}_2$ such that:
+    \\\noindent\scalebox{0.8}{\begin{minipage}{1.2\textwidth}
+            \begin{equation*}
+                \begin{array}{llcll}
+                     & \left(\patOpsem{\rho_1}{pat = v_1}{b'_1}{\rho^{\prime\prime}_1}\right)^+                & \quad &
+                     & \left(\patOpsem{\rho_2}{pat = v_2}{b'_2}{\rho^{\prime\prime}_2}\right)^+                          \\
+                     & \exprOpsem{\rho_1 \ctxconcat \bigCtxconcat \rho^{\prime\prime+}_1}{()}{e_g}{()}{b_{g1}} & \quad &
+                     & \exprOpsem{\rho_2 \ctxconcat \bigCtxconcat \rho^{\prime\prime+}_2}{()}{e_g}{()}{b_{g2}}           \\
+                     & b_1 = b_{g1} \kwf{\&\&} (\kwf{\&\&} b'_1)^+                                             & \quad &
+                     & b_2 = b_{g2} \kwf{\&\&} (\kwf{\&\&} b'_2)^+                                                       \\
+                     & \rho'_1 = \bigCtxconcat \rho^{\prime\prime +}_1                                         & \quad &
+                     & \rho'_2 = \bigCtxconcat \rho^{\prime\prime +}_2.
+                \end{array}
+            \end{equation*}
+        \end{minipage}}\\\noindent
+    %
+    The rule \nameref{rule:semantics:grsync:react_typing:pats} ensures that we have
+    \exprTypedReact{\Theta}{e_g}{\dType}, and for each $pat$ we have \patTypedReact
+    {\Theta}{pat}{\rType}.
+    %
+    Therefore for each $pat$ we have $b'_2 = b'_1$, and for all $y$ in \defs{pat} such
+    that $\Theta[y] = \dType$ we have $\rho^{\prime\prime}_2[y] = \intoVal{\tyCtx[y]}
+        {\rho^{\prime\prime}_1[y]}{\bot}$.
+    %
+    For all $y$ in \defs{pat^+}, there exists a pattern $pat$ such that we have $y$ in
+    \defs{pat} (\Cref{rule:semantics:grsync:causality:defs:pat}), thus if $\Theta[y] =
+        \dType$ then we have $\bigCtxconcat \rho^{\prime\prime +}_2[y] = \intoVal
+        {\tyCtx[x]}{\bigCtxconcat \rho^{\prime\prime +}_1[y]}{\bot}$.
+    %
+    Therefore, for all $x$ in \deps{e_g}, we have
+    $\bigCtxconcat (\rho_2 \ctxconcat \rho^{\prime\prime +}_2)[x] = \intoVal{\tyCtx[x]}
+        {(\rho_1 \ctxconcat \bigCtxconcat \rho^{\prime\prime +}_1)[x]}{\bot}$.
+    %
+    The application of \Cref{lem:semantics:grsync:theorems:oversampling:e} ensures that
+    $b_{g2} = \intoVal{\kwf{bool}}{b_{g1}}{\bot} = b_{g1}$.
+    %
+    It implies that $b_1 = b_{g1} \kwf{\&\&} (\kwf{\&\&} b'_1)^+ = b_{g2} \kwf{\&\&}
+        (\kwf{\&\&} b'_2)^+ = b_2$.
+
+    \paragraph{Constants}
+    Suppose \guarded{pat^+}{e_g} is the constant pattern $c$.
+    Then the rule \nameref{rule:semantics:grsync:opsem:step:pat:const} ensures that $b_1 =
+        (c \kwf{==} v_1)$ and $b_2 = (c \kwf{==} v_2)$.
+    %
+    The rule \nameref{rule:semantics:grsync:react_typing:pat:const} ensures that
+    $\rType = \dType$, thus $v_2 = \intoVal{sty}{v_1}{\bot}$.
+    %
+    The rule \nameref{rule:grust:typing:grsync:pat:const} ensures that $c$ is of signal type,
+    thus we have $v_2 = v_1$, which implies $b_2 = b_1$.
+    %
+    \Cref{rule:semantics:grsync:causality:defs:pat:const} states that \defs{c} is empty.
+
+    \paragraph{Identifiers}
+    Suppose \guarded{pat^+}{e_g} is the identifier pattern $x$.
+    Then the rule \nameref{rule:semantics:grsync:opsem:step:pat:ident} ensures that $b_1 =
+        = b_2 = \true$, $\rho'_1[x] = v_1$, and $\rho'_2[x] = v_2$.
+    %
+    The rule \nameref{rule:grust:typing:grsync:pat:id} ensures that $sty = \tyCtx[x]$.
+    %
+    \Cref{rule:semantics:grsync:causality:defs:pat:ident} states that $\defs{x} = \{x\}$.
+    %
+    The rule \nameref{rule:semantics:grsync:react_typing:pat:ident} ensures that
+    $\rType = \Theta[x]$, thus if $\Theta[x] = \dType$ then:
+    \begin{equation*}
+        \rho'_2[x] = v_2 = \intoVal{sty}{v_1}{\bot} = \intoVal{\tyCtx[x]}{\rho'_1[x]}{\bot}.
+    \end{equation*}
+
+    \paragraph{Wildcards}
+    Suppose \guarded{pat^+}{e_g} is the wildcard pattern $\_$.
+    Then the rule \nameref{rule:semantics:grsync:opsem:step:pat:wild} ensures that $b_1 =
+        = b_2 = \true$.
+    %
+    \Cref{rule:semantics:grsync:causality:defs:pat:wild} states that \defs{x} is empty.
+
+    \setcounter{paragraph}{0}
+\end{skippableproof}
+
+\begin{lemma}[Oversampling of \GRSync reactive event patterns]
+    \label{lem:semantics:grsync:theorems:oversampling:epat}
+    Let \guarded{epat^+}{e_g} be a guarded event pattern in a program \G and typing
+    context \tyCtx, and let $\Theta$ be a reactive typing context such that:
+    \begin{equation*}
+        \epatTyped{epat^+} \qquad \exprTyped{e_g}{\kwf{bool}} \qquad \epatTypedReact{\Theta}{\guarded{epat^+}{e_g}}.
+    \end{equation*}
+    For all contexts $\rho_1$, $\rho'_1$, $\rho_2$ and $\rho'_2$, all states $s_1$, $s_2$ and $s_3$
+    corresponding to \guarded{epat^+}{e_g}, and all booleans $b_1$ and $b_2$ such that:
+    \begin{equation*}
+        \epatOpsem{\rho_1}{s_1}{\guarded{epat^+}{e_g}}{s_2}{b_1}{\rho'_1} \qquad
+        \epatOpsem{\rho_2}{s_2}{\guarded{epat^+}{e_g}}{s_3}{b_2}{\rho'_2},
+    \end{equation*}
+    we have:
+    \begin{multline*}
+        \left(\forall x \in \deps{epat^+}, \; \Theta[x] = \dType \Rightarrow \rho_2[x] = \intoVal{\tyCtx[x]}{\rho_1[x]}{\bot}\right) \Rightarrow
+        s_3 = s_2 \wedge b_2 = \false.
+    \end{multline*}
+
+    This lemma addresses the behavior of event patterns during an oversampling step. It asserts that
+    if all discrete dependencies of an event pattern are oversampled, then the pattern will not
+    detect a new event ($b_2 = \false$) and its internal state will remain unchanged ($s_3 = s_2$).
+    This is a critical property. The reactive type system
+    (\Cref{sec:semantics:grsync:react_typing}) ensures that event detection cannot depend on the
+    \timeop operator, guaranteeing that events are triggered only by genuine value changes. This
+    lemma confirms that, as a result, an oversampling step does not cause spurious event
+    activations.
+\end{lemma}
+\begin{skippableproof}
+    Let \guarded{epat^+}{e_g} be a guarded event pattern in a program \G and typing
+    context \tyCtx, and let $\Theta$ be a reactive typing context such that:
+    \begin{equation*}
+        \epatTyped{epat^+} \qquad \exprTyped{e_g}{\kwf{bool}} \qquad \epatTypedReact{\Theta}{\guarded{epat^+}{e_g}}.
+    \end{equation*}
+    Let $\rho_1$, $\rho'_1$, $\rho_2$ and $\rho'_2$ be contexts, let $s_1$, $s_2$ and $s_3$ be
+    states corresponding to \guarded{epat^+}{e_g}, and let $b_1$ and $b_2$ be booleans such that:
+    \begin{equation*}
+        \begin{array}{c}
+            \epatOpsem{\rho_1}{s_1}{\guarded{epat^+}{e_g}}{s_2}{b_1}{\rho'_1} \qquad \epatOpsem{\rho_2}{s_2}{\guarded{epat^+}{e_g}}{s_3}{b_2}{\rho'_2} \\
+            \forall x \in \deps{epat^+}, \; \Theta[x] = \dType \Rightarrow \rho_2[x] = \intoVal{\tyCtx[x]}{\rho_1[x]}{\bot}                            \\
+            \forall x \in \deps{e_g} \backslash \defs{pat^+}, \; \Theta[x] = \dType \Rightarrow \rho_2[x] = \intoVal{\tyCtx[x]}{\rho_1[x]}{\bot}.
+        \end{array}
+    \end{equation*}
+
+    We proceed by structural induction on event patterns.
+
+    \paragraph{Guarded event patterns}
+    The rule \nameref{rule:semantics:grsync:opsem:step:epats:bool} ensures there exist booleans
+    $b_{g1}$ and $b_{g2}$, for each event pattern $epat$ booleans $b'_1$ and $b'_2$, states $s'_1$,
+    $s'_2$ and $s'_3$, and contexts $\rho^{\prime\prime}_1$ and $\rho^{\prime\prime}_2$ such that:
+    \\\noindent\scalebox{0.8}{\begin{minipage}{1.2\textwidth}
+            \begin{equation*}
+                \begin{array}{llcll}
+                     & \left(\epatOpsem{\rho_1}{s'_1}{epat}{s'_2}{b'_1}{\rho^{\prime\prime}_1}\right)^+        & \quad &
+                     & \left(\epatOpsem{\rho_2}{s'_2}{epat}{s'_3}{b'_2}{\rho^{\prime\prime}_2}\right)^+                  \\
+                     & \exprOpsem{\rho_1 \ctxconcat \bigCtxconcat \rho^{\prime\prime+}_1}{()}{e_g}{()}{b_{g1}} & \quad &
+                     & \exprOpsem{\rho_2 \ctxconcat \bigCtxconcat \rho^{\prime\prime+}_2}{()}{e_g}{()}{b_{g2}}           \\
+                     & s_1 = (s'_1)^+ \qquad s_2 = (s'_2)^+                                                    & \quad &
+                     & s_3 = (s'_3)^+                                                                                    \\
+                     & b_1 = b_{g1} \kwf{\&\&} (\kwf{\&\&} b'_1)^+                                             & \quad &
+                     & b_2 = b_{g2} \kwf{\&\&} (\kwf{\&\&} b'_2)^+                                                       \\
+                     & \rho'_1 = \bigCtxconcat \rho^{\prime\prime +}_1                                         & \quad &
+                     & \rho'_2 = \bigCtxconcat \rho^{\prime\prime +}_2.
+                \end{array}
+            \end{equation*}
+        \end{minipage}}\\\noindent
+    %
+    The rule \nameref{rule:semantics:grsync:react_typing:epats} ensures that for each
+    $epat$ we have \epatTypedReact{\Theta}{epat}.
+    %
+    \Cref{rule:semantics:grsync:causality:dependencies:deps:epat} ensures that for each
+    $epat$ and for all $x$ in \deps{epat} we have $x$ in \deps{epat^+}, and thus if
+    $\Theta[x] = \dType$ then $\rho_2[x] = \intoVal{\tyCtx[x]}{\rho_1[x]}{\bot}$.
+    %
+    Therefore for each $epat$ we have $s'_3 = s'_2$, $b'_2 = \false$, which implies that:
+    \begin{align*}
+        b_2 & = b_{g2} \kwf{\&\&} (\kwf{\&\&} b'_2)^+ = b_{g2} \kwf{\&\&} \false = \false \\
+        s_3 & = (s'_3)^+ = (s'_2)^+ = s_2.
+    \end{align*}
+
+    \paragraph{Event detections}
+    Suppose \guarded{epat^+}{e_g} is the event detection pattern
+    \detect{x}{y}.
+    %
+    \Cref{rule:semantics:grsync:causality:dependencies:deps:epat:event} states that
+    $\deps{\detect{x}{y}} = \{y\}$, and the rule \nameref{rule:semantics:grsync:react_typ%
+        ing:epat:event} ensures that $\Theta[y] = \dType$, so that $\rho_2[y] = \intoVal
+        {\tyCtx[y]}{\rho_1[y]}{\bot}$.
+    %
+    The rule \nameref{rule:grust:typing:grsync:epat:event} ensures that $\tyCtx[y]$ is of the
+    form \mayB{ty} which implies that $\rho_2[y] = \none$ and
+    \nameref{rule:semantics:grsync:opsem:step:epat:event:none} ensure that $b_2 = \false$.
+
+    \paragraph{Rising edges}
+    Suppose \guarded{epat^+}{e_g} is the rising edge $e$.
+    %
+    \Cref{rule:semantics:grsync:causality:dependencies:deps:epat:edge} states that
+    its dependency set equals the dependency set of the expression $e$, and the rule
+    \nameref{rule:semantics:grsync:react_typing:epat:edge} ensures that \exprTypedReact
+    {\Theta}{e}{\dType}.
+    %
+    The rule \nameref{rule:semantics:grsync:opsem:step:epat:edge:bool} ensures there exist
+    a value $v_m$, states $s'_1$, $s'_2$ and $s'_3$ corresponding to the
+    expression $e$, and booleans $b'_1$ and $b'_2$ such that:
+    \\\noindent\scalebox{0.8}{\begin{minipage}{1.2\textwidth}
+            \begin{equation*}
+                \begin{array}{llcll}
+                     & \exprOpsem{\rho_1}{s'_1}{e}{s'_2}{b'_1}     & \quad &
+                     & \exprOpsem{\rho_2}{s'_2}{e}{s'_3}{b'_2}               \\
+                     & s_1 = (v_m, s'_1) \qquad s_2 = (b'_1, s'_2) & \quad &
+                     & s_3 = (b'_2, s'_3)                                    \\
+                     & b_1 = \kwf{!}v_m \kwf{\&\&} b'_1            & \quad &
+                     & b_2 = \kwf{!}b'_1 \kwf{\&\&} b'_2                     \\
+                     & \rho'_1 = \emptyrho                         & \quad &
+                     & \rho'_2 = \emptyrho.
+                \end{array}
+            \end{equation*}
+        \end{minipage}}\\\noindent
+    %
+    The rule \nameref{rule:grust:typing:grsync:epat:edge} ensures that \exprTyped{e}{\kwf{bool}}.
+    %
+    The oversampling \Cref{lem:semantics:grsync:theorems:oversampling:e} on expressions
+    ensures that we have  $s'_3 = s'_2$ and $b'_2 = \intoVal{\kwf{bool}}{b'_1}{\bot} =
+        b'_1$, which implies that:
+    \begin{align*}
+        b_2 & = \kwf{!}b'_1 \kwf{\&\&} b'_2 = \kwf{!}b'_1 \kwf{\&\&} b'_1 = \false \\
+        s_3 & = (b'_2, s'_3) = (b'_1, s'_2) = s_2.
+    \end{align*}
+
+    \setcounter{paragraph}{0}
+\end{skippableproof}
+
+\begin{lemma}[Oversampling of \GRSync reactive equations]
+    \label{lem:semantics:grsync:theorems:oversampling:eq}
+    Let $eq^+$ be a causal set of equations in a program \G and typing context \tyCtx, and let
+    $\Theta$ be a reactive typing context such that:
+    \begin{equation*}
+        \eqTyped{eq^+} \qquad \eqTypedReact{\Theta}{eq^+}.
+    \end{equation*}
+    For all contexts $\rho_1$, $\rho'_1$, $\rho_2$ and $\rho'_2$, and all states $s_1$, $s_2$ and
+    $s_3$ corresponding to $eq^+$ such that:
+    \begin{equation*}
+        \eqOpsem{\rho_1}{s_1}{eq^+}{s_2}{\rho'_1} \qquad
+        \eqOpsem{\rho_2}{s_2}{eq^+}{s_3}{\rho'_2},
+    \end{equation*}
+    we have:
+    \begin{multline*}
+        \left(\forall x \in \deps{eq^+}, \; \Theta[x] = \dType \Rightarrow \rho_2[x] = \intoVal{\tyCtx[x]}{\rho_1[x]}{\bot}\right) \Rightarrow \\
+        s_3 = s_2 \wedge \left(\forall y \in \defs{eq^+}, \; \Theta[y] = \dType \Rightarrow \rho'_2[y] = \intoVal{\tyCtx[y]}{\rho'_1[y]}{\bot}\right).
+    \end{multline*}
+
+    This lemma lifts the oversampling property from individual expressions and patterns to a
+    causal set of reactive equations. It establishes that if a block of equations is
+    evaluated in two consecutive steps, and all of its discrete dependencies are oversampled
+    in the second step, then the entire computation remains stable. Specifically, the state
+    managed by the equations does not change ($s_3 = s_2$), and any values of a discrete
+    type defined within the equations are themselves correctly oversampled.
+\end{lemma}
+\begin{skippableproof}
+    Let $eq^+$ be a causal set of equations in a program \G and typing context \tyCtx, and let
+    $\Theta$ be a reactive typing context such that:
+    \begin{equation*}
+        \eqTyped{eq^+} \qquad \eqTypedReact{\Theta}{eq^+}.
+    \end{equation*}
+    Let $\rho_1$, $\rho'_1$, $\rho_2$ and $\rho'_2$ be contexts, $s_1$, $s_2$ and $s_3$ be states
+    corresponding to $eq^+$ such that:
+    \begin{align*}
+        \eqOpsem{\rho_1}{s_1}{eq^+}{s_2}{\rho'_1} \qquad \eqOpsem{\rho_2}{s_2}{eq^+}{s_3}{\rho'_2} \\
+        \forall x \in \deps{eq^+}, \; \Theta[x] = \dType \Rightarrow \rho_2[x] = \intoVal{\tyCtx[x]}{\rho_1[x]}{\bot}.
+    \end{align*}
+
+    We proceed by structural induction on \GRSync equations.
+
+    \paragraph{Overview of the proof strategy}
+    The difficult points of the proof are the following.
+    \begin{itemize}
+        \item For blocks of mutually recursive equations, we use rank induction
+              (\Cref{def:semantics:grsync:causality:induction:rank}) to prove iteratively the
+              oversampling of identifiers following the rank
+              (\Cref{def:semantics:grsync:causality:rank}).
+        \item For \kwf{match} equations, the main difficulty is to prove that the control flow
+              remains stable, \ie that the same branch is chosen in both steps. This is achieved by
+              applying the oversampling lemma for patterns
+              (\Cref{lem:semantics:grsync:theorems:oversampling:pat}). This lemma ensures the
+              boolean outcome of each pattern match is unchanged, thus guaranteeing the same branch
+              is executed.
+        \item For \kwf{when} equations, the challenge is to show that an oversampling step does not
+              trigger the stateful computations within a branch. The proof uses the oversampling
+              lemma for event patterns (\Cref{lem:semantics:grsync:theorems:oversampling:epat}) to
+              demonstrate that no event is detected. This forces the execution to follow the
+              non-activating path, which by definition preserves the state and produces the correct
+              oversampled outputs.
+    \end{itemize}
+
+    \paragraph{Block of equations}
+    \Cref{rule:semantics:grsync:causality:dependencies:deps:eq,%
+        rule:semantics:grsync:causality:defs:eq} ensure that:
+    \begin{align*}
+        \deps{eq^+} & = \left(\bigcup \deps{eq}^+\right) \backslash \defs{eq^+} \\
+        \defs{eq^+} & = \bigsqcup \defs{eq}^+.
+    \end{align*}
+    %
+    The rule \nameref{rule:semantics:grsync:react_typing:eqs} ensures that for each
+    individual equation $eq$ we have \eqTypedReact{\Theta}{eq}.
+    %
+    The rule \nameref{rule:semantics:grsync:opsem:step:eqs} ensures that for each
+    individual equation $eq$ there exist states $s^{eq}_1$, $s^{eq}_2$ and $s^{eq}_3$
+    corresponding to $eq$ such that $s_1 = ((s_1^{eq})^+)$, $s_2 = ((s_2^{eq})^+)$ and
+    $s_3 = ((s_3^{eq})^+)$.
+
+    The causality of $eq^+$ allows to use the rank induction
+    (\Cref{def:semantics:grsync:causality:induction:rank}) to determine for all
+    $x \in \defs{eq^+}$ the property \P{x}: if the equation $eq_x$ defines $x$, then:
+    \begin{align*}
+        s_3^{eq_x} = s_2^{eq_x} \\
+        \Theta[x] = \dType \Rightarrow \rho'_2[x] = \intoVal{\tyCtx[x]}{\rho'_1[x]}{\bot}.
+    \end{align*}
+
+    \begin{itemize}
+        \item \textit{Base case:} Let $x \in \defs{eq^+}$ such that $\rank{eq^+}{x} = 0$.
+
+              Therefore, there exists an equation $eq_x$ that defines $x$ and that has no
+              dependency with \defs{eq^+}. By induction hypothesis on equations structure,
+              we have:
+              \begin{align*}
+                   & s_3^{eq_x} = s_2^{eq_x}                                                                                          \\
+                   & \forall z \in \defs{eq_x}, \; \Theta[z] = \dType \Rightarrow \rho'_2[z] = \intoVal{\tyCtx[z]}{\rho'_1[z]}{\bot},
+              \end{align*}
+              in particular:
+              \begin{equation*}
+                  \Theta[x] = \dType \Rightarrow \rho'_2[x] = \intoVal{\tyCtx[x]}{\rho'_1[x]}{\bot},
+              \end{equation*}
+
+        \item \textit{Inductive step:} Let $k \in \N$.
+              We assume that for all $y \in \defs{eq^+}$ such that $\rank{eq^+}{y} \le k$
+              we have:
+              \begin{align*}
+                   & \exists eq_y \in \{eq^+\}, \; y \in \defs{eq_y} \wedge s_3^{eq_y} = s_2^{eq_y}     \\
+                   & \Theta[y] = \dType \Rightarrow \rho'_2[y] = \intoVal{\tyCtx[y]}{\rho'_1[y]}{\bot}.
+              \end{align*}
+
+              Let $x \in \defs{eq^+}$ such that $\rank{eq^+}{x} = k+1$. For all
+              $y \in \defs{eq^+}$ such that $x$ depends on $y$ (\ie \depOrd{eq^+}{x}{y}),
+              \Cref{lem:semantics:grsync:causality:rank:decrease} states that
+              $\rank{eq^+}{x} > \rank{eq^+}{y}$, which implies that
+              $\rank{eq^+}{y} \le k$. By rank induction hypothesis, for all
+              $y \in \defs{eq^+}$ such that \depOrd{eq^+}{x}{y}, we have:
+              \begin{equation*}
+                  \Theta[y] = \dType \Rightarrow \rho'_2[y] = \intoVal{\tyCtx[y]}{\rho'_1[y]}{\bot}.
+              \end{equation*}
+
+              Let $eq_x$ be the equation that defines $x$. Then for all
+              $y \in \deps{eq_x}$, we have:
+              \begin{equation*}
+                  \Theta[y] = \dType \Rightarrow \rho'_2[y] = \intoVal{\tyCtx[y]}{\rho'_1[y]}{\bot}.
+              \end{equation*}
+              By induction hypothesis on equations, for all $z$ in \defs{eq_z} we have:
+              \begin{align*}
+                   & s_3^{eq_x} = s_2^{eq_x}                                                                                          \\
+                   & \forall z \in \defs{eq_x}, \; \Theta[z] = \dType \Rightarrow \rho'_2[z] = \intoVal{\tyCtx[z]}{\rho'_1[z]}{\bot},
+              \end{align*}
+              in particular:
+              \begin{equation*}
+                  \Theta[x] = \dType \Rightarrow \rho'_2[x] = \intoVal{\tyCtx[x]}{\rho'_1[x]}{\bot},
+              \end{equation*}
+    \end{itemize}
+    Therefore, the property \P{x} holds for all $x \in \defs{eq^+}$.
+
+    It implies that:
+    \begin{align*}
+         & s_3 = (s_3^{eq+}) = (s_2^{eq+}) = s_2                                                                            \\
+         & \forall x \in \defs{eq^+}, \; \Theta[x] = \dType \Rightarrow \rho'_2[x] = \intoVal{\tyCtx[x]}{\rho'_1[x]}{\bot}.
+    \end{align*}
+
+    \paragraph{Declarations}
+    Suppose that $eq^+$ is the declaration $x^+ = e$.
+    %
+    \Cref{rule:semantics:grsync:causality:dependencies:deps:eq:decl} ensures that
+    $\deps{x^+ = e} = \deps{e}$.
+    %
+    \Cref{rule:semantics:grsync:causality:defs:eq:decl} ensures that
+    $\defs{x^+ = e} = \{x^+\}$.
+    %
+    The rule \nameref{rule:semantics:grsync:opsem:step:eq:decl} ensures that there exists
+    values $v_1^+$ and $v_2^+$ such that:
+    \\\noindent\scalebox{0.8}{\begin{minipage}{1.2\textwidth}
+            \begin{equation*}
+                \begin{array}{llcll}
+                     & \exprOpsem{\rho_1}{s_1}{e}{s_2}{v_1^+} & \quad &
+                     & \exprOpsem{\rho_2}{s_2}{e}{s_3}{v_2^+}           \\
+                     & \left(\rho'_1[x] = v_1\right)^+        & \quad &
+                     & \left(\rho'_2[x] = v_2\right)^+ ,
+                \end{array}
+            \end{equation*}
+        \end{minipage}}\\\noindent
+    so that for all $x$ in \deps{e} such that $\Theta[x] = \dType$ we have $\rho_2[x] =
+        \intoVal{\tyCtx[x]}{\rho_1[x]}{\bot}$.
+    %
+    The rule \nameref{rule:semantics:grsync:react_typing:eq:decl} ensures that
+    \exprTypedReact{\Theta}{e}{(\Theta[x])^+}.
+    %
+    The oversampling \Cref{lem:semantics:grsync:theorems:oversampling:e} on expressions
+    ensures that:
+    \begin{align*}
+        s_3 = s_2                     &                          \\
+        \forall y \in \defs{y^+ = e}, &                          \\
+        \Theta[y] = \dType            & \Rightarrow \rho'_2[y] =
+        v_2 = \intoVal{\tyCtx[y]}{v_1}{\bot} = \intoVal{\tyCtx[y]}{\rho'_1[y]}{\bot}.
+    \end{align*}
+
+    \paragraph{Match equations}
+    Suppose that $eq^+$ is the \kwf{match} equation:
+    \begin{equation*}
+        \match{e}{x^+}{(\branch{pat_k^+}{e_k}{eq_k^+})^+}.
+    \end{equation*}
+    %
+    \Cref{%
+        rule:semantics:grsync:causality:dependencies:deps:eq:match,%
+        rule:semantics:grsync:causality:defs:eq:match%
+    } ensures that:
+    \begin{align*}
+        \deps{\mathtiny{\matchTab{e}{x^+}{(\branch{pat_k^+}{e_k}{eq_k^+})^+}}} & =
+        \deps{e} \cup \bigcup \left(\deps{e_k} \cup \deps{eq_k^+} \backslash \defs{pat_k^+}\right)^+ \\
+        \defs{\mathtiny{\matchTab{e}{x^+}{(\branch{pat_k^+}{e_k}{eq_k^+})^+}}} & = \{x^+\}.
+    \end{align*}
+    %
+    The rule \nameref{rule:grust:typing:grsync:eq:match} ensures there exist types $sty^+$ such
+    that \exprTyped{e}{sty^+}, for all patterns \guarded{pat_k^+}{e_k} we have \patTyped
+    {pat_k^+}{sty^+} and \exprTyped{e_k}{\kwf{bool}}, and for all block of equations
+    $eq_k^+$ we have \eqTyped{eq_k^+}.
+    %
+    The rule \nameref{rule:semantics:grsync:react_typing:eq:match} ensures there exist
+    reactive types $\rType^+$ such that:
+    \begin{align*}
+         & \exprTypedReact{\Theta}{e}{\rType^+}                                   \\
+         & \forall k, \; \patTypedReact{\Theta}{\guarded{pat_k^+}{e_k}}{\rType^+} \\
+         & \forall k, \; \eqTypedReact{\Theta}{eq_k^+}.
+    \end{align*}
+    %
+    The rule \nameref{rule:semantics:grsync:opsem:step:eq:match:value} ensures that there exists
+    states $s_{e1}$, $s_{e2}$ and $s_{e3}$ corresponding to $e$, values $v_1^+$ and
+    $v_2^+$, for each pattern \guarded{pat_k^+}{e_k} there exist booleans $b_{k1}$ and
+    $b_{k2}$ and contexts $rho_{k1}$ and $rho_{k2}$, identifiers $i_1$ and $i_2$, and for
+    each $eq_k^+$ there exist states $s_{k1}$, $s_{k2}$ and $s_{k3}$ corresponding to each
+    $eq_k^+$ such that:
+    \\\noindent\scalebox{0.8}{\begin{minipage}{1.2\textwidth}
+            \begin{equation*}
+                \begin{array}{llcll}
+                                        & s_1 = (s_{e1}, s_{k1}^+) \qquad s_2 = (s_{e2}, s_{k2}^+)                               & \quad &
+                                        & s_3 = (s_{e3}, s_{k3}^+)                                                                         \\
+                                        & \exprOpsem{\rho_1}{s_{e1}}{e}{s_{e2}}{v_1^+}                                           & \quad &
+                                        & \exprOpsem{\rho_2}{s_{e2}}{e}{s_{e3}}{v_2^+}                                                     \\
+                    \forall k,          & \patOpsem{\rho_1}{\guarded{pat_k^+ = v_1^+}{e_k}}{b_{k1}}{\rho_{k1}}                   & \quad &
+                    \forall k,          & \patOpsem{\rho_2}{\guarded{pat_k^+ = v_2^+}{e_k}}{b_{k2}}{\rho_{k2}}                             \\
+                    \forall k < i_1,    & b_k = \false \wedge b_{i_1} = \true                                                    & \quad &
+                    \forall k < i_2,    & b_k = \false \wedge b_{i_2} = \true                                                              \\
+                                        & \eqOpsem{\rho_1 \ctxconcat \rho_{{i_1}1}}{s_{{i_1}1}}{eq_{i_1}^+}{s_{{i_1}2}}{\rho'_1} & \quad &
+                                        & \eqOpsem{\rho_2 \ctxconcat \rho_{{i_2}2}}{s_{{i_2}2}}{eq_{i_2}^+}{s_{{i_2}3}}{\rho'_2}           \\
+                    \forall k \neq i_1, & s_{k2} = s_{k1}                                                                        & \quad &
+                    \forall k \neq i_2, & s_{k3} = s_{k2},
+                \end{array}
+            \end{equation*}
+        \end{minipage}}\\\noindent
+    so that for all $x$ in \deps{e} such that $\Theta[x] = \dType$ we have $\rho_2[x] =
+        \intoVal{\tyCtx[x]}{\rho_1[x]}{\bot}$.
+    %
+    The oversampling \Cref{lem:semantics:grsync:theorems:oversampling:e} on expressions
+    ensures that:
+    \begin{align*}
+         & s_{e3} = s_{e2}                                                            \\
+         & \left(\rType = \dType \Rightarrow v_2 = \intoVal{sty}{v_1}{\bot}\right)^+.
+    \end{align*}
+    %
+    The oversampling \Cref{lem:semantics:grsync:theorems:oversampling:pat} on patterns
+    ensures that:
+    \begin{align*}
+        \forall k, \; & b_{k2} = b_{k1}                                                                                                                      \\
+        \forall k, \; & \left(\forall y \in \defs{pat_k^+}, \; \Theta[y] = \dType \Rightarrow \rho_{k2}[y] = \intoVal{\tyCtx[y]}{\rho_{k1}[y]}{\bot}\right),
+    \end{align*}
+    so that we have $i_1 = i_2 = i$, and for all $x$ in \deps{eq_i^+} such that $Theta[x]
+        = \dType$ we have $(\rho_2 \ctxconcat \rho_{i2})[x] = \intoVal{\tyCtx[x]}{(\rho_1
+            \ctxconcat \rho_{i1})[x]}{\bot}$.
+    %
+    The application of the structural induction hypothesis on equations ensures that:
+    \begin{align*}
+         & s_{i3} = s_{i2}                                                                                                    \\
+         & \forall y \in \defs{eq_i^+}, \; \Theta[y] = \dType \Rightarrow \rho'_2[y] = \intoVal{\tyCtx[y]}{\rho'_1[y]}{\bot}.
+    \end{align*}
+    %
+    Moreover, for all $k \neq i$, we have $s_{k3} = s_{k2}$.
+    % 
+    \Cref{rule:semantics:grsync:causality:defs:eq:match} ensures that $\defs{\kwf{match}}
+        = \defs{eq_i^+}$, so that:
+    \begin{align*}
+         & s_3 = (s_{e3}, s_{k3}^+) = (s_{e2}, s_{k2}^+) = s_2                                                                     \\
+         & \forall y \in \defs{\kwf{match}}, \; \Theta[y] = \dType \Rightarrow \rho'_2[y] = \intoVal{\tyCtx[y]}{\rho'_1[y]}{\bot}.
+    \end{align*}
+
+    \paragraph{When equations}
+    Suppose that $eq^+$ is the \kwf{when} equation:
+    \begin{equation*}
+        \when{x^+}{x_m^+ = c^+}{(\branch{epat_k^+}{e_k}{eq_k^+})^+}.
+    \end{equation*}
+    %
+    \Cref{%
+        rule:semantics:grsync:causality:dependencies:deps:eq:when,%
+        rule:semantics:grsync:causality:defs:eq:when%
+    } ensures that:
+    \begin{align*}
+        \deps{\kwf{when}} & =
+        \begin{array}{l}
+            \bigcup \left(\deps{epat_k^+} \cup \deps{e_k} \cup \deps{eq_k^+} \backslash \defs{epat_k^+}\right)^+ \\
+            \qquad \backslash (\{x^+\} \cup \{\last{x_m}^+\})
+        \end{array} \\
+        \defs{\kwf{when}} & = \{x^+\}.
+    \end{align*}
+    %
+    The rule \nameref{rule:semantics:grsync:react_typing:eq:when} ensures that:
+    \begin{align*}
+         & \forall x \in \defs{\kwf{when}}, \; \Theta[x] = \dType          \\
+         & \forall k, \; \epatTypedReact{\Theta}{\guarded{epat_k^+}{e_k}}.
+    \end{align*}
+    %
+    The rules \nameref{rule:semantics:grsync:opsem:step:eq:when:branch} and
+    \nameref{rule:semantics:grsync:opsem:step:eq:when:default} ensure that there exists values
+    $v_m^+$, for each event pattern \guarded{epat_k^+}{e_k} there exist states $s^p_{k1}$,
+    $s^p_{k2}$ and $s^p_{k3}$ corresponding to \guarded{epat_k^+}{e_k}, booleans $b_{k1}$
+    and $b_{k2}$ and contexts $rho_{k1}$ and $rho_{k2}$, and for each $eq_k^+$ there exist
+    states $s_{k1}$, $s_{k2}$ and $s_{k3}$ corresponding to each $eq_k^+$ such that:
+    \\\noindent\scalebox{0.8}{\begin{minipage}{1.2\textwidth}
+            \begin{equation*}
+                \begin{array}{llcll}
+                    \forall k, & \epatOpsem{\rho_1}{s^p_{k1}}{\guarded{epat_k^+}{e_k}}{s^p_{k2}}{b_{k1}}{\rho_{k1}} & \quad &
+                    \forall k, & \epatOpsem{\rho_2}{s^p_{k2}}{\guarded{epat_k^+}{e_k}}{s^p_{k3}}{b_{k2}}{\rho_{k2}}           \\
+                               & s_1 = (v_m^+, s^{p+}_{k1}, s_{k1}^+)                                                         \\
+                               & s_2 = ((\rho'_1[x_m])^+, s^{p+}_{k2}, s_{k2}^+)                                    & \quad &
+                               & s_3 = ((\rho'_2[x_m])^+, s^{p+}_{k3}, s_{k3}^+).
+                \end{array}
+            \end{equation*}
+        \end{minipage}}\\\noindent
+    %
+    The oversampling \Cref{lem:semantics:grsync:theorems:oversampling:epat} on event
+    patterns ensures that for all $k$ we have $s^p_{k3} = s^p_{k2}$ and $b_{k2} = \false$.
+    %
+    The rule \nameref{rule:semantics:grsync:opsem:step:eq:when:default} ensures that:
+    \begin{align*}
+         & \left(\rho'_2[x_m] = \rho'_1[x_m]\right)^+                                                                                               \\
+         & \left(s_{k3} = s_{k2}\right)^+                                                                                                           \\
+         & \rho'_2 = [(\rho'_1[x_m] / \last{x_m})^+] \ctxconcat [\none / x_e \in \{x^+\} \backslash \{x_m^+\}] \ctxconcat [(\rho'_1[x_m] / x_m)^+],
+    \end{align*}
+    so that $s_3 = s_2$, and for all $y$ in \defs{\kwf{when}} we have:
+    \begin{itemize}
+        \item if $y$ is in $\{x_m\}$, then its type corresponds to a signal type $ty$
+              (\cf the typing rules \nameref{rule:grust:typing:grsync:eq:when}
+              and \nameref{rule:grust:typing:grsync:expr:const}) and $\rho'_2[y] = \rho'_1[y]$
+              which equals \intoVal{ty}{\rho'_1[y]}{\bot}; and
+        \item if $y$ is not in $\{x_m\}$, then $y$ is of event type \mayB{ty} (\cf the
+              typing rule \nameref{rule:grust:typing:grsync:eq:when}) and $\rho'_2[y] = \none$
+              which equals \intoVal{\mayB{ty}}{\rho'_1[y]}{\bot}.
+    \end{itemize}
+    %
+    Therefore for all $y$ in \defs{\kwf{when}} we have $\rho'_2[y] = \intoVal{\tyCtx[y]}
+        {\rho'_1[y]}{\bot}$.
+
+    \setcounter{paragraph}{0}
+\end{skippableproof}
+
+\begin{theorem}[Oversampling]
+    \label{thm:semantics:grsync:theorems:oversampling}
+    Let \component{f}{x_i^+}{x_o^+}{eq^+}{x_m^+ = c^+} be a causal and well-typed component in a
+    program \G and typing context \tyCtx, and let $\rType_i^+$ and $\rType_o^+$ be input and
+    output reactive types such that:
+    \begin{equation*}
+        \compTypedReact{f}{\rType_i^+}{\rType_o^+}.
+    \end{equation*}
+    For all states $s_1$, $s_2$, and $s_3$ corresponding to $f$, and all values $v_{i1}^+$,
+    $v_{i2}^+$, $v_{o1}^+$ and $v_{o2}^+$, such that:
+    \begin{equation*}
+        \compOpsem{s_1}{v_{i1}^+}{f}{s_2}{v_{o1}^+} \qquad \compOpsem{s_2}{v_{i2}^+}{f}{s_3}{v_{o2}^+},
+    \end{equation*}
+    we have:
+    \begin{multline*}
+        \left(\forall x_i, \; \rType_i = \dType \Rightarrow v_{i2} = \intoVal{\tyCtx[x_i]}{v_{i1}}{\bot}\right) \\
+        \Rightarrow
+        s_3 = s_2 \wedge \left(\forall x_o, \; \rType_o = \dType \Rightarrow v_{o2} = \intoVal{\tyCtx[x_o]}{v_{o1}}{\bot}\right).
+    \end{multline*}
+
+    This theorem states the oversampling property to the component level. It guarantees that if a
+    reactive component is executed on oversampled discrete inputs, its behavior remains stable: its
+    internal state does not change ($s_3 = s_2$), and its discrete outputs are correctly
+    oversampled. This result is crucial, proving that the behavior of a \GRSync  component is driven
+    solely by discrete input signal changes and event occurrences. This independence from the
+    execution rate is essential for the safe integration of components into \GRFRP services, which
+    are designed to propagate only signal changes and event occurrences.
+\end{theorem}
+\begin{skippableproof}
+    Let \component{f}{x_i^+}{x_o^+}{eq^+}{x_m^+ = c^+} be a causal and well-typed component in a
+    program \G and typing context \tyCtx, and let $\rType_i^+$ and $\rType_o^+$ be input and
+    output reactive types such that:
+    \begin{equation*}
+        \compTypedReact{f}{\rType_i^+}{\rType_o^+}.
+    \end{equation*}
+    Let $s_1$, $s_2$, and $s_3$ be states corresponding to $f$, let $v_{i1}^+$, $v_{i2}^+$,
+    $v_{o1}^+$ and $v_{o2}^+$ be values such that:
+    \begin{align*}
+         & \compOpsem{s_1}{v_{i1}^+}{f}{s_2}{v_{o1}^+} \qquad \compOpsem{s_2}{v_{i2}^+}{f}{s_3}{v_{o2}^+} \\
+         & \forall x_i, \; \rType_i = \dType \Rightarrow v_{i2} = \intoVal{\tyCtx[x_i]}{v_{i1}}{\bot}.
+    \end{align*}
+
+    The rule \nameref{rule:semantics:grsync:react_typing:comp} ensures that:
+    \begin{align*}
+        \left(\Theta[x_i] = \rType_i\right)^+       &  &  &
+        \left(\Theta[x_o] = \rType_o\right)^+       &  &  &
+        \left(\Theta[x_m] = \dType \right)^+        &  &  &
+        \left(\Theta[\last{x_m}] = \cType \right)^+ &  &  &
+        \eqTypedReact{\Theta}{eq^+}.
+    \end{align*}
+
+    The rule \nameref{rule:semantics:grsync:opsem:step:comp} ensures there exist values $v_m^+$,
+    states $s'_1$, $s'_2$, and $s'_3$ corresponding to $eq^+$, and contexts $\rho_1$, $\rho_2$,
+    $\rho'_1$ and $\rho'_2$ such that:
+    \begin{center}
+        \scalebox{0.8}{\begin{minipage}{1.2\textwidth}
+            \begin{equation*}
+                \begin{array}{llcll}
+                     & s_1 = (v_m^+, s'_1) \qquad s_2 = (\rho'_1[x_m]^+, s'_2) & \quad &
+                     & s_3 = (\rho'_2[x_m]^+, s'_3)                                      \\
+                     & \rho_1 = [(v_{i1}/x_i)^+, (v_m/\last{x_m})^+]           & \quad &
+                     & \rho_2 = [(v_{i2}/x_i)^+, (\rho'_1[x_m]/\last{x_m})^+]            \\
+                     & \eqOpsem{\rho_1}{s'_1}{eq^+}{s'_2}{\rho'_1}             & \quad &
+                     & \eqOpsem{\rho_2}{s'_2}{eq^+}{s'_3}{\rho'_2}                       \\
+                     & \left(v_{o1} = \rho'_1[x_o]\right)^+                    & \quad &
+                     & \left(v_{o2} = \rho'_2[x_o]\right)^+.
+                \end{array}
+            \end{equation*}
+        \end{minipage}}
+    \end{center}
+
+    Because $f$ is well-typed, $\deps{eq^+} \subseteq \{x_i^+, \last{x_m}^+\}$ and $\{x_o^+, x_m^+\}
+        \subseteq \defs{eq^+}$.
+    %
+    Therefore, for all $x$ in \deps{eq^+}, if $x$ is in $\{x_i^+\}$ and $\Theta[x] = \dType$
+    then we have $\rho_2[x] = v_{i2} = \intoVal{\tyCtx[x_i]}{v_{i1}}{\bot} = \rho_1[x]$,
+    otherwise $x$ is in $\{\last{x_m}^+\}$ and $\Theta[x] = \cType \neq \dType$.
+
+    The oversampling \Cref{lem:semantics:grsync:theorems:oversampling:eq} on equations ensures that:
+    \begin{align*}
+         & s'_3 = s'_2                                                                                                      \\
+         & \forall y \in \defs{eq^+}, \; \Theta[y] = \dType \Rightarrow \rho'_2[y] = \intoVal{\tyCtx[y]}{\rho'_1[y]}{\bot}.
+    \end{align*}
+
+    The rule \nameref{rule:grust:typing:grsync:eq:init} ensures that, because constants are of signal type,
+    only signal typed memories are created.
+    %
+    Therefore for all initialized memory $x_m$, there exist a type $ty_m$ such that $ty_m =
+        \tyCtx[x_m]$. Furthermore, for all $x_m$ we have $\Theta[x_m] = \dType$, thus:
+    \begin{equation*}
+        \forall x_m, \; \rho'_2[x_m] = \intoVal{ty_m}{\rho'_1[x_m]}{\bot} = \rho'_1[x_m],
+    \end{equation*}
+    which implies:
+    \begin{align*}
+         & s_3 = (\rho'_2[x_m]^+, s'_3) = (\rho'_1[x_m]^+, s'_2) = s_2                                                                                            \\
+         & \forall x_o, \; \rType_o = \dType \Rightarrow v_{o2} = \rho'_2[x_o] = \intoVal{\tyCtx[x_o]}{\rho'_1[x_o]}{\bot} = \intoVal{\tyCtx[x_o]}{v_{o1}}{\bot}.
+    \end{align*}
+\end{skippableproof}
+
+\paragraph{Summary}
+In conclusion, this section established the oversampling property for reactive \GRSync components.
+%
+The core result, \Cref{thm:semantics:grsync:theorems:oversampling}, formally guarantees that
+executing a reactive component with unchanged discrete inputs---a process called oversampling---%
+results in a stable computation.
+%
+Specifically, the internal state of the component remains unchanged, and its discrete outputs are
+correctly oversampled, meaning signals retain their value and events do not occur.
+%
+The proof was demonstrated by structural induction, with key lemmas confirming that oversampling
+does not alter control flow in \kwf{match} statements or trigger stateful computations in
+\kwf{when} clauses.
+%
+This theorem provides a critical justification for the compiler optimization that shifts from a
+periodic to an event-driven execution model. It proves that the behavior of a reactive component is
+driven solely by meaningful changes in its inputs, ensuring its safe and correct integration into
+the asynchronous environment of \GRFRP services.

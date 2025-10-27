@@ -1,0 +1,410 @@
+\begin{thebibliography}{10}
+
+\bibitem{freertos}
+{Amazon Web Services}.
+\newblock {FreeRTOS}: A real-time operating system for microcontrollers.
+\newblock \url{https://www.freertos.org/}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{DBLP:journals/pacmpl/BahrGM19}
+Patrick Bahr, Christian Graulund, and Rasmus~Ejlers M{\o}gelberg.
+\newblock Simply ratt: a fitch-style modal calculus for reactive programming without space leaks.
+\newblock {\em Proc. {ACM} Program. Lang.}, 3({ICFP}):109:1--109:27, 2019.
+
+\bibitem{DBLP:journals/pacmpl/BahrM23}
+Patrick Bahr and Rasmus~Ejlers M{\o}gelberg.
+\newblock Asynchronous modal {FRP}.
+\newblock {\em Proc. {ACM} Program. Lang.}, 7({ICFP}):476--510, 2023.
+
+\bibitem{books/kap/BattacharyyaLM96}
+Shuvra~S. Battacharyya, Edward~A. Lee, and Praveen~K. Murthy.
+\newblock {\em Software Synthesis from Dataflow Graphs}.
+\newblock Kluwer Academic Publishers, 1996.
+
+\bibitem{DBLP:conf/emsoft/BenvenisteBCP11}
+Albert Benveniste, Timothy Bourke, Beno{\^{\i}}t Caillaud, and Marc Pouzet.
+\newblock A hybrid synchronous language with hierarchical automata: static typing and translation to synchronous code.
+\newblock In {\em {EMSOFT}}, pages 137--148. {ACM}, 2011.
+
+\bibitem{DBLP:conf/cdc/BenvenisteBGBGM01}
+Albert Benveniste, Patricia Bournai, Thierry Gautier, Michel~Le Borgne, Paul {Le Guernic}, and Herv{\'{e}} Marchand.
+\newblock The {SIGNAL} declarative synchronous language: controller synthesis and systems/architecture design.
+\newblock In {\em {CDC}}, pages 3284--3289. {IEEE}, 2001.
+
+\bibitem{DBLP:journals/scp/BenvenisteGJ91}
+Albert Benveniste, Paul {Le Guernic}, and Christian Jacquemot.
+\newblock Synchronous programming with events and relations: the {SIGNAL} language and its semantics.
+\newblock {\em Sci. Comput. Program.}, 16(2):103--149, 1991.
+
+\bibitem{DBLP:journals/scp/BerryG92}
+G{\'{e}}rard Berry and Georges Gonthier.
+\newblock The esterel synchronous programming language: Design, semantics, implementation.
+\newblock {\em Sci. Comput. Program.}, 19(2):87--152, 1992.
+
+\bibitem{crazyflie-fm}
+{Bitcraze}.
+\newblock {Crazyflie Firmware}: Source code for the {Crazyflie} nano quadcopter.
+\newblock \url{https://github.com/bitcraze/crazyflie-firmware}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{DBLP:conf/pldi/BourkeBDLPR17}
+Timothy Bourke, L{\'{e}}lio Brun, Pierre{-}{\'{E}}variste Dagand, Xavier Leroy, Marc Pouzet, and Lionel Rieg.
+\newblock A formally verified compiler for lustre.
+\newblock In {\em {PLDI}}, pages 586--601. {ACM}, 2017.
+
+\bibitem{bourke:hal-03936656}
+Timothy Bourke, Basile Pesin, and Marc Pouzet.
+\newblock {Analyse de d{\'e}pendance v{\'e}rifi{\'e}e pour un langage synchrone {\`a} flot de donn{\'e}es}.
+\newblock In {\em {Journ{\'e}es Francophones des Langages Applicatifs}}, pages 101--120, 2023.
+
+\bibitem{DBLP:journals/tecs/BourkePP23}
+Timothy Bourke, Basile Pesin, and Marc Pouzet.
+\newblock Verified compilation of synchronous dataflow with state machines.
+\newblock {\em {ACM} Trans. Embed. Comput. Syst.}, 22(5s):137:1--137:26, 2023.
+
+\bibitem{DBLP:conf/hybrid/BourkeP13}
+Timothy Bourke and Marc Pouzet.
+\newblock Z{\'{e}}lus: a synchronous language with odes.
+\newblock In {\em {HSCC}}, pages 113--118. {ACM}, 2013.
+
+\bibitem{DBLP:conf/popl/CaspiPHP87}
+Paul Caspi, Daniel Pilaud, Nicolas Halbwachs, and John Plaice.
+\newblock Lustre: {A} declarative language for programming synchronous systems.
+\newblock In {\em {POPL}}, pages 178--188. {ACM} Press, 1987.
+
+\bibitem{tcmCocospec}
+Adrien Champion, Arie Gurfinkel, Temesghen Kahsai, and Cesare Tinelli.
+\newblock Cocospec: A mode-aware contract language for reactive systems.
+\newblock In {\em International Conference on Software Engineering and Formal Methods}, pages 347--366. Springer, 2016.
+
+\bibitem{DBLP:conf/cav/ChampionMST16}
+Adrien Champion, Alain Mebsout, Christoph Sticksel, and Cesare Tinelli.
+\newblock The kind 2 model checker.
+\newblock In {\em {CAV} {(2)}}, volume 9780 of {\em Lecture Notes in Computer Science}, pages 510--517. Springer, 2016.
+
+\bibitem{DBLP:phd/us/Chapiro85}
+Daniel~M. Chapiro.
+\newblock {\em Globally-asynchronous locally-synchronous systems}.
+\newblock PhD thesis, Stanford University, {USA}, 1985.
+
+\bibitem{DBLP:conf/ppdp/ChupinN19}
+Guerric Chupin and Henrik Nilsson.
+\newblock Functional reactive programming, restated.
+\newblock In {\em {PPDP} 2019, Porto, Portugal, October 7-9, 2019}, pages 7:1--7:14. {ACM}, 2019.
+
+\bibitem{DBLP:conf/emsoft/CohenGP12}
+Albert Cohen, L{\'{e}}onard G{\'{e}}rard, and Marc Pouzet.
+\newblock Programming parallelism with futures in lustre.
+\newblock In {\em {EMSOFT}}, pages 197--206. {ACM}, 2012.
+
+\bibitem{DBLP:journals/tecs/ColacoMPP23}
+Jean{-}Louis Cola{\c{c}}o, Michael Mendler, Baptiste Pauget, and Marc Pouzet.
+\newblock A constructive state-based semantics and interpreter for a synchronous data-flow language with state machines.
+\newblock {\em {ACM} Trans. Embed. Comput. Syst.}, 22(5s):152:1--152:26, 2023.
+
+\bibitem{DBLP:conf/tase/ColacoPP17}
+Jean{-}Louis Cola{\c{c}}o, Bruno Pagano, and Marc Pouzet.
+\newblock {SCADE} 6: {A} formal language for embedded critical software development (invited paper).
+\newblock In {\em {TASE}}, pages 1--11. {IEEE} Computer Society, 2017.
+
+\bibitem{DBLP:conf/emsoft/ColacoP03}
+Jean{-}Louis Cola{\c{c}}o and Marc Pouzet.
+\newblock Clocks as first class abstract types.
+\newblock In {\em {EMSOFT}}, volume 2855 of {\em Lecture Notes in Computer Science}, pages 134--155. Springer, 2003.
+
+\bibitem{DBLP:conf/haskell/CourtneyNP03}
+Antony Courtney, Henrik Nilsson, and John Peterson.
+\newblock The yampa arcade.
+\newblock In {\em Haskell}, pages 7--18. {ACM}, 2003.
+
+\bibitem{DBLP:conf/pldi/CzaplickiC13}
+Evan Czaplicki and Stephen Chong.
+\newblock Asynchronous functional reactive programming for guis.
+\newblock In {\em {PLDI}}, pages 411--422. {ACM}, 2013.
+
+\bibitem{DBLP:conf/icfem/DenisJM22}
+Xavier Denis, Jacques{-}Henri Jourdan, and Claude March{\'{e}}.
+\newblock Creusot: {A} foundry for the deductive verification of rust programs.
+\newblock In {\em {ICFEM}}, volume 13478 of {\em Lecture Notes in Computer Science}, pages 90--105. Springer, 2022.
+
+\bibitem{DBLP:journals/toplas/DeRemerP82}
+Frank DeRemer and Thomas~J. Pennello.
+\newblock Efficient computation of {LALR(1)} look-ahead sets.
+\newblock {\em {ACM} Trans. Program. Lang. Syst.}, 4(4):615--649, 1982.
+
+\bibitem{DBLP:conf/icfp/ElliottH97}
+Conal Elliott and Paul Hudak.
+\newblock Functional reactive animation.
+\newblock In {\em {ICFP}}, pages 263--273. {ACM}, 1997.
+
+\bibitem{DBLP:conf/haskell/Elliott09}
+Conal~M. Elliott.
+\newblock Push-pull functional reactive programming.
+\newblock In {\em Haskell}, pages 25--36. {ACM}, 2009.
+
+\bibitem{ferrocene}
+{Ferrous Systems GmbH and AdaCore}.
+\newblock {Ferrocene}: A {Rust} compiler toolchain for safety-critical systems.
+\newblock \url{https://ferrocene.dev/}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{smol}
+Stjepan Glavina and contributors.
+\newblock smol: A small and fast async runtime for {Rust}.
+\newblock \url{https://github.com/smol-rs/smol}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{DBLP:journals/pieee/HalbwachsCRP91}
+Nicolas Halbwachs, Paul Caspi, Pascal Raymond, and Daniel Pilaud.
+\newblock The synchronous data flow programming language {LUSTRE}.
+\newblock {\em Proc. {IEEE}}, 79(9):1305--1320, 1991.
+
+\bibitem{tcmOriginal}
+Richard~M. Hueschen.
+\newblock Development of the {Transport Class Model} ({TCM}) aircraft simulation from a sub-scale {Generic Transport Model} ({GTM}) simulation.
+\newblock Technical report, NASA Langley Research Center, 2011.
+
+\bibitem{izerrouken:hal-02270296}
+Nassima Izerrouken, Xavier Thirioux, Marc Pantel, and Martin Strecker.
+\newblock {Certifying an Automated Code Generator Using Formal Tools: Preliminary experiments in the GeneAuto project.}
+\newblock In {\em {ERTS 2008 proceedings}}, 2008.
+
+\bibitem{DBLP:journals/pacmpl/0002JKD18}
+Ralf Jung, Jacques{-}Henri Jourdan, Robbert Krebbers, and Derek Dreyer.
+\newblock Rustbelt: securing the foundations of the rust programming language.
+\newblock {\em Proc. {ACM} Program. Lang.}, 2({POPL}):66:1--66:34, 2018.
+
+\bibitem{rustbelt_mutex_proof}
+Ralf Jung, Jacques-Henri Jourdan, Robbert Krebbers, and Derek Dreyer.
+\newblock Rustbelt: Semantic model of {Rust} mutex.
+\newblock \url{https://gitlab.mpi-sws.org/iris/lambda-rust/-/tree/popl18/theories/typing/lib/mutex}, 2018.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{DBLP:journals/cacm/JungJKD21}
+Ralf Jung, Jacques{-}Henri Jourdan, Robbert Krebbers, and Derek Dreyer.
+\newblock Safe systems programming in rust.
+\newblock {\em Commun. {ACM}}, 64(4):144--152, 2021.
+
+\bibitem{DBLP:conf/ifip/Kahn74}
+Gilles Kahn.
+\newblock The semantics of a simple language for parallel programming.
+\newblock In Jack~L. Rosenfeld, editor, {\em Information Processing, Proceedings of the 6th {IFIP} Congress 1974, Stockholm, Sweden, August 5-10, 1974}, pages 471--475. North-Holland, 1974.
+
+\bibitem{DBLP:journals/mscs/KozenS17}
+Dexter Kozen and Alexandra Silva.
+\newblock Practical coinduction.
+\newblock {\em Math. Struct. Comput. Sci.}, 27(7):1132--1152, 2017.
+
+\bibitem{DBLP:conf/icfp/Krishnaswami13}
+Neelakantan~R. Krishnaswami.
+\newblock Higher-order functional reactive programming without spacetime leaks.
+\newblock In {\em {ACM} {SIGPLAN} ICFP'13, Boston, MA, {USA} - September 25 - 27, 2013}, pages 221--232. {ACM}, 2013.
+
+\bibitem{DBLP:conf/cgo/LattnerA04}
+Chris Lattner and Vikram~S. Adve.
+\newblock {LLVM:} {A} compilation framework for lifelong program analysis {\&} transformation.
+\newblock In {\em {CGO}}, pages 75--88. {IEEE} Computer Society, 2004.
+
+\bibitem{DBLP:journals/tcad/LeeS98}
+Edward~A. Lee and Alberto~L. Sangiovanni{-}Vincentelli.
+\newblock A framework for comparing models of computation.
+\newblock {\em {IEEE} Trans. Comput. Aided Des. Integr. Circuits Syst.}, 17(12):1217--1229, 1998.
+
+\bibitem{DBLP:journals/tc/LeeM87}
+Edward~Ashford Lee and David~G. Messerschmitt.
+\newblock Static scheduling of synchronous data flow programs for digital signal processing.
+\newblock {\em {IEEE} Trans. Computers}, 36(1):24--35, 1987.
+
+\bibitem{journals/computer/LevesonT93}
+N.G. Leveson and C.S. Turner.
+\newblock An investigation of the therac-25 accidents.
+\newblock {\em Computer}, 26(7):18--41, 1993.
+
+\bibitem{DBLP:phd/ethos/Levy01}
+Paul~Blain Levy.
+\newblock {\em Call-by-push-value}.
+\newblock PhD thesis, Queen Mary University of London, {UK}, 2001.
+
+\bibitem{DBLP:conf/ppdp/MandelPP15}
+Louis Mandel, C{\'{e}}dric Pasteur, and Marc Pouzet.
+\newblock Reactiveml, ten years later.
+\newblock In {\em {PPDP}}, pages 6--17. {ACM}, 2015.
+
+\bibitem{simulink_codegen}
+{MathWorks}.
+\newblock Generate c code from simulink model.
+\newblock \url{https://mathworks.com/help/dsp/ug/generate-c-code-from-simulink-model.html}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{simulink_misra}
+{MathWorks}.
+\newblock Misra c and c++ compliance.
+\newblock \url{https://mathworks.com/solutions/misra-c.html}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{simulink}
+{MathWorks}.
+\newblock Simulink.
+\newblock \url{https://www.mathworks.com/products/simulink.html}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{DBLP:conf/pldi/MatsushitaDJD22}
+Yusuke Matsushita, Xavier Denis, Jacques{-}Henri Jourdan, and Derek Dreyer.
+\newblock Rusthornbelt: a semantic foundation for functional verification of rust programs with unsafe code.
+\newblock In {\em {PLDI}}, pages 841--856. {ACM}, 2022.
+
+\bibitem{MuellerCovariance2016}
+Mark~W Mueller, Markus Hehn, and Raffaello D'Andrea.
+\newblock Covariance correction step for kalman filtering with an attitude.
+\newblock {\em Journal of Guidance, Control, and Dynamics}, pages 1--7, 2016.
+
+\bibitem{DBLP:conf/icra/MullerHD15}
+Mark~W. M{\"{u}}ller, Michael Hamer, and Raffaello D'Andrea.
+\newblock Fusing ultra-wideband range measurements with accelerometers and rate gyroscopes for quadrocopter state estimation.
+\newblock In {\em {ICRA}}, pages 1730--1736. {IEEE}, 2015.
+
+\bibitem{DBLP:conf/haskell/NilssonCP02}
+Henrik Nilsson, Antony Courtney, and John Peterson.
+\newblock Functional reactive programming, continued.
+\newblock In {\em Haskell}, pages 51--64. {ACM}, 2002.
+
+\bibitem{DBLP:books/sp/NipkowPW02}
+Tobias Nipkow, Lawrence~C. Paulson, and Markus Wenzel.
+\newblock {\em Isabelle/HOL - {A} Proof Assistant for Higher-Order Logic}, volume 2283 of {\em Lecture Notes in Computer Science}.
+\newblock Springer, 2002.
+
+\bibitem{DBLP:journals/deds/PagettiFBCL11}
+Claire Pagetti, Julien Forget, Fr{\'{e}}d{\'{e}}ric Boniol, Mikel Cordovilla, and David Lesens.
+\newblock Multi-task implementation of multi-periodic synchronous programs.
+\newblock {\em Discret. Event Dyn. Syst.}, 21(3):307--338, 2011.
+
+\bibitem{pictorus}
+{Pictorus Inc.}
+\newblock {Pictorus}: A software development platform for control systems.
+\newblock \url{https://www.pictor.us/}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{DBLP:books/daglib/0023221}
+Dumitru Potop{-}Butucaru, Stephen~A. Edwards, and G{\'{e}}rard Berry.
+\newblock {\em Compiling Esterel}.
+\newblock Springer, 2007.
+
+\bibitem{reactivex}
+{ReactiveX Contributors}.
+\newblock {ReactiveX}: An {API} for asynchronous programming with observable streams.
+\newblock \url{https://reactivex.io/}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{rust_mutex_issue}
+rkruppe.
+\newblock Rust issue \#41622: {\texttt{MutexGuard<Cell<i32>>}} must not be {\texttt{sync}}.
+\newblock \url{https://github.com/rust-lang/rust/issues/41622}, 2017.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{async_std}
+{The async-std team}.
+\newblock async-std: An async version of the {Rust} standard library.
+\newblock \url{https://async.rs/}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{embassy}
+{The Embassy project contributors}.
+\newblock Embassy: The next-generation stack for embedded {Rust}.
+\newblock \url{https://embassy.dev/}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{framac}
+{The Frama-C project developers}.
+\newblock {Frama-C}: A framework for modular analysis of {C} code.
+\newblock \url{https://frama-c.com/}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{heptagon}
+{The Heptagon project developers}.
+\newblock {Heptagon}: A compiler for a {Lustre}-like synchronous dataflow language.
+\newblock \url{https://gitlab.inria.fr/synchrone/heptagon}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{lustrec}
+{The LustreC project developers}.
+\newblock {LustreC}: A public version of the {Lustre} compiler.
+\newblock \url{https://gitlab.isae-supaero.fr/lustrec/lustrec-public-version}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{perfetto}
+{The Perfetto Authors}.
+\newblock {Perfetto}: System profiling, app tracing and trace analysis.
+\newblock \url{https://perfetto.dev}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{petgraph_rust}
+{The petgraph contributors}.
+\newblock {petgraph}: A graph data structure library for {Rust}.
+\newblock \url{https://github.com/petgraph/petgraph}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{rocq}
+{The Rocq Development Team}.
+\newblock {Rocq}: The {Rocq} proof assistant.
+\newblock \url{https://rocq-prover.org/}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{futures}
+{The Rust Project Developers}.
+\newblock {futures}: Zero-cost asynchronous programming in {Rust}.
+\newblock \url{https://crates.io/crates/futures}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{loom}
+{The Tokio project developers}.
+\newblock Loom: A testing tool for concurrent {Rust} code.
+\newblock \url{https://github.com/tokio-rs/loom}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{tokio}
+{The Tokio project developers}.
+\newblock {Tokio}: An asynchronous runtime for the {Rust} programming language.
+\newblock \url{https://tokio.rs/}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{tracing_rust}
+{The Tokio Project Developers}.
+\newblock {tracing}: A framework for application-level tracing in {Rust}.
+\newblock \url{https://github.com/tokio-rs/tracing}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{velus}
+{The Velus project developers}.
+\newblock {Velus}: A formally-verified {Lustre} compiler.
+\newblock \url{https://velus.inria.fr/}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{quote_rust}
+David Tolnay.
+\newblock {quote}: Quasi-quoting for {Rust} procedural macros.
+\newblock \url{https://github.com/dtolnay/quote}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{syn_rust}
+David Tolnay.
+\newblock syn: A procedural macro library for parsing {Rust} source code.
+\newblock \url{https://github.com/dtolnay/syn}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{veecle}
+{Veecle GmbH}.
+\newblock {Veecle}: A framework for software-defined vehicle architectures.
+\newblock \url{https://veecle.io/}, 2025.
+\newblock Accessed: 2025-09-16.
+
+\bibitem{DBLP:conf/icfp/WanTH01}
+Zhanyong Wan, Walid Taha, and Paul Hudak.
+\newblock Real-time {FRP}.
+\newblock In {\em {ICFP}}, pages 146--156. {ACM}, 2001.
+
+\bibitem{DBLP:conf/padl/WanTH02}
+Zhanyong Wan, Walid Taha, and Paul Hudak.
+\newblock Event-driven {FRP}.
+\newblock In {\em {PADL}}, volume 2257 of {\em Lecture Notes in Computer Science}, pages 155--172. Springer, 2002.
+
+\end{thebibliography}

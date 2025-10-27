@@ -1,0 +1,75 @@
+\subsection{Formal Syntax of \GRSync}
+\label{sec:semantics:grsync:syntax}
+
+The syntax of \GRSync is summarized below and developed in the following paragraphs. Even if \GRust
+is strongly typed (as in the example from \Cref{sec:semantics:example}), types are omitted here for
+readability. Furthermore, the elements $\kwf{vars}\{x^+\}$ are added to the syntax of \kwf{match}
+and \kwf{when} to help the semantics, they represent the set of identifiers defined by those
+constructs, which is statically constructed at compile-time.
+
+\begin{center}
+    \begin{bnf}(comment = {:is:})
+        $f, x, y$     :is: Identifiers    :in: \idSet ;;
+        $c$           :is: Constants      :in: \textit{Const} ;;
+        $op$          :is: Operators      :in: \textit{Op} ;;
+        $\mathcal{C}$ :is: Components     ::=  \component{f}{x^+}{x^+}{eq^+}{x^+ = c^+} ;;
+        $eq$          :is: Equations      ::=  $x^+ = e$ // \match{e}{x^+}{(\branch{pat^+}{e_g}%
+            {eq^+})^+} | \when{x^+}{x_m^+ = c^+}{(\branch{epat^+}{e_g}{eq^+})^+} ;;
+        $e$           :is: Expressions    ::=  $c$ // $x$ // \last{x} // \emit{e} // $op(e^+)$
+        // $f(e^+)$ ;;
+        $pat$         :is: Patterns       ::=  $c$ // $x$ // $\_$ ;;
+        $epat$        :is: Event Patterns ::=  \detect{x}{y} // $e$ ;;
+    \end{bnf}
+\end{center}
+
+Components are functions over flows:
+\component{f}{x_i^+}{x_o^+}{eq^+}{x_m^+ = c^+}
+states the behavior of a component named $f$, that defines the values $(x_o^+)$ of the output flows
+depending on the values $(x_i^+)$ of the input flows at the same instant. Here, $x_m^+ = c^+$
+represents the initialization of memories, and $\{eq^+\}$ denotes the set of mutually recursive
+equations that define the values of the local and output flows.
+%
+For instance, components in the \aeb example~\Cref{fig:semantics:example:aeb:code} are \idf{compute\_braking}
+(\Crefrange{ex:line:brakesStart}{ex:line:brakesEnd}) and \idf{braking\_strat}
+(\Crefrange{ex:line:brakingStart}{ex:line:brakingEnd}).
+%
+The values of signals and events are defined by equations that are of three kinds, described below.
+\begin{description}
+    \item[Instantiation] ($x^+ = e$) states that the values of the identifiers $x^+$ are the ones of
+          the expression $e$, such as the equation \Cref{ex:line:braking_distance} defining the value of the
+          local identifier \idf{braking\_distance} and the one~\Cref{ex:line:braking} defining the value of the
+          output \idf{braking} in the example~\Cref{fig:semantics:example:aeb}.
+
+    \item[Match equations] (\match{e}{x^+}{(\branch{pat^+}{e_g}{eq^+})^+})
+          defines the values of the identifiers $x^+$ by selecting at every instant the equations
+          ($eq^+$) of the first branch whose patterns ($pat^+$) matches the value of the given
+          expression ($e$) and whose guard (\kwf{if} $e_g$) holds.
+          %
+          A pattern can be a constant ($c$), a local identifier definition ($x$), or a wild card
+          ($\_$).
+          %
+          Match equations ensure patterns are exhaustive, meaning a branch is always selected, and
+          therefore that the identifiers $x^+$ always have a value.
+
+    \item[When equations] (\when{x^+}{x^+=c^+}{(\branch{epat^+}{e_g}{eq^+})^+}) defines the values
+          of the identifiers $x^+$ by activating the first branch whose eventful patterns ($epat^+$)
+          are satisfied and whose guard (\kwf{if} $e_g$) holds.
+          %
+          An eventful pattern can be an event detection $y?$ combined with a binding local
+          identifier (\detect{x}{y}), or a rising edge ($e$).
+          %
+          The activated branch performs punctual updates of signals and emissions of events \via its
+          equations ($eq^+$). Undefined signals in the branch keep their previous values, motivating
+          their initialization (\init{x_m^+ = c^+}).
+          %
+          In the example~\Cref{fig:semantics:example:aeb:code}, the \kwf{when} equation (\Crefrange{ex:line:whenStart}%
+          {ex:line:whenEnd}) defines the signal \idf{b}: it is initialized to \idf{No} and
+          updated upon event occurrences of a pedestrian \idf{p} or a timeout \idf{t\_p}.
+\end{description}
+%
+Expressions in \GRSync can be constants ($c$), identifiers ($x$), signal memories ($\last{x}$),
+event emissions (\emit{e}), $n$-ary operations ($op(e^+)$), or component calls ($f(e^+)$).
+%
+For instance, in the example~\Cref{fig:semantics:example:aeb}, the expression
+\verb|if ... then ... else ...| (\Cref{ex:line:braking}) is considered as a $3$-ary operation using
+this formal syntax.

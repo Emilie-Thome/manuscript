@@ -1,0 +1,535 @@
+\subsection{Denotational Semantics of \GRSync}
+\label{sec:semantics:grsync:denot}
+
+\GRSync's semantics is based on prior work on dataflow and synchronous
+languages~\cite{DBLP:conf/ifip/Kahn74,DBLP:journals/tecs/BourkePP23}, associating to each identifier
+an infinite sequence of values, called \emph{stream}, representing the value the identifier will carry
+at every time step. Time steps are represented by a clock ($ck$), a stream of boolean that indicates
+the rhythm of other streams and therefore of their computations.
+
+\begin{table}[!ht]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}\hline
+        $v, \, \some{v}, \, \none \in \Val$                           & A value of any type; \ttf{some} and \none represent optional values.                                           \\\hline
+        $v_\bot \in \ValBot ::= v \, \vert \, \bot$                   & A value that may be present ($v$) or absent ($\bot$).                                                          \\\hline
+        $sty ::= ty \, \vert \, \mayB{ty}$                            & A type, where \kwf{?} indicates an event type.                                                                 \\\hline
+        $\tyCtx[x] = sty$                                             & A typing context \tyCtx mapping flow identifiers to their types.                                               \\\hline
+        $\G[f]$                                                       & A program context \G mapping component and service names to their definitions.                                 \\\hline
+        $s \in \Stream{\ValBot} ::= v_\bot \step s'$                  & A coinductive stream of bottom values.                                                                         \\\hline
+        $ck ::= (\true \, \vert \, \false \, \vert \, \bot) \step ck$ & A clock is a stream of booleans.                                                                               \\\hline
+        $[s^+]$                                                       & An implicitly finite list of streams $s^+$.                                                                    \\\hline
+        $op(s^+)$                                                     & An operation $op$ on values that is implicitly lifted to the streams $s^+$.                                    \\\hline
+        % \const{c}{ck}                                                   & A stream of constant $c$ on clock $ck$.                                                                                \\\hline
+        % \buffer{v}{s}                                                   & A buffer of stream $s$ initialized by value $v$.                                                                       \\\hline
+        % \whenB{s}{ck}                                                   & Filtered version of stream $s$ when values of $ck$ equal $b$.                                                          \\\hline
+        % \whenB{H}{ck}                                                   & Filtered version of streams in $H$ when values of $ck$ equal $b$.                                                      \\\hline
+        $H[x], \, H[\last{x}]$                                        & A stream context $H$ that maps identifiers to their stream.                                                    \\\hline
+        $s_1 \equiv s_2$                                              & Equivalence of the streams $s_1$ and $s_2$.                                                                    \\\hline
+        \compDenot{ck}{f}{s_i^+}{s_o^+}                               & The component $f$ is a function from the input streams $s_i^+$ to the output streams $s_o^+$, defined on $ck$. \\\hline
+        \eqDenot{H}{ck}{eq^+}                                         & The constraints of equations $eq^+$ are satisfied by the context $H$ on $ck$.                                  \\\hline
+        \exprDenot{H}{ck}{e}{s^+}                                     & The expression $e$ is associated with the streams $s^+$ on $ck$.                                               \\\hline
+        \patDenot{H}{ck}{\mathfoot{\guarded{pat^+ = s^+}{e_g}}}{ck'}  & The guarded patterns \guarded{pat^+}{e_g} matching the streams $s^+$ are associated with the clock $ck'$.      \\\hline
+        \epatDenot{H}{ck}{\guarded{epat^+}{e_g}}{ck'}                 & The guarded event patterns \guarded{epat^+}{e_g} are associated with the clock $ck'$.                          \\\hline
+    \end{tabularx}
+    \caption[Notations for the denotational semantics of \GRSync.]%
+    {Notations for the denotational semantics of \GRSync.}
+    \label{tab:semantics:grsync:denot:notations}
+\end{table}
+
+We now introduce the notations used in this section to define the denotational semantics. These
+notations, which build upon those introduced for the operational semantics in
+\Cref{sec:semantics:grsync:opsem}, are summarized in \Cref{tab:semantics:grsync:denot:notations}.
+
+A stream $s$ is an infinite sequence of bottom values, coinductively constructed as
+$v \step s'$ (\resp $\bot \step s'$) meaning the first value of $s$ is defined (\resp undefined) and
+its next values are those of $s'$. There is no base construction for stream, as they are infinite.
+The set of all possible streams of bottom values is denoted by \Stream{\ValBot}.
+%
+Clocks are streams of booleans, denoted by $ck$, that represent the logical instants of computation
+and its rate. We say that a clock \emph{ticks} when its value is \true. More information on clocks
+and streams are provided in \Cref{sec:semantics:streams:def,sec:semantics:streams:clock}.
+%
+Finite lists of streams are denoted by $[s^+]$.
+%
+Reasoning on streams is done using the coinduction principle~\cite{DBLP:journals/mscs/KozenS17}.
+This principle, further explained in \Cref{sec:semantics:streams:coinduction}, provides a framework
+for reasoning about infinite structures like streams. Specifically, it allows us to apply the
+\emph{coinduction hypothesis} only to streams that have \emph{progressed} and remain \emph{opaque}.
+%
+Operations on values are implicitly lifted to streams ($op(s^+)$), using the definition
+in \Cref{eq:semantics:grsync:denot:aux:lift}. This definition is proved to be well-defined using the
+coinduction principle: the construction of $op((v_\bot \step s)^+)$ calls the definition of
+$op(s^+)$ (the diminution from $(v_\bot \step s)^+$ to $s^+$ shows progress), where no assumptions
+are made about $s^+$ ($s^+$ are opaque), we invoke the coinduction hypothesis to establish that
+$op(s^+)$ is well-defined, we then prove that $op((v_\bot \step s)^+)$ is well-defined.
+\begin{align}
+    op((v \step s)^+)    & = op(v^+) \step op(s^+) &
+    op((\bot \step s)^+) & = \bot \step op(s^+)
+    \label{eq:semantics:grsync:denot:aux:lift}
+\end{align}
+%
+A context $H$ stores the streams associated with identifiers. For an identifier $x$, $H[x] = s$
+indicates that $x$ is associated with the stream $s$.
+%
+The equivalence of streams $s_1$ and $s_2$ is written $s_1 \equiv s_2$ and states their values are
+identical, as defined coinductively by the rule \nameref{eq:semantics:streams:equiv}
+(in \Cref{sec:semantics:streams:def}).
+
+Using those notations, we refine the objective of the denotational semantics of \GRSync. It
+defines how to construct the streams corresponding to each identifier and expression. It models
+equations as constraints on the stream context $H$, and represents causal components as
+stream functions.
+%
+The denotational view abstracts away the control flow of evaluation and focuses on the functional
+relationship between input and output streams.
+%
+The following paragraphs explain in details the mutually recursive rules that define this semantics.
+
+\paragraph{Components}
+
+In the denotational semantics, a causal component $f$ is treated as a function from input streams
+$s_i^+$ to output streams $s_o^+$, with both streams sharing a clock $ck$. The function is denoted
+by:
+\begin{equation*}
+    \compDenot{ck}{f}{s_i^+}{s_o^+}.
+\end{equation*}
+
+Following rule \nameref{rule:semantics:grsync:denot:comp}, the function maps $s_i^+$ to $s_o^+$ if
+there exists a local stream context $H$ associating inputs, outputs and memories to their respective
+streams and satisfying the constraints of the equations $eq^+$ of the component $f$.
+
+The determinism of the semantics under causality, stated in
+\Cref{thm:semantics:grsync:theorems:determinism}
+(in \Cref{sec:semantics:grsync:theorems:determinism}), guarantees that this context $H$ is unique
+for the identifiers of $f$. The uniqueness of $H$ ensures that $f$ is a well-defined function.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferDENOT
+            {
+                G[f] = \component{f}{x_i^+}{x_o^+}{eq^+}{x_m^+ = c^+} \\\\
+                \left( H[x_i] \equiv s_i \right)^+ \\
+                \left( H[x_o] \equiv s_o \right)^+ \\
+                \left( H[\last{x_m}] \equiv \buffer{c}{H[x_m]} \right)^+ \\\\
+                \eqDenot{H}{ck}{eq^+}
+            }
+            { \compDenot{ck}{f}{s_i^+}{s_o^+} }
+            {Comp}
+            \label{rule:semantics:grsync:denot:comp}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The \buffer{c}{s} function, coinductively defined in \Cref{eq:semantics:grsync:denot:aux:buffer},
+creates a stream whose first value is $c$ and the followings are the ones from $s$, shifted so that
+it is on the same clock as $s$.
+\begin{align}
+    \buffer{v_1}{\bot \step s} & = \bot \step \buffer{v_1}{s} &
+    \buffer{v_1}{v_2 \step s}  & = v_1 \step \buffer{v_2}{s}
+    \label{eq:semantics:grsync:denot:aux:buffer}
+\end{align}
+
+Let us illustrate the component semantics on the example \Cref{fig:semantics:example:aeb}.
+The denotational semantics of the component \idf{braking\_strat} corresponds to the stream function
+denoted by:
+\begin{equation*}
+    \idf{ck} \vdashSync \idf{braking\_strat}[\idf{p}, \idf{t\_p}, \idf{s}] \Downarrow [\idf{b}]
+\end{equation*}
+where \idf{ck} is the clock on which the streams \idf{p}, \idf{t\_p}, \idf{s}, and \idf{b} are
+defined. Events \idf{p} and \idf{t\_p} are streams of optional values, with occurrences wrapped in
+\ttf{some} and absences replaced by \none. Each stream is defined at discrete instants when the
+clock ticks, and the output stream \idf{b} results from evaluating the component equations at
+every clock tick.
+%
+For instance, based on the execution from \Cref{fig:semantics:example:aeb:chronogram} with the clock
+\idf{ck} constantly \true, the first values of these streams for the application in
+\Cref{ex:line:strat} are:%
+\setlength{\arraycolsep}{2pt}%
+\begin{equation*}
+    \begin{array}{rrlllllllllll}
+        \idf{p}    & = & \none & \step & \some{20.} & \step & \none & \step & \none & \step & \none     & \cdots \\
+        \idf{t\_p} & = & \none & \step & \none      & \step & \none & \step & \none & \step & \some{()} & \cdots \\
+        \idf{s}    & = & 32.   & \step & 32.        & \step & 30.   & \step & 25.   & \step & 25.       & \cdots \\
+        \idf{b}    & = & \No   & \step & \Soft      & \step & \Soft & \step & \Soft & \step & \No       & \cdots
+    \end{array}
+\end{equation*}%
+\setlength{\arraycolsep}{5pt}%
+
+\paragraph{Equations}
+
+The denotational semantics models equations ($eq^+$) as constraints for the stream context $H$ on
+the clock $ck$. The satisfaction of those constraints is denoted by:
+$$\eqDenot{H}{ck}{eq^+}.$$
+
+The rule \nameref{rule:semantics:grsync:denot:eqs} states that a stream context $H$
+satisfies the constraints of a block of equations ($eq^+$) if it satisfies the constraints on
+each individual equations ($eq$).
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferDENOTEq
+            { \left(\eqDenot{H}{ck}{eq}\right)^+ }
+            { \eqDenot{H}{ck}{eq^+} }
+            {Blck}
+            \label{rule:semantics:grsync:denot:eqs}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+For identifiers declarations ($x^+ = e$), the rule \nameref{rule:semantics:grsync:denot:eq:decl}
+states that the streams associated with the identifiers $x^+$ in the context $H$ are equivalent
+to those associated with the expression $e$.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferDENOTEq
+            {
+                \exprDenot{H}{ck}{e}{s_e^+} \\
+                \left(H[x] \equiv s_e\right)^+
+            }
+            { \eqDenot{H}{ck}{x^+ = e} }
+            {Decl}
+            \label{rule:semantics:grsync:denot:eq:decl}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The rule \nameref{rule:semantics:grsync:denot:eq:match} states that a stream context $H$ satisfies
+the constraints of a \kwf{match} equation (\match{e}{x^+}{(\branch{pat_k^+}{e_k}{eq_k^+})^+}) if it
+satisfies the constraints of each branch-equations $eq_k^+$ on the clock $ck'_k$. This clock
+corresponds to associated clock of the guarded patterns \guarded{pat_k^+ = s^+}{e_k}, filtered
+when the clocks of the prioritized patterns are \true.%
+\footnote{There can be multiple patterns that hold at the same time, like in usual pattern matching,
+    only the first successful pattern is taken.}
+%
+This corresponds to clock filtering and merging in \Lustre. The function \whenB{s}{ck} (\resp
+\whenB{H}{ck}), coinductively defined in \Crefrange{eq:semantics:grsync:denot:aux:when:stream1}
+{eq:semantics:grsync:denot:aux:when:stream2} (\resp in \Cref{eq:semantics:grsync:denot:aux:when:context}), is
+a \Lustre expression used to filter $s$ (\resp the streams in $H$) only when the value of clock $ck$
+is equal to $b$.
+%
+Pattern exhaustiveness ensures the total merge is on the global clock $ck$.
+\begin{align}
+    \whenB{\bot \step s}{\bot \step ck} & = \bot \step \whenB{s}{ck}
+    \label{eq:semantics:grsync:denot:aux:when:stream1}                       \\
+    \whenB{v \step s}{b' \step ck}      & = (
+    \ttf{if}   \, b' = b \,
+    \ttf{then} \, v      \,
+    \ttf{else} \, \bot
+    ) \step \whenB{s}{ck} \label{eq:semantics:grsync:denot:aux:when:stream2} \\
+    \whenB{H}{ck}[x]                    & = \whenB{H[x]}{ck}
+    \label{eq:semantics:grsync:denot:aux:when:context}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferDENOTEq
+            {
+                \exprDenot{H}{ck}{e}{s^+} \\
+                \left(\patDenot{H}{ck}{\guarded{pat_k^+ = s^+}{e_k}}{ck_k}\right)^+ \\
+                ck \equiv \kwf{\Vert}(ck_k)^+ \\
+                \left(ck'_k = ck_k \kwf{\&\&} (\kwf{\&\&}(\kwf{!}ck_i)^{i < k})\right)^+ \\
+                \left(H^\T_k = \whenT{H}{ck'_k} \right)^+\\
+                \left(\eqDenot{H^\T_k}{ck'_k}{eq_k^+}\right)^+
+            }
+            { \eqDenot{H}{ck}{\match{e}{x^+}{(\branch{pat_k^+}{e_k}{eq_k^+})^+}} }
+            {Mtch}
+            \label{rule:semantics:grsync:denot:eq:match}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+Similar to the \kwf{match} equations, the rule \nameref{rule:semantics:grsync:denot:eq:when} states
+that a stream context $H$ satisfies the constraints of a \kwf{when} equation
+\begin{equation*}
+    \when{x^+}{x_m^+ = c^+}{(\branch{epat_k^+}{e_k}{eq_k^+})^+}
+\end{equation*}
+if it satisfies the constraints of each
+branch-equations $eq_k^+$ on the clock $ck'_k$, the filtered version of the clock associated with the
+guarded event patterns \guarded{epat_k^+}{e_k}, with default values for identifiers not present in equations $eq_k^+$ or in case there is no
+event detected: previous values for signals ($x_m^+$ identifiers) and \none for events.
+This is why signals has to be initialized in \init{x_m^+ = c^+}.
+%
+The rule for the \kwf{when} equation relies on the function \const{c}{ck}, coinductively defined in
+\Crefrange{eq:semantics:grsync:denot:aux:const1}{eq:semantics:grsync:denot:aux:const3}, that builds
+a stream of constant values equal to $c$ on the clock $ck$.
+\begin{align}
+    \const{c}{\bot \step ck}   & = \bot \step \const{c}{ck} \label{eq:semantics:grsync:denot:aux:const1} \\
+    \const{c}{\true \step ck}  & = c \step \const{c}{ck}                                                 \\
+    \const{c}{\false \step ck} & = \bot \step \const{c}{ck} \label{eq:semantics:grsync:denot:aux:const3}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferDENOTEq
+            {
+                \left(\epatDenot{H}{ck}{\guarded{epat_k^+}{e_k}}{ck_k}\right)^+ \\\\
+                \left(ck'_k = ck_k \kwf{\&\&} (\kwf{\&\&}(\kwf{!}ck_i)^{i < k})\right)^+ \\\\
+                \left(H^\T_k = \whenT{H}{ck'_k} \right)^+\\
+                \left(\eqDenot{H^\T_k}{ck'_k}{eq_k^+}\right)^+ \\\\
+                \left(\forall x_s \in \{x_m^+\} \backslash \defs{eq_k^+}, H^\T_k[x_s] \equiv H^\T_k[\last{x_s}]\right)^+ \\\\
+                \left(\forall x_e \in \{x^+\} \backslash (\{x_m^+\} \cup \defs{eq_k^+}), H^\T_k[x_e] \equiv \const{\none}{ck'_k}\right)^+ \\\\
+                ck^\F = \whenF{ck}{\kwf{\Vert}(ck_k^+)} \\
+                H^\F = \whenF{H}{\kwf{\Vert}(ck_k^+)} \\\\
+                \forall x_s \in \{x_m^+\}, H^\F[x_s] \equiv H^\F[\last{x_s}] \\
+                \forall x_e \in \{x^+\} \backslash \{x_m^+\}, H^\F[x_e] \equiv \const{\none}{ck^\F} \\
+                \left(H[\last{x_m}] \equiv \buffer{c}{H[x_m]} \right)^+
+            }
+            { \eqDenot{H}{ck}{\when{x^+}{x_m^+ = c^+}{(\branch{epat_k^+}{e_k}{eq_k^+})^+}} }
+            {When}
+            \label{rule:semantics:grsync:denot:eq:when}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Expressions}
+
+A \GRSync expression $e$ is associated with the streams of its values $s^+$.
+With a stream context $H$, that associates streams to identifiers, on a clock $ck$, this association
+is denoted by:
+$$\exprDenot{H}{ck}{e}{s^+}.$$
+
+A constant expression $c$ follows the rule \nameref{rule:semantics:grsync:denot:e:const} and is
+associated with the stream on clock $ck$ constantly equal to $c$. It relies on the function
+\const{c}{ck}, defined in \Crefrange{eq:semantics:grsync:denot:aux:const1}{eq:semantics:%
+    grsync:denot:aux:const3}, that builds the stream.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferDENOTE
+            { }
+            { \exprDenot{H}{ck}{c}{\const{c}{ck}} }
+            {Cst}
+            \label{rule:semantics:grsync:denot:e:const}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+Identifiers ($x$) and memories (\last{x}) are associated with the streams stored in the context
+($H$) at their respective names ($H[x]$ and $H[\last{x}]$), as defined in rules \nameref{rule:%
+    semantics:grsync:denot:e:ident} and \nameref{rule:semantics:grsync:denot:e:last}.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferDENOTE
+            { }
+            { \exprDenot{H}{ck}{x}{H[x]} }
+            {ID}
+            \label{rule:semantics:grsync:denot:e:ident}
+
+            \inferDENOTE
+            { }
+            { \exprDenot{H}{ck}{\last{x}}{H[\last{x}]} }
+            {Last}
+            \label{rule:semantics:grsync:denot:e:last}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+An event emission (\emit{e}) is associated with the stream corresponding to the inner expression ($e$)
+wrapped by the option operator \ttf{some} lifted to streams, as defined by the rule \nameref{rule:%
+    semantics:grsync:denot:e:emit}.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferDENOTE
+            { \exprDenot{H}{ck}{e}{s} }
+            { \exprDenot{H}{ck}{\emit{e}}{\some{s}} }
+            {Emit}
+            \label{rule:semantics:grsync:denot:e:emit}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+Operations ($op(e^+)$) are lifted to operate on streams ($op(s^+)$) as defined by rule
+\nameref{rule:semantics:grsync:denot:e:op}. Component applications ($f(e^+)$) are associated with
+the output streams of the stream function representing the called component ($f$), based on the
+input streams corresponding to the input expressions ($e^+$), as specified by rule
+\nameref{rule:semantics:grsync:denot:e:app}.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferDENOTE
+            { \left(\exprDenot{H}{ck}{e}{s}\right)^+ }
+            { \exprDenot{H}{ck}{op(e^+)}{op(s^+)} }
+            {Op}
+            \label{rule:semantics:grsync:denot:e:op}
+
+            \inferDENOTE
+            {
+                \left(\exprDenot{H}{ck}{e}{s_i}\right)^+ \\\\
+                \compDenot{ck}{f}{s_i^+}{s_o^+}
+            }
+            { \exprDenot{H}{ck}{f(e^+)}{s_o^+} }
+            {App}
+            \label{rule:semantics:grsync:denot:e:app}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Patterns}
+
+Guarded patterns (\guarded{pat^+ = s^+}{e_g}), following the rule
+\nameref{rule:semantics:grsync:denot:pats}, are associated with a clock ($ck'$) representing match
+success for all pattern ($pat = s$), and the success of the guard~($e_g$). This association is
+denoted by:
+\begin{equation*}
+    \patDenot{H}{ck}{\guarded{pat^+ = s^+}{e_g}}{ck'}.
+\end{equation*}
+
+Rule \nameref{rule:semantics:grsync:denot:pats} defines the clock $ck_g$ for the guard's success in
+two parts. First, it corresponds to the stream associated with the guard $e_g$, conditioned on the
+clock $ck_p$ that represents the success of all pattern matches. Second, it corresponds to a stream
+of repeated \false values when the patterns do not match. The overall clock $ck_g$ is then a merge
+of these two definitions.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferDENOTPat
+            {
+                \left(\patDenot{H}{ck}{pat = s}{ck_1}\right)^+ \\
+                ck_p = \kwf{\&\&}(ck_1^+) \\\\
+                \exprDenot{\whenT{H}{ck_p}}{\whenT{ck}{ck_p}}{e_g}{\whenT{ck_g}{ck_p}} \\\\
+                \whenF{ck_g}{ck_p} = \const{\false}{\whenF{ck}{ck_p}}
+            }
+            { \patDenot{H}{ck}{\guarded{pat^+ = s^+}{e_g}}{ck_g} }
+            {Tple}
+            \label{rule:semantics:grsync:denot:pats}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+A constant pattern ($c = s$) follows rule \nameref{rule:semantics:grsync:denot:pat:const} and
+matches when the value of the matched stream ($s$) equals the constant ($c$). The notation $(\cdot
+    \kwf{==} c)$ indicates a single-argument function that substitutes the $\cdot$ with the value of
+the input.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferDENOTPat
+            { }
+            { \patDenot{H}{ck}{c = s}{(\cdot \kwf{==} c)(s)} }
+            {Cst}
+            \label{rule:semantics:grsync:denot:pat:const}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+An identifier pattern ($x = s$) always holds, so the associated clock is constantly \true on
+the base clock ($ck$), and the stream associated with the identifier in the context ($H[x]$) is
+equivalent to the matched stream $s$, as stated by the rule \nameref{rule:semantics:grsync:denot:%
+    pat:ident}.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferDENOTPat
+            { H[x] \equiv s }
+            { \patDenot{H}{ck}{x = s}{\const{\true}{ck}} }
+            {ID}
+            \label{rule:semantics:grsync:denot:pat:ident}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+A wild pattern ($\_ = s$) always holds, as depicted by the rule \nameref{rule:semantics:grsync:%
+    denot:pat:wild}.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferDENOTPat
+            { }
+            { \patDenot{H}{ck}{\_ = s}{\const{\true}{ck}} }
+            {Wild}
+            \label{rule:semantics:grsync:denot:pat:wild}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Event patterns}
+
+Guarded event patterns (\guarded{epat^+}{e_g}), following the rule \nameref{rule:semantics:grsync:%
+    denot:epats}, are associated with a clock ($ck'$) representing occurrence of all event pattern
+($epat$), and the success of the guard ($e_g$). This association is denoted by:
+$$\epatDenot{H}{ck}{\guarded{epat^+}{e_g}}{ck'}.$$
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferDENOTEPat
+            {
+                \left(\patDenot{H}{ck}{epat}{ck_1}\right)^+ \\
+                ck_p \equiv \kwf{\&\&}(ck_1^+) \\\\
+                \exprDenot{\whenT{H}{ck_p}}{\whenT{ck}{ck_p}}{e_g}{\whenT{ck_g}{ck_p}} \\\\
+                \whenF{ck_g}{ck_p} \equiv \const{\false}{\whenF{ck}{ck_p}}
+            }
+            { \epatDenot{H}{ck}{\guarded{epat^+}{e_g}}{ck_g} }
+            {Tple}
+            \label{rule:semantics:grsync:denot:epats}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+An event pattern (\detect{x}{y}) follows rule \nameref{rule:semantics:grsync:denot:epat:event}: it
+gets the clock ($ck'$) that is \true when the stream associated with the event in the context
+($H[y]$) has \ttf{some} values, and states that the stream associated with the receiving identifier
+in the context ($H[x]$) is equivalent to $H[y]$ when wrapped by \ttf{some} and filtered on $ck'$.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferDENOTEPat
+            {
+                ck' \equiv \isSome{H[y]} \\
+                \whenT{H[y]}{ck'} \equiv \whenT{\some{H[x]}}{ck'}
+            }
+            { \epatDenot{H}{ck}{\detect{x}{y}}{ck'} }
+            {Dtct}
+            \label{rule:semantics:grsync:denot:epat:event}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+A rising edge ($e$) is associated with a clock that is \true when the value of the stream
+associated with the boolean expression $e$ was \false in the previous time step and \true in
+the current one, as defined by rule \nameref{rule:semantics:grsync:denot:epat:edge}.
+It relies on the \buffer{c}{s} function, defined in \Cref{eq:semantics:grsync:denot:aux:%
+    buffer}, that creates a stream whose first value is $c$ and the followings are the ones from
+$s$, shifted so that it is on the same clock as $s$.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferDENOTEPat
+            {
+                \exprDenot{H}{ck}{e}{ck_1} \\
+                ck_2 \equiv ck_1 \kwf{\&\&} \kwf{!} \buffer{\false}{ck_1}
+            }
+            { \epatDenot{H}{ck}{e}{ck_2} }
+            {Edge}
+            \label{rule:semantics:grsync:denot:epat:edge}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Summary}
+This section detailed the denotational semantics for \GRSync, grounding it in the classical theory
+of synchronous languages. In this model, identifiers are interpreted as infinite streams of values,
+whose temporal evolution is governed by clocks. Components are defined as functions that transform
+input streams into output streams, while equations impose constraints on these streams. We
+demonstrated how constructs like \kwf{match} and \kwf{when} are handled through a clock calculus,
+using clock filtering and merging. This stream-based formalism provides a high-level, declarative
+view of program semantics, abstracting away from operational details to focus on the functional
+relationships between dataflows.

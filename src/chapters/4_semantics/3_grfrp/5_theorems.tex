@@ -1,0 +1,34 @@
+\subsection{Theorems for \GRFRP}
+\label{sec:semantics:grfrp:theorems}
+
+This section establishes the key semantic properties of \GRFRP services. While services operate in
+an asynchronous environment, their correctness and predictability depend on the well-behaved nature
+of the synchronous \GRSync components and the \GReact operations they orchestrate.
+
+As established in \Cref{sec:semantics:grsync:theorems}, the causality of all \GRSync components is a
+fundamental property, statically guaranteed by the compiler. This ensures that every component is
+both productive and deterministic. This guarantee is the essential precondition for analyzing the
+behavior of \GRFRP services.
+
+Building on this foundation, we now prove that \GRFRP services are themselves well-behaved. We
+establish the following key properties:
+\begin{enumerate}
+      \item \emph{Productivity}: A service always produces a valid state transition and a
+            set of outputs in response to any incoming value
+            (\Cref{thm:semantics:grfrp:theorems:productivity}).
+      \item \emph{Determinism}: The sequence of outputs from a service is uniquely
+            determined by the history of its inputs
+            (\Cref{thm:semantics:grfrp:theorems:determinism}).
+      \item \emph{Equivalence}: The push-based operational semantics is consistent with the
+            stream-based denotational semantics (\Cref{thm:semantics:grfrp:theorems:equivalence}).
+      \item \emph{Soundness}: The operational semantics is sound with respect to input
+            oversampling (\Cref{thm:semantics:grfrp:theorems:oversampling}).
+\end{enumerate}
+
+\input{./chapters/4_semantics/3_grfrp/5_theorems/1_productivity.tex}
+
+\input{./chapters/4_semantics/3_grfrp/5_theorems/2_determinism.tex}
+
+\input{./chapters/4_semantics/3_grfrp/5_theorems/3_equivalence.tex}
+
+\input{./chapters/4_semantics/3_grfrp/5_theorems/4_oversampling.tex}

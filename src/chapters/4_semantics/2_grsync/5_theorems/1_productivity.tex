@@ -1,0 +1,614 @@
+\subsubsection{Productivity}
+\label{sec:semantics:grsync:theorems:productivity}
+
+A productive component is one that is guaranteed to always produce an output for every possible
+input it receives. In other words, it never gets stuck or fails to respond. This assumes that no
+runtime errors occur, such as division by zero, overflows, or other exceptions.
+
+\newcommand{\obsCompName}[1]{\ensuremath{\llbracket #1 \rrbracket^\textit{obs}_{\tyCtx, G}}}
+\newcommand{\obsComp}[3]{\ensuremath{\obsCompName{#1}(#2, #3)}}
+
+To formalize the notion of productivity, we first define the observation function for a component
+$f$. The observation of a component $f$ at the $n^\text{th}$ time step on the input lists $L^+$ of
+length at least $n$, denoted by \obsComp{f}{L^+}{n} and defined by the rule
+\nameref{rule:semantics:grsync:theorems:productivity:observe:component}, is the execution of $n$
+steps of the operational semantics of $f$ on the successive inputs of $L^+$, starting from its
+initial state.
+
+\begin{mathpar}
+    \myinfer
+    { s_0 = \initsync{f} \\ \forall k \in [0, n-1],\,\compOpsem{s_k}{(L[k])^+}{f}{s_{k+1}}{v^+_k} }
+    { \obsComp{f}{L^+}{n} = v^+_{n-1} }
+    {{\tiny Observe}Comp}
+    \label{rule:semantics:grsync:theorems:productivity:observe:component}
+\end{mathpar}
+
+\Cref{thm:semantics:grsync:theorems:productivity} ensures that the operational semantics of a
+well-defined component (\ie well-typed and causal) is productive by guaranteeing that its
+observation function is well-defined.
+%
+The proof of this theorem proceeds by structural induction on the syntax of \GRSync. Due to the
+presence of component calls within expressions, the proof is mutually recursive with the proofs
+of the intermediate \Crefrange{lem:semantics:grsync:theorems:productivity:expression}
+{lem:semantics:grsync:theorems:productivity:equations}, which establish equivalent productivity
+properties for each syntactic construct of \GRSync (expressions, patterns, event patterns, and
+equations). This mutual recursion is well-founded because, while expressions can contain
+component calls, the components themselves are not mutually recursive, ensuring that the
+induction remains valid.
+
+\begin{lemma}[Productivity of \GRSync expression]
+    \label{lem:semantics:grsync:theorems:productivity:expression}
+    Let $e$ be a well-typed \GRSync expression, and let $\rho$ be an environment in which all
+    dependencies of $e$ (\ie all identifiers in \deps{e}) have well-defined, non-$\bot$ values.
+    %
+    Assuming that no runtime errors occur, then for all state $s$ corresponding to $e$, the step
+    function of $e$ in $\rho$ from $s$ produces a new compatible state $s'$ and a well-defined
+    value.
+\end{lemma}
+\begin{skippableproof}
+    We proceed by structural induction on expressions and rely on the induction hypothesis on
+    component calls (recursive calls are forbidden).
+
+    \paragraph{Constants}
+    Let $c$ be a constant, let $s$ be a compatible state for the expression, let $\rho$ be an
+    environment such that all dependencies of the expression are well-defined in $\rho$.
+    %
+    \Cref{eq:semantics:grsync:opsem:init:e:const} ensures that $s$ equals $()$.
+    %
+    The step function of the expression $c$ always produces the value $c$, as state by the rule
+    \nameref{rule:semantics:grsync:opsem:step:e:const}, and $c$ is well-defined. Moreover, the produced
+    state remains empty.
+
+    \paragraph{Identifiers}
+    Let $x$ be an identifier expression, let $s$ be a compatible state, let $\rho$ be an environment
+    such that all dependencies of the expression are well-defined in $\rho$.
+    %
+    \Cref{eq:semantics:grsync:opsem:init:e:ident} ensures that $s$ equals $()$.
+    %
+    \Cref{rule:semantics:grsync:causality:dependencies:deps:e:ident} implies that $x \in \deps{x}$,
+    so we know that $\rho[x]$ is assumed well-defined.
+    %
+    The rule \nameref{rule:semantics:grsync:opsem:step:e:ident} states that the value produced by
+    the step function of $x$ is equal to $\rho[x]$, which is well-defined. Moreover, the produced
+    state remains empty.
+
+    \paragraph{Last memories}
+    Let the expression \last{x} be the memory of the identifier $x$, let $s$ be a compatible state,
+    let $\rho$ be an environment such that all dependencies of the expression are well-defined in
+    $\rho$.
+    %
+    \Cref{eq:semantics:grsync:opsem:init:e:last} ensures that $s$ equals $()$.
+    %
+    \Cref{rule:semantics:grsync:causality:dependencies:deps:e:last} implies that $\last{x} \in
+        \deps{\last{x}}$, so we know that $\rho[\last{x}]$ is assumed well-defined.
+    %
+    The rule \nameref{rule:semantics:grsync:opsem:step:e:last} states that the value produced by the
+    step function of \last{x} is equal to $\rho[\last{x}]$, which is well-defined. Moreover, the produced
+    state remains empty.
+
+    \paragraph{Event emission}
+    Let \emit{e} be the event emission of the expression $e$, let $s$ be a compatible state for
+    the expression, let $\rho$ be an environment such that all dependencies of the expression are
+    well-defined in $\rho$.
+    %
+    \Cref{eq:semantics:grsync:opsem:init:e:emit} ensures that $s$ is compatible with $e$.
+    %
+    \Cref{rule:semantics:grsync:causality:dependencies:deps:e:emit} ensures that all the
+    dependencies of $e$ have well-defined values in the environment $\rho$.
+    %
+    By the induction hypothesis, evaluating $e$ with $\rho$ yields a well-defined value $v$ and a
+    compatible state $s'$. The rule \nameref{rule:semantics:grsync:opsem:step:e:emit:value} implies
+    that the value produced by the step function of \emit{e} is equal to \some{v}, which is
+    well-defined. Moreover, the state produced remains compatible.
+
+    \paragraph{Operations}
+    Let $op(e^+)$ be the application of the operation $op$ on the expressions $e^+$, let $s$ be a
+    compatible state for the expression, let $\rho$ be an environment such that all dependencies of
+    the expression are well-defined in $\rho$.
+    %
+    \Cref{eq:semantics:grsync:opsem:init:e:op} ensures there exists a list of states $s_e^+$
+    compatible with $e^+$ such that $s = (s_e^+)$.
+    %
+    \Cref{rule:semantics:grsync:causality:dependencies:deps:e:op} ensures that all the dependencies
+    of the expressions $e^+$ have well-defined values in $\rho$.
+    %
+    By the induction hypothesis, each $e$ evaluates to a well-defined value $v$ and a new compatible
+    state $s_e'$. The rule \nameref{rule:semantics:grsync:opsem:step:e:op:value} implies that the
+    value produced by the step function of $op(e^+)$ is equal to $op(v^+)$, which is well-defined if
+    and only if the expression $op(e^+)$ is well-typed and no runtime errors occur (which is the
+    case by hypothesis). Moreover, the state produced remains compatible.
+
+    \paragraph{Component calls}
+    Let $f(e^+)$ be the call of the component $f$ on the expressions $e^+$, let $s$ be a compatible
+    state for the expression, let $\rho$ be an environment such that all dependencies of the
+    expression are well-defined in $\rho$.
+    %
+    \Cref{eq:semantics:grsync:opsem:init:e:app} ensures there exists a list of states $s_e^+$
+    compatible with $e^+$ and a state $s_f$ compatible with $f$ such that $s = (s_f, s_e^+)$.
+    %
+    \Cref{rule:semantics:grsync:causality:dependencies:deps:e:app} ensures that all the dependencies
+    of the expressions $e^+$ have well-defined values in $\rho$.
+    %
+    By the induction hypothesis, each $e$ evaluates to a well-defined value $v_i$ and a new
+    compatible state $s_e'$. The induction on component calls ensures that the values produced by
+    the step function of $f$ with the well-defined values $v_i^+$ yields the well-defined outputs
+    $v_o^+$ and a compatible state $s_f'$. The rule
+    \nameref{rule:semantics:grsync:opsem:step:e:app:value}
+    implies that the values produced by the step function of $f(e^+)$ are equal to $v_o^+$, which
+    are well-defined. Moreover, the state produced remains compatible.
+
+    \setcounter{paragraph}{0}
+\end{skippableproof}
+
+\begin{lemma}[Productivity of \GRSync patterns]
+    \label{lem:semantics:grsync:theorems:productivity:patterns}
+    Let \guarded{pat^+ = v^+}{e_g} be a well-typed \GRSync pattern guarded by $e_g$ and matching the
+    values $v^+$, let $\rho$ be an environment such that all dependencies of $e_g$ except those from
+    the pattern $pat^+$ (\ie all identifiers in $\deps{e_g} \backslash \defs{pat^+}$) have
+    well-defined values in the environment $\rho$ (non-$\bot$).
+    %
+    Assuming that no runtime errors occur, the step function of \guarded{pat^+ = v^+}{e_g} in $\rho$
+    from an empty state produces another empty state, a boolean $b$, and an environment $\rho'$
+    where identifiers defined by $pat^+$ (\ie all identifiers in \defs{pat^+}) are well-defined if
+    $b$ is \true.
+\end{lemma}
+\begin{skippableproof}
+    We proceed by structural induction on patterns.
+
+    \paragraph{Guarded patterns}
+    Let \guarded{pat^+ = v^+}{e_g} be a guarded tuple of patterns, let $\rho$ be an environment such
+    that all dependencies of $e_g$ except those from the pattern $pat^+$ are well-defined $\rho$.
+    %
+    By induction hypothesis on patterns, the step function of each patterns $pat$ matching $v$
+    produces a boolean $b'$ and an environment $\rho^{\prime\prime}$ where identifiers defined by
+    $pat$ are well-defined if $b'$ is \true.
+    %
+    For all identifier $x \in \defs{pat^+}$, \Cref{rule:semantics:grsync:causality:defs:pat} implies
+    that there exists a pattern $pat$ such that $x \in \defs{pat}$.
+    %
+    Compatible states for $e_g$ are empty, \cf \Cref{eq:semantics:grsync:opsem:stateTy:pats}.
+    \Cref{lem:semantics:grsync:theorems:productivity:expression} ensures that the step function of $e_g$ on
+    the environment $\rho \ctxconcat \bigCtxconcat \rho^{\prime\prime+}$ produces a well-defined value
+    $b_g$, that is a boolean because the pattern is well-typed.
+    %
+    The step function of \guarded{pat^+ = v^+}{e_g}, as defined by
+    \nameref{rule:semantics:grsync:opsem:step:pats:bool}, produces a boolean
+    $b = b_g \bigwedge b^{\prime+}$ and an environment
+    $\rho' = \bigCtxconcat \rho^{\prime\prime+}$. Therefore, if $b$ is \true, all $b'$ are
+    \true and every identifier $x \in \defs{pat^+}$ has a well-defined value in $\rho'$.
+
+    \paragraph{Wildcards}
+    Let $\rho$ be an environment. The step function of $\_ = v$, as defined by \nameref{rule:%
+        semantics:grsync:opsem:step:pat:wild}, produces a boolean $b$ that is always \true, and
+    an environment $\rho'$ that is empty. \Cref{rule:semantics:grsync:causality:defs:pat:wild}
+    ensures that \defs{\_} is the empty set. Therefore all identifiers defined by $\_$ are
+    well-defined in $\rho'$.
+
+    \paragraph{Identifiers}
+    Let $\rho$ be an environment. The step function of $x = v$, as defined by \nameref{rule:%
+        semantics:grsync:opsem:step:pat:ident}, produces a boolean $b$ that is always \true,
+    and an environment $\rho' = [v / x]$. \Cref{rule:semantics:grsync:causality:defs:pat:ident}
+    ensures that $\defs{x} = \{ x \}$. Therefore all identifiers defined by $x$ are well-defined in
+    $\rho'$.
+
+    \paragraph{Constants}
+    Let $\rho$ be an environment. The step function of the constant pattern matching $c = v$, as
+    defined by \nameref{rule:semantics:grsync:opsem:step:pat:const}, produces a boolean $b$ that
+    equals $c \kwf{==} v$, and an environment $\rho'$ that is empty.
+    \Cref{rule:semantics:grsync:causality:defs:pat:const} ensures that \defs{c} is the empty set.
+    Therefore all identifiers defined by $c$ are well-defined in $\rho'$.
+
+    \setcounter{paragraph}{0}
+\end{skippableproof}
+
+\begin{lemma}[Productivity of \GRSync event patterns]
+    \label{lem:semantics:grsync:theorems:productivity:epat}
+    Let \guarded{epat^+}{e_g} be a well-typed \GRSync event pattern guarded by $e_g$, let $\rho$ be
+    an environment such that all dependencies of $epat^+$ and $e_g$, except those defined by
+    $epat^+$ (\ie all identifiers in $\deps{epat^+} \cup \deps{e_g} \backslash \defs{epat^+}$), have
+    well-defined values in the environment $\rho$ (non-$\bot$).
+    %
+    Assuming that no runtime errors occur, for all state $s$ corresponding to $epat^+$, the step
+    function of \guarded{epat^+}{e_g} in $\rho$ from $s$ produces a new compatible state $s'$, a
+    boolean $b$, and an environment $\rho'$ where identifiers defined by $epat^+$ (\ie all
+    identifiers in \defs{epat^+}) are well-defined if $b$ is \true.
+\end{lemma}
+\begin{skippableproof}
+    We proceed by structural induction on event patterns.
+
+    \paragraph{Guarded event patterns}
+    Let \guarded{epat^+}{e_g} be a guarded tuple of event patterns, let $s$ be a compatible state
+    for the pattern, let $\rho$ be an environment such that all dependencies of $epat^+$ and $e_g$,
+    except those from the pattern $epat^+$, are well-defined $\rho$.
+    %
+    \Cref{eq:semantics:grsync:opsem:stateTy:epats} ensures there exists a list of states $s_{epat}^+$
+    compatible with $epat^+$ such that $s = (s_{epat}^+)$.
+    %
+    \Cref{rule:semantics:grsync:causality:dependencies:deps:epat} ensures that all the dependencies
+    of each event pattern $epat$ have well-defined values in $\rho$. By induction hypothesis on
+    event patterns, the step function of each event patterns $epat$ produces a boolean $b'$, a new
+    compatible state $s'_{epat}$ and an environment $\rho^{\prime\prime}$ where identifiers defined
+    by $epat$ are well-defined if $b'$ is \true.
+    %
+    For all identifier $x \in \defs{epat^+}$, \Cref{rule:semantics:grsync:causality:defs:epat}
+    implies that there exists an event pattern $epat$ such that $x \in \defs{epat}$.
+    %
+    Compatible states for $e_g$ are empty, \cf \Cref{eq:semantics:grsync:opsem:stateTy:epats}.
+    \Cref{lem:semantics:grsync:theorems:productivity:expression} ensures that the step function of $e_g$ on
+    the environment $\rho \ctxconcat \bigCtxconcat \rho^{\prime\prime+}$ produces the well-defined value
+    $b_g$, that is a boolean because the event pattern is well-typed.
+    %
+    The step function of \guarded{epat^+}{e_g}, as defined by
+    \nameref{rule:semantics:grsync:opsem:step:epats:bool}, produces a boolean
+    $b = b_g \bigwedge b^{\prime+}$, a new compatible
+    state $s' = (s_{epat}^{\prime+})$ an environment $\rho' = \bigCtxconcat \rho^{\prime\prime+}$.
+    Therefore, if $b$ is \true, all $b'$ are \true and every identifier $x \in
+        \defs{epat^+}$ has a well-defined value in $\rho'$.
+
+    \paragraph{Event occurrences}
+    Let \detect{x}{y} be an event detection, let $s$ be a compatible state for the pattern, let
+    $\rho$ be an environment such that all dependencies of the event-pattern are well-defined $\rho$.
+    \Cref{rule:semantics:grsync:causality:dependencies:deps:epat:event} ensures that the value of
+    the event $y$ is well-defined in $\rho$.
+    %
+    \Cref{eq:semantics:grsync:opsem:init:epat:event} ensures $s$ is an empty state.
+    %
+    If $\rho[y] = \none$ (event $y$ is absent) then the step function of \detect{x}{y},
+    following the rule \nameref{rule:semantics:grsync:opsem:step:epat:event:none} produces a boolean
+    $b$ that is \false and an environment $\rho' = \bot_{(x)}$ that maps $x$ to $\bot$.
+    %
+    If $\rho[y] = \some{v}$ (event $y$ is present) then the step function of \detect{x}{y}
+    follows the rule \nameref{rule:semantics:grsync:opsem:step:epat:event:some} and produces an empty
+    state and a boolean $b$ that is \true along with an environment $\rho' = [v / x]$ in which
+    $x$ is well-defined.
+    %
+    \Cref{rule:semantics:grsync:causality:defs:epat:event} ensures that \defs{\detect{x}{y}} equals
+    $\{ x \}$. Therefore all identifiers defined by \detect{x}{y} are well-defined in $\rho'$.
+
+    \paragraph{Rising edges}
+    Let $e$ be a rising edge event pattern, let $s$ be a compatible state for the pattern, let
+    $\rho$ be an environment such that all dependencies of the event-pattern are well-defined $\rho$,
+    and let $s$ be a corresponding state.
+    %
+    \Cref{rule:semantics:grsync:causality:dependencies:deps:epat:edge} ensures that all dependencies
+    of the expression $e$ are well-defined in the environment $\rho$, and
+    \Cref{eq:semantics:grsync:opsem:init:epat:edge} ensures that there exist a well-defined
+    value $v_m$ and a state $s_e$ corresponding to $e$ such that $s = (v_m, s_e)$.
+    \Cref{lem:semantics:grsync:theorems:productivity:expression} ensures the step function of $e$ from $s_e$ produces a new compatible state
+    $s_e'$ and the well-defined value $b'$, that is a boolean because the event pattern is
+    well-typed. The step function of the rising edge $e$, as defined by
+    \nameref{rule:semantics:grsync:opsem:step:epat:edge:bool} produces the boolean
+    $b = !v_m \wedge b'$, the compatible state $s' = (b', s_e')$, and an environment $\rho'$ that is
+    empty. \Cref{rule:semantics:grsync:causality:defs:epat:edge} ensures that \defs{e} is the empty
+    set. Therefore all identifiers defined by the rising edge $e$ are well-defined in $\rho'$.
+
+    \setcounter{paragraph}{0}
+\end{skippableproof}
+
+\begin{lemma}[Productivity of \GRSync equations]
+    \label{lem:semantics:grsync:theorems:productivity:equations}
+    Let $eq^+$ be a well-typed and causal \GRSync equation, let $\rho$ be an environment such that
+    all dependencies of $eq^+$ (\ie \deps{eq^+}) have a well-defined value in $\rho$ (non-$\bot$).
+    %
+    Assuming that no runtime errors occur, for all state $s$ corresponding to $eq^+$, the step
+    function of $eq^+$ in $\rho$ from $s$ produces a new compatible state $s'$, and an environment
+    $\rho'$ where all identifiers defined by $eq^+$ (\ie \defs{eq^+}) are well-defined in $\rho'$.
+\end{lemma}
+\begin{remark}
+    In synchronous languages with explicit clocks, both clock calculus and causality analysis must
+    be satisfied for a set of equations to ensure that it is productive. In \GRSync, the constructs
+    \kwf{match} and \kwf{when} filter equations using pattern matching or event occurrences,
+    but maintain the global equation on the base clock. As a result, only causality needs to be
+    checked to establish the productivity of \GRSync equations.
+\end{remark}
+\begin{skippableproof}
+    The proof proceeds by structural induction on equations.
+
+    \paragraph{Overview of the proof strategy}
+    The difficult points of the proof are the following.
+    \begin{itemize}
+        \item For \kwf{match} equations, the exhaustiveness of patterns (verified by the \Rust
+              compiler on the generated code) ensures that a branch will always match.
+        \item For \kwf{when} equations, signals not updated in a branch retain their last value, and
+              events not emitted are set to \none, ensuring an available value for every identifier.
+        \item For blocks of mutually recursive equations, we use rank induction
+              (\Cref{def:semantics:grsync:causality:induction:rank}) to prove that
+              identifiers are iteratively defined following the rank (\Cref{def:semantics:grsync:causality:rank}).
+              The rank is the maximum length of the dependency sequence of an identifier in a causal
+              component.
+    \end{itemize}
+
+    \paragraph{Declarations}
+    Let $x^+ = e$ be a well-typed declaration, let $s$ be a compatible state for the equation, let
+    $\rho$ be an environment such that all dependencies of the equation are well-defined in $\rho$.
+    %
+    \Cref{rule:semantics:grsync:causality:dependencies:deps:eq:decl} ensures that all dependencies
+    of $e$ are well-defined in $\rho$, and \Cref{eq:semantics:grsync:opsem:init:eq:decl} ensures
+    that the state $s$ corresponds to $e$.
+    %
+    \Cref{lem:semantics:grsync:theorems:productivity:expression} ensures the step function of $e$ from $s$
+    produces the well-defined values $v^+$. The step function of $x^+ = e$, following the rule
+    \nameref{rule:semantics:grsync:opsem:step:eq:decl} produces an environment $\rho' =
+        [(v / x)^+]$, in which the values of $x^+$ are well-defined. \Cref{rule:semantics:%
+        grsync:causality:defs:eq:decl} ensures that \defs{x^+ = e} equals $\{ x^+ \}$. Therefore all
+    identifiers defined by $x^+ = e$ are well-defined in $\rho'$.
+
+    \paragraph{Match}
+    Let \match{e}{x^+}{(\branch{pat_i^+}{e_i}{eq_i^+})^+} be a well-typed \kwf{match} equation, let
+    $s$ be a compatible state for the equation, let $\rho$ be an environment such that all
+    dependencies of the equation are well-defined in $\rho$.
+    %
+    \Cref{rule:semantics:grsync:causality:dependencies:deps:eq:match} ensures that all dependencies
+    of $e$, $e_i^+$, and $(eq_i^+)^+$, except those defined by $pat_i^+$, are well-defined in
+    $\rho$, and \Cref{eq:semantics:grsync:opsem:stateTy:eq:match} ensures that there exist a state
+    $s_e$ corresponding to $e$ and a tuple of states $(s_i^+)$ each corresponding to the blocks of
+    equations $eq_i^+$ such that $s = (s_e, s_i^+)$.
+    %
+    \Cref{lem:semantics:grsync:theorems:productivity:expression} ensures the step function of $e$ from $s_e$
+    produces the well-defined values $v_e^+$.
+    %
+    \Cref{lem:semantics:grsync:theorems:productivity:patterns} ensures the step function of
+    \guarded{pat_i^+ = v_e^+}{e_i} in $\rho$ from an empty state produces another
+    empty state, a boolean $b_i$, and an environment $\rho_i$ where identifiers defined by $pat_i^+$
+    are well-defined if $b_i$ is \true.
+    %
+    Because patterns are exhaustive, \emph{there exists $k$ such that $b_k$ is \true} and for all
+    $i < k$, $b_i$ is \false. Consequently, $\rho_k$ defines the identifiers defined by
+    $pat_k^+$.
+    %
+    Therefore $\rho \ctxconcat \rho_k$ defines all dependencies of $eq_k^+$, so by induction hypothesis%
+    , its step function from state $s_k$ produces a new state $s'_k$ and an environment $\rho'$
+    where identifiers defined in $eq_k^+$ are well-defined.
+    %
+    The rule \nameref{rule:semantics:grsync:opsem:step:eq:match:value} states that
+    the step function of the \kwf{match} equation returns the environment $\rho'$. Because the
+    \kwf{match} equation is well-typed,
+    the rule \nameref{rule:grust:id_usage:grsync:eq:declared:match} on identifier usage ensures that
+    for all equations-branch $eq_i^+$ we have
+    $\defs{eq_i^+} = \{x^+\}$. Therefore all identifiers defined by the \kwf{match} equation are
+    well-defined in $\rho'$.
+
+    \paragraph{When}
+    Let \when{x^+}{x_m^+ = c^+}{(\branch{epat_i^+}{e_i}{eq_i^+})^+} be well-typed, let $s$ be a
+    compatible state for the equation, let $\rho$ be an environment such that all dependencies of
+    the equation are well-defined in $\rho$.
+    %
+    \Cref{rule:semantics:grsync:causality:dependencies:deps:eq:when} ensures that all dependencies
+    of $(epat_i^+)^+$, $e_i^+$, and $(eq_i^+)^+$, except those defined by $epat_i^+$ and the
+    memories $(\last{x_m})^+$, are well-defined in $\rho$, and \Cref{eq:semantics:grsync:opsem:init%
+        :eq:when} ensures that there exist a tuple of well-defined values $(v_m^+)$, a tuple of
+    states $(p_i^+)$ each corresponding to $epat_i^+$, and a tuple of states $(s_i^+)$ each
+    corresponding to the blocks of equations $eq_i^+$ such that $s = (v_m^+, p_i^+, s_i^+)$.
+    %
+    \Cref{lem:semantics:grsync:theorems:productivity:epat} ensures the step function of
+    \guarded{epat_i^+}{e_i} in $\rho$ from $p_i$ produces a new state $p_i'$, a boolean $b_i$, and
+    an environment $\rho_i$ where identifiers defined by $epat_i^+$ are well-defined if $b_i$ is
+    \true.
+
+    Suppose there exists $k$ such that $b_k$ is \true and for all $i < k$, $b_i$ is
+    \false. Consequently, $\rho_k$ defines the identifiers defined by $epat_k^+$.
+    %
+    The environment $\rho \ctxconcat \rho_k \ctxconcat \rho_m \ctxconcat \rho_k'$ defines all dependencies of
+    $eq_k^+$, with $\rho_m$ being the memory of signals defined by the \kwf{when} equation
+    ($[(v_m/\last{x_m})^+]$) and $\rho_k'$ being the environment of identifiers not defined by
+    $eq_k^+$ (signals get their \kwf{last} value and events are set to \none).
+    %
+    By induction hypothesis, the step function of $eq_k^+$ from state $s_k$ produces a new state
+    $s'_k$ and an environment $\rho'$ where identifiers defined in $eq_k^+$ are well-defined.
+    %
+    In that case, the rule \nameref{rule:semantics:grsync:opsem:step:eq:when:branch} is applied, and
+    the step function of the \kwf{when} equation returns the environment $\rho_m \ctxconcat \rho'_k
+        \ctxconcat \rho'$, where the identifiers defined by the \kwf{when} equation are well-defined
+    (\cf \Cref{rule:semantics:grsync:causality:defs:eq:when}).
+
+    In the case all $b_i^+$ are \false, the step function of the \kwf{when} equation follows
+    the rule \nameref{rule:semantics:grsync:opsem:step:eq:when:default} and returns the environment
+    $\rho'$ which gives default values to all identifiers defined by the \kwf{when} equation:
+    signals get their last value and events are set to \none.
+
+    \paragraph{Mutually recursive equations}
+
+    Let $n>0$, let $eq^+$ be a well-typed and causal set of $n$ equations, let $s$ be a compatible
+    state for the set of equations, and let $\rho$ be an environment such that all dependencies of
+    the equation are well-defined in $\rho$ (\ie for all external dependency $y \in \deps{eq^+}$ we
+    have $\rho[y] \in \Val$).
+
+    To proceed, we rely on the following definitions.
+    Let \Val denote the set of all possible values and \ValBot the set of bottom values.
+    Let $P_{\{x^+\}} = \prod_x \{x\}\times\ValBot$ be the set of environments over the finite set of
+    identifiers $\{x^+\}$.
+    The bottom environment $\botrho{\{x^+\}} \in P_{\{x^+\}}$ assigns $\bot$ to every identifier
+    in $\{x^+\}$.
+
+    \Cref{eq:semantics:grsync:opsem:stateTy:eqs} ensures that there exist a tuple of states
+    $(s^{\prime+})$, each corresponding to one equation of $eq^+$, such that $s = (s^{\prime+})$.
+
+    The step function of $eq^+$ uses the fix-point function that performs $n+1$ iterative step
+    transitions of each individual equation, as stated by the rule
+    \nameref{rule:semantics:grsync:opsem:step:eqs}.
+    %
+    From the state $s = (s^{\prime+})$ and an environment $\rho \in P_{(\deps{eq^+})}$, the fix-point
+    function produces the sequence of $n+1$ environments $(\rho_k^+)$ in $P_{\defs{eq^+}}$, and a
+    sequence of $n+1$ states $(s_k^{\prime+})$ defined as follows:
+    \begin{equation*}
+        \fixsem{k}{\rho}{s^{\prime+}}{eq^+}{s_k^{\prime+}}{\rho_k}
+    \end{equation*}
+    equivalently defined as follows:
+    \begin{align*}
+        \rho_0 & = \botrho{\defs{eq^+}} & \rho_{k+1} & = \bigCtxconcat (\rho'_{k+1})^+
+    \end{align*}
+    where each $\rho'_{k+1}$ is obtained by evaluating each $eq \in \{eq^+\}$ under the environment
+    $\rho \ctxconcat \rho_k$:
+    \begin{equation*}
+        \eqOpsem{\rho \ctxconcat \rho_k}{s'}{eq}{s'_k}{\rho'_{k+1}}.
+    \end{equation*}
+    Intuitively, $\rho_k$ captures value of the identifiers defined by $eq^+$ at the $k^\text{th}$
+    iteration. Beginning with the bottom empty environment where all identifiers are undefined (\ie
+    equal to $\bot$), it is incrementally extended as more identifiers are determined.
+
+    We want to prove that for all $x \in \defs{eq^+} \cup \deps{eq^+}$ the property \P{x} holds:
+    \begin{equation*}
+        \P{x}: \forall r \in \{0, \dots, n\}, \, \rank{eq^+}{x} \le r \Rightarrow (\rho \ctxconcat \rho_{r+1})[x] \in \Val.
+    \end{equation*}
+
+    We reason by rank induction (\Cref{def:semantics:grsync:causality:induction:rank}): we prove the
+    property incrementally for identifiers following their rank.
+    \begin{itemize}
+        \item \textit{Base case:} Let $x \in \defs{eq^+} \cup \deps{eq^+}$ such that
+              $\rank{eq^+}{x} = 0$. \Cref{def:semantics:grsync:causality:rank}
+              gives the formal definition of the rank, it ensures that $x$ has no dependency in
+              $eq^+$ (because the set
+              $D_x = \{y \in \defs{eq^+} \cup \deps{eq^+} \mid \depOrd{eq^+}{x}{y}\}$ is empty).
+
+              Let $r \in \{0, \dots, n\}$.
+              We want to prove that, because it has no dependencies, $x$ is defined in $\rho \ctxconcat \rho_{r+1}$
+              (\ie $(\rho \ctxconcat \rho_{r+1})[x] \in \Val$).
+
+              If $x \notin \defs{eq^+}$ then $x$ is in \deps{eq^+}, which ensures that
+              $\rho[x] \in \Val$, and thus $(\rho \ctxconcat \rho_{r+1})[x] \in \Val$.
+
+              If $x \in \defs{eq^+}$, we want to prove that the equation defining $x$ has no dependencies.
+              Let us examine the equation $eq_x$ that defines $x$ (that exists thanks ot
+              \Cref{rule:semantics:grsync:causality:defs:eq}). We want to prove that \deps{eq_x} is
+              an empty set.
+              \begin{itemize}
+                  \item Suppose $eq_x$ is a declaration $z^+ = e$.
+                        \Cref{rule:semantics:grsync:causality:defs:eq:decl} ensures $x$ is in
+                        $\{z^+\}$.
+                        \Cref{rule:semantics:grsync:causality:dependencies:rel:eq:decl} states that
+                        $D_x = \deps{e}$, which implies that \deps{e} is empty.
+                        \Cref{rule:semantics:grsync:causality:dependencies:deps:eq:decl} ensures that
+                        \deps{eq_x} is empty.
+                  \item Suppose $eq_x$ is a \kwf{match} equation:
+                        $$\match{e}{z^+}{(\branch{pat_i^+}{e_g}{eq_i^+})^+}.$$
+                        \Cref{rule:semantics:grsync:causality:defs:eq:match} ensures $x$ is in
+                        $\{z^+\}$. \Cref{rule:semantics:grsync:causality:dependencies:rel:eq:match}
+                        states that $D_x = \deps{e} \cup \bigcup (\deps{e_i} \cup \deps{eq_i^+})^+$
+                        (the renaming functions $\sigma^{x^+}_{pat_i^+}$ induce relation bridges between
+                        the $z^+$ and the dependencies from the branch-equations $eq_i^+$), includes
+                        the dependencies of the \kwf{match} equation (\Cref{rule:semantics:grsync:%
+                            causality:dependencies:deps:eq:match}), which is then empty.
+                  \item Suppose $eq_x$ is a \kwf{when} equation:
+                        $$\when{z^+}{x_m^+ = c^+}{(\branch{epat_i^+}{e_g}{eq_i^+})^+}.$$
+                        \Cref{rule:semantics:grsync:causality:defs:eq:when} ensures $x$ is in
+                        $\{z^+, \last{x_m}^+\}$. \Cref{rule:semantics:grsync:causality:dependencies%
+                            :rel:eq:when} states that $D_x$ equals $\bigcup (\deps{epat_i} \cup
+                            \deps{e_i} \cup \deps{eq_i^+})^+$ (the renaming functions
+                        $\sigma^{x^+}_{epat_i^+}$ induce relation bridges between the $z^+$ and the
+                        dependencies from the branch-equations $eq_i^+$), includes the dependencies
+                        of the \kwf{when} equation (\Cref{rule:semantics:grsync:causality:%
+                            dependencies:deps:eq:when}), which is then empty.
+              \end{itemize}
+              Therefore, \deps{eq_x} is an empty set.
+
+              The structural induction hypothesis on equations gives:
+              \begin{equation*}
+                  \eqOpsem{\rho \ctxconcat \rho_r}{s_x}{eq_x}{s'_x}{\rho'_{r+1}},
+              \end{equation*}
+              with $\rho'_{r+1}[x] \in \Val$.
+              %
+              Because $(\rho \ctxconcat \rho_{r+1})[x]$ equals $\rho_{r+1}[x]$ which equal
+              $(\bigCtxconcat (\rho'_{r+1})^+)[x]$ and finally equals $\rho'_{r+1}[x]$, we can
+              state that $(\rho \ctxconcat \rho_{r+1})[x] \in \Val$ and that \P{x} holds.
+
+        \item \textit{Inductive step:} Let $k \in \N$.
+              We assume \P{y} for all $y \in \defs{eq^+} \cup \deps{eq^+}$ such that $\rank{eq^+}{y} \le k$.
+              Let $x \in \defs{eq^+} \cup \deps{eq^+}$ such that $\rank{eq^+}{x} = k+1$.
+              Let $r \in \{0, \dots, n\}$ such that $k+1 \le r$.
+
+              For all $y \in \defs{eq^+} \cup \deps{eq^+}$ such that $x$ depends on $y$ (\ie \depOrd{eq^+}{x}{y}),
+              \Cref{lem:semantics:grsync:causality:rank:decrease}
+              states that $\rank{eq^+}{x} > \rank{eq^+}{y}$, which implies that $\rank{eq^+}{y} \le k$.
+              By rank induction hypothesis, for all $y \in \defs{eq^+} \cup \deps{eq^+}$ such that
+              \depOrd{eq^+}{x}{y}, \P{y} holds (\ie for all $r' \in \{0, \dots, n\}$ such that
+              $\rank{eq^+}{y} \le r'$ we have $(\rho \ctxconcat \rho_{r'+1})[y] \in \Val$).
+              Because $\rank{eq^+}{y} \le k \le r-1$, then for all $y \in \defs{eq^+} \cup \deps{eq^+}$ such that
+              \depOrd{eq^+}{x}{y} we have $(\rho \ctxconcat \rho_r)[y] \in \Val$.
+
+              The equation $eq_x$ that defines $x$ only depends on identifiers that are well-defined
+              in $\rho \ctxconcat \rho_r$. The induction hypothesis on equations gives:
+              \begin{equation*}
+                  \eqOpsem{\rho \ctxconcat \rho_r}{s_x}{eq_x}{s'_x}{\rho'_{r+1}},
+              \end{equation*}
+              with  $\rho'_{r+1}[x] \in \Val$.
+              %
+              Because $(\rho \ctxconcat \rho_{r+1})[x]$ equals $\rho_{r+1}[x]$ which equal
+              $(\bigCtxconcat (\rho'_{r+1})^+)[x]$ and finally equals $\rho'_{r+1}[x]$, we can
+              state that $(\rho \ctxconcat \rho_{r+1})[x] \in \Val$ and that \P{x} holds.
+    \end{itemize}
+
+    \Cref{lem:semantics:grsync:causality:rank:bounded} ensures that for all $x \in \defs{eq^+}$,
+    we have $\rank{eq^+}{x} \le n$, where $n$ is the number of equations. Then, all
+    $x \in \defs{eq^+}$ ensures $\rho_{n+1}[x] \in \Val$,
+    \ie all identifiers of $f$ are defined after the $(n+1)^\text{th}$ step iteration, in particular
+    all $x_m$ and $x_o$.
+
+    \paragraph{Other approaches}
+    We give a brief overview of how other synchronous languages address the productivity.
+
+    \begin{description}
+        \item[Fixed-point approach]
+              The operational semantics of a set of equations is usually represented as a fix-point
+              application of the step functions of each individual equation.
+              A common method for proving its productivity involves applying Kleene fixed-point theorem, as
+              shown in prior work~\cite{DBLP:journals/tecs/ColacoMPP23}.
+              The causality of the set of equations is used to ensure a fix-point where all identifier are
+              non-bottom.
+
+        \item[Causal induction]
+              Causal induction~\cite{bourke:hal-03936656} is another proof technique used to reason about
+              properties of mutually recursive equations by following the causality (dependency) order
+              directly. This approach is very similar to rank induction.
+
+        \item[Fixed scheduling]
+              Another approach is to use the causality of the set of equations to derive a scheduling,
+              an order in which equations can be called in the operational semantics to produce their values.
+              This method is discussed in \Cref{rmk:semantics:grsync:opsem:step:eqs}.
+              We want the operational semantics to describe the execution of the high-level program,
+              while a scheduling would describe the execution of the compiled code.
+    \end{description}
+
+    \setcounter{paragraph}{0}
+\end{skippableproof}
+
+\begin{theorem}[Productivity]
+    \label{thm:semantics:grsync:theorems:productivity}
+    Let $f$ be a well-typed and causal component in a program \G with a typing context \tyCtx, and
+    assuming no mutually recursive components exist. Assuming that no runtime errors occur, for all
+    input lists $L^+$ of length $n \in \Nstar$, \obsComp{f}{L^+}{n} is well-defined.
+\end{theorem}
+\begin{skippableproof}
+    Let \component{f}{x^+_i}{x^+_o}{eq^+}{x^+_m = c^+} be a well-typed and causal component in a
+    program \G and a typing context \tyCtx, let $(v_m^+, s^+)$ be a compatible state (defined
+    in \Cref{eq:semantics:grsync:opsem:stateTy:comp}), and let $v_i^+$ be input values.
+
+    Because $f$ is well-typed, the dependencies of its internal equations $eq^+$ are included in
+    the set of inputs and memories $\{x_i^+, \last{x_m}^+\}$. Therefore, the causality of $f$ allows
+    to apply \Cref{lem:semantics:grsync:theorems:productivity:equations}, ensuring that the step function of
+    $eq^+$, from a state $(s^+)$ and a context $[(v_i/x_i)^+, (v_m/\last{x_m})^+]$ produces a new
+    compatible state $(s^{\prime+})$ and an environment $\rho$ where all identifiers from
+    \defs{eq^+} are well-defined.
+
+    And because $f$ is well-typed, all $x_o^+$ and $x_m^+$ are in \defs{eq^+}, and thus are
+    well-defined in $\rho$. The rule \nameref{rule:semantics:grsync:opsem:step:comp} then states
+    that the output values of the step function of $f$ are well-defined and the next state is
+    compatible.
+
+    \setcounter{paragraph}{0}
+\end{skippableproof}
+
+\paragraph{Summary}
+In summary, this section established the productivity of well-formed \GRSync components. The central
+result, presented in \Cref{thm:semantics:grsync:theorems:productivity}, guarantees that any
+well-typed and causal component produces a well-defined output for any sequence of inputs, assuming
+no runtime errors.
+%
+This property was demonstrated through a proof by structural induction on the language constructs.
+%
+The key challenge, posed by mutually recursive equations, was addressed using rank induction
+(\Cref{def:semantics:grsync:causality:induction:rank}), which ensures that all identifiers are
+computed in a finite number of steps by following dataflow dependencies.
+%
+This formal guarantee of productivity is a cornerstone of the language design, ensuring that every
+component behaves as a total function over input streams and will not deadlock or halt unexpectedly
+during its execution.

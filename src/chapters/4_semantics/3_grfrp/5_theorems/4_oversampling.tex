@@ -1,0 +1,1494 @@
+\subsubsection{Oversampling}
+\label{sec:semantics:grfrp:theorems:oversampling}
+
+The execution model of \GRust presents a potential conflict between its two sub-languages. \GRFRP
+services adopt a \emph{push-based} strategy, where computations are triggered by changes to imported
+flows. In contrast, \GRSync components are compiled into \emph{pull-based} state machines that
+conceptually expect to be evaluated at every logical \emph{step}. When a component is used within a
+service, it is executed only when its inputs change. This mismatch could lead to incorrect behavior
+if a component's state depends on the passage of time or internal feedback loops rather than on its
+inputs.
+
+To resolve this conflict, we introduced the reactive type system
+(\Cref{sec:semantics:grsync:react_typing,sec:semantics:grfrp:react_typing}). This system enforces
+that any component used within a service must be \emph{reactive}.
+\Cref{thm:semantics:grsync:theorems:oversampling} states that a reactive component is one whose
+internal state and outputs change only in response to changes in its \emph{discrete} inputs---those
+whose values are determined by service imports and explicit timing constraints. This property
+guarantees that an event-driven execution is sound.
+
+The oversampling theorem (\Cref{thm:semantics:grfrp:theorems:oversampling}) formalizes this
+guarantee at the service level. It states that evaluating a service at moments other than when its
+imports change does not alter the values of its exported flows. Such additional evaluations are
+referred to as \emph{oversampling}. This theorem provides the formal justification for shifting from
+a traditional periodic execution model to a more efficient event-driven one without risking semantic
+inconsistencies.
+
+We model oversampling differently in our two semantic frameworks. In the denotational semantics,
+oversampling corresponds to adding extra timestamps to the clock \tck, representing additional
+evaluation instants. In the operational semantics, it is modeled by the arrival of an input message
+from a flow not imported by the service. This technique simulates an external trigger for
+computation that carries no new data, allowing us to observe the effect of an extra evaluation step
+in isolation. The timestamp of this message propagates through the service \via the \timeop flow.
+
+The proof of the oversampling theorem relies on \Cref{lem:semantics:grfrp:theorems:oversampling:op}
+for flow operations. This lemma states that for any reactive operation, inserting an oversampling
+step between two regular computation steps does not affect the final result. However, the 
+operational semantics only makes flow \emph{updates} visible, where a $\bot$ value signifies no 
+change. To formally reason about the outcome of a computation, we must first define the
+\emph{current value} of a flow, which is the last non-$\bot$ value in its history of updates.
+
+\newcommand{\CurrVal}[2]{\ensuremath{\smf{curr_{#1}}\left(#2\right)}}
+We introduce the \smf{curr} function, which computes the current value of a flow from
+the complete, unbounded list of its past values. This historical interpretation is distinct from the
+memory-bounded \smf{into\_val} function of the operational semantics, which computes the next
+state based only on the current state and a single update. The \smf{curr} function thus provides the
+history-based view required for our proofs.
+
+\begin{definition}[Current Value]
+    \label{def:semantics:grfrp:theorems:oversampling:CurrVal}
+    Consider a list $l$ of bottom values, representing the historical updates of a flow with type
+    $sty$. The current value of the flow, denoted \CurrVal{sty}{l}, is defined recursively:
+    \begin{align}
+        \CurrVal{sty}{\emptylist}            & = v_d \label{eq:semantics:grfrp:theorems:oversampling:CurrVal:nil}                                      \\
+        \CurrVal{sty}{l \lstconcat [v_\bot]} & = \intoVal{sty}{\CurrVal{sty}{l}}{v_\bot} \label{eq:semantics:grfrp:theorems:oversampling:CurrVal:cons}
+    \end{align}
+    with $v_d$ denoting a default value.
+
+    For a signal of type $ty$ and a list of bottom values $l$, a bottom value $v_\bot$ represents an
+    \emph{additional update} \iff $v_\bot \neq \bot$ implies $\CurrVal{ty}{l} \neq v_\bot$. We say
+    that $l$ is \emph{a list of additional updates} if, for any element $v_\bot$ in $l$, $v_\bot$ is
+    an additional update with respect to the sub-list of elements in $l$ that precede $v_\bot$.
+\end{definition}
+
+\begin{remark}[Propagation of Additional Updates]
+    The property of being an \emph{additional update} is preserved across reactive flow
+    computations. We observe that if all dependencies to a flow operation are additional updates,
+    its resulting values will also be additional updates.
+    %
+    This observation extends to the service level: if the imported flow values are additional
+    updates, then all intermediate flows computed within the service will also consist of additional
+    updates.
+    %
+    While a formal proof is not provided in this manuscript, we conjecture that these properties can
+    be established by structural induction over the definitions of flow operations and service
+    statements.
+\end{remark}
+
+\begin{lemma}[Current value equalities]
+    \label{lem:semantics:grfrp:theorems:oversampling:CurrVal:last}
+    For all flow of type $sty$, all list bottom of values $l$, and all bottom values $v_{1\bot}$ and
+    $v_{2\bot}$ representing additional updates of $l$, we have:
+    \begin{equation*}
+        \CurrVal{sty}{l \lstconcat [v_{1\bot}]} = \CurrVal{sty}{l \lstconcat [v_{2\bot}]}
+        \Leftrightarrow
+        v_{1\bot} = v_{2\bot}.
+    \end{equation*}
+\end{lemma}
+\begin{skippableproof}
+    We establish this equivalence by proving implication in both directions.
+
+    \noindent\textit{Case $\Leftarrow$.}
+    %
+    Let a flow of type $sty$, $l$ be a list bottom of values, and $v_{1\bot}$ and $v_{2\bot}$ be two
+    bottom values representing additional updates of $l$ such that $v_{1\bot} = v_{2\bot}$. The
+    function \CurrVal{sty}{\_} is deterministic, so that we have
+    $\CurrVal{sty}{l \lstconcat [v_{1\bot}]} = \CurrVal{sty}{l \lstconcat [v_{2\bot}]}$.
+
+    \noindent\textit{Case $\Rightarrow$.}
+    %
+    Let a flow of type $sty$, $l$ be a list bottom of values, and $v_{1\bot}$ and $v_{2\bot}$ be two
+    bottom values representing additional updates of $l$ such that:
+    \begin{equation*}
+        \CurrVal{sty}{l \lstconcat [v_{1\bot}]} = \CurrVal{sty}{l \lstconcat [v_{2\bot}]}.
+    \end{equation*}
+
+    \begin{itemize}
+        \item \textit{If there exist a type $ty$ such that $sty = \mayB{ty}$
+                  (\ie it is an event type):}
+
+              \Cref{eq:semantics:grfrp:theorems:oversampling:CurrVal:cons,%
+                  rule:semantics:grfrp:opsem:aux:intoVal:event} ensure that for
+              $i \in \{1,2\}$ we have:
+              \begin{align*}
+                  \CurrVal{\mayB{ty}}{l \lstconcat [v_{i\bot}]} & = \intoVal{\mayB{ty}}{\CurrVal{\mayB{ty}}{l}}{v_{i\bot}}                                     \\
+                                                                & = \ttf{match} \, v_{i\bot} \, \{ \, v \rightarrow \some{v}, \, \bot \rightarrow \none \, \}.
+              \end{align*}
+
+              Then, if \CurrVal{\mayB{ty}}{l \lstconcat [v_{i\bot}]} are equal to \none, then both
+              $v_{1\bot}$ and $v_{2\bot}$ are equal to $\bot$.
+
+              Conversely, if there exist a value $v$ such that
+              \CurrVal{\mayB{ty}}{l \lstconcat [v_{i\bot}]} are equal to \some{v}, then both
+              $v_{1\bot}$ and $v_{2\bot}$ are equal to $v$.
+
+        \item \textit{If there exist a type $ty$ such that $sty = ty$ (\ie it is a signal type):}
+
+              \Cref{eq:semantics:grfrp:theorems:oversampling:CurrVal:cons,%
+                  rule:semantics:grfrp:opsem:aux:intoVal:signal} ensure that for
+              $i \in \{1,2\}$ we have:
+              \begin{align*}
+                  \CurrVal{ty}{l \lstconcat [v_{i\bot}]} & = \intoVal{ty}{\CurrVal{ty}{l}}{v_{i\bot}}                                                      \\
+                                                         & = \ttf{match} \, v_{i\bot} \, \{ \, v \rightarrow v, \, \bot \rightarrow \CurrVal{ty}{l} \, \}.
+              \end{align*}
+
+              Then, if \CurrVal{ty}{l \lstconcat [v_{i\bot}]} are equal to \CurrVal{ty}{l}, because
+              $\CurrVal{ty}{l} \neq v_{i\bot}$, then both $v_{1\bot}$ and $v_{2\bot}$ are equal to
+              $\bot$.
+
+              Conversely, if there exist a value $v$ such that \CurrVal{ty}{l \lstconcat [v_{i\bot}]}
+              are equal to $v$, because $\CurrVal{ty}{l} \neq v_{i\bot}$, then both $v_{1\bot}$ and
+              $v_{2\bot}$ are equal to $v$.
+    \end{itemize}
+
+    In all cases, we have $v_{1\bot} = v_{2\bot}$.
+\end{skippableproof}
+
+With the \smf{curr} function, we can precisely formulate the guarantee provided by the oversampling
+\Cref{lem:semantics:grfrp:theorems:oversampling:op} for flow operations. Consider a simulation of
+$N$ steps. If we perform an oversampling evaluation just after the $n^\text{th}$ step
+(with $n < N$), the system enters an intermediate state. The lemma guarantees that this intermediate
+step has no lasting effect. Subsequently, if the $(n+1)^\text{th}$ step is performed from this state
+using the original inputs, the resulting current value of any flow is identical to what it would
+have been in the non-oversampled simulation.
+
+\begin{lemma}[Oversampling of \GRFRP reactive flow operations]
+    \label{lem:semantics:grfrp:theorems:oversampling:op}
+    Let $\sigma$ be a flow operation in a program \G and typing context \tyCtx, let $sty^+$ be
+    types, let $\rType^+$ be reactive types, and let $\Theta$ be a reactive typing context such
+    that:
+    \begin{equation*}
+        \flowTyped{\sigma}{sty^+} \qquad \opTypedReact{\Theta}{\sigma}{\rType^+}.
+    \end{equation*}
+    For
+    all $n \ge 1$;
+    all states $s_0$, \dots, $s_{n+1}$, $s'_{n+1}$, and $s'_{n+2}$ corresponding to $\sigma$;
+    all update context $\gamma_0$, \dots, $\gamma_n$, $\gamma'_n$, and $\gamma'_{n+1}$;
+    all timestamps $t_0$, \dots, $t_n$, $t'_n$, and $t'_{n+1}$;
+    all bottom values $v_{0\bot}^+$, \dots, $v_{n\bot}^+$, $v_{n\bot}^{\prime+}$, and $v_{n+1\bot}^{\prime+}$; and
+    all list of timer resets $[(i_{T0}, t_{T0})^+]$, \dots, $[(i_{Tn}, t_{Tn})^+]$, $[(i'_{Tn}, t'_{Tn})^+]$, and $[(i'_{Tn+1}, t'_{Tn+1})^+]$
+    such that:
+    \begin{equation*}
+        \begin{array}{c}
+            t'_n \le t'_{n+1} = t_n \qquad s_0 = \initstate{\sigma}                                                                \\
+            \forall k \in \{0, \dots, n\}, \quad \sigmaOpSem{\gamma_k}{s_k}{\sigma}{t_k}{s_{k+1}}{v_{k\bot}^+}{(i_{Tk}, t_{Tk})^+} \\
+            \sigmaOpSem{\gamma'_n}{s_n}{\sigma}{t'_n}{s'_{n+1}}{v_{n\bot}^{\prime+}}{(i'_{Tn}, t'_{Tn})^+}                         \\
+            \sigmaOpSem{\gamma'_{n+1}}{s'_{n+1}}{\sigma}{t'_{n+1}}{s'_{n+2}}{v_{n+1\bot}^{\prime+}}{(i'_{Tn+1}, t'_{Tn+1})^+},
+        \end{array}
+    \end{equation*}
+    we have:
+    \begin{multline*}
+        \left[\begin{array}{l}
+                \forall x \in \depSet{\sigma}, \; \left(\Theta[x] = \dType \Rightarrow \gamma'_n[x] = \bot\right) \\
+                \quad \wedge \left(\CurrVal{\tyCtx[x]}{[\gamma_0[x], \dots, \gamma_n[x]]} = \CurrVal{\tyCtx[x]}{[\gamma_0[x], \dots, \gamma_{n-1}[x], \gamma'_n[x], \gamma'_{n+1}[x]]}\right)
+            \end{array}\right]
+        \quad \Rightarrow \\
+        \begin{array}{ll}
+                   & s'_{n+2} = s_{n+1} \wedge [(i'_{Tn}, t'_{Tn})^+] = \emptylist \wedge [(i'_{Tn+1}, t'_{Tn+1})^+] = [(i_{Tn}, t_{Tn})^+]                  \\
+            \wedge & \left(\rType = \dType \Rightarrow v'_{n\bot} = \bot\right)^+                                                                            \\
+            \wedge & \left(\CurrVal{sty}{[v_{0\bot}, \dots, v_{n\bot}]} = \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}, v'_{n+1\bot}]}\right)^+.
+        \end{array}
+    \end{multline*}
+
+    This lemma formalizes the behavior of a flow operation, $\sigma$, during an oversampling step.
+    It states that if, after $n$ simulation steps, all discrete dependencies of $\sigma$
+    (of type \dType) are oversampled at step $n+1$, then this intermediate step has no lasting
+    effect. Specifically, a computation performed from this new state yields the same result as
+    one performed from the state at step $n$. This implies that the internal state of the flow
+    operation does not change ($s'_{n+2} = s_{n+1}$), timer resets are preserved
+    ($[(i'_{Tn}, t'_{Tn})^+] = \emptylist$ and $[(i'_{Tn+1}, t'_{Tn+1})^+] = [(i_{Tn}, t_{Tn})^+]$),
+    discrete outputs are oversampled ($v'_{n\bot} = \bot$), and the current value of the outputs
+    remains identical ($\CurrVal{sty}{[v_{0\bot}, \dots, v_{n\bot}]} =
+        \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}, v'_{n+1\bot}]}$).
+\end{lemma}
+\begin{skippableproof}
+    Let $\sigma$ be a flow operation in a program \G and typing context \tyCtx, let $sty^+$ be
+    types, let $\rType^+$ be reactive types, let $\Theta$ be a reactive typing context, let $n\ge 1$,
+    let $s_0$, \dots, $s_{n+1}$, $s'_{n+1}$, and $s'_{n+2}$ be states corresponding to $\sigma$, let
+    $\gamma_0$, \dots, $\gamma_n$, $\gamma'_n$, and $\gamma'_{n+1}$ be update context, let $t_0$,
+    \dots, $t_n$, $t'_n$, and $t'_{n+1}$ be timestamps, let $v_{0\bot}^+$, \dots, $v_{n\bot}^+$,
+    $v_{n\bot}^{\prime+}$, and $v_{n+1\bot}^{\prime+}$ be bottom values, and let
+    $[(i_{T0}, t_{T0})^+]$, \dots, $[(i_{Tn}, t_{Tn})^+]$, $[(i'_{Tn}, t'_{Tn})^+]$, and
+    $[(i'_{Tn+1}, t'_{Tn+1})^+]$ be list of timer resets such that:
+    \begin{equation*}
+        \begin{array}{c}
+            t'_n \le t'_{n+1} = t_n \qquad s_0 = \initstate{\sigma}                                                                \\
+            \forall k \in \{0, \dots, n\}, \quad \sigmaOpSem{\gamma_k}{s_k}{\sigma}{t_k}{s_{k+1}}{v_{k\bot}^+}{(i_{Tk}, t_{Tk})^+} \\
+            \sigmaOpSem{\gamma'_n}{s_n}{\sigma}{t'_n}{s'_{n+1}}{v_{n\bot}^{\prime+}}{(i'_{Tn}, t'_{Tn})^+}                         \\
+            \sigmaOpSem{\gamma'_{n+1}}{s'_{n+1}}{\sigma}{t'_{n+1}}{s'_{n+2}}{v_{n+1\bot}^{\prime+}}{(i'_{Tn+1}, t'_{Tn+1})^+},
+        \end{array}
+    \end{equation*}
+    and,
+    \begin{multline*}
+        \forall x \in \depSet{\sigma}, \; \left(\Theta[x] = \dType \Rightarrow \gamma'_n[x] = \bot\right) \\
+        \wedge \left(\CurrVal{\tyCtx[x]}{[\gamma_0[x], \dots, \gamma_n[x]]} = \CurrVal{\tyCtx[x]}{[\gamma_0[x], \dots, \gamma_{n-1}[x], \gamma'_n[x], \gamma'_{n+1}[x]]}\right)
+    \end{multline*}
+
+    We proceed by structural induction on $\sigma$.
+
+    \paragraph{Identifiers}
+    Suppose $\sigma$ is $x$, the identifier to the flow $x$.
+
+    The reactive typing rule \nameref{rule:semantics:grfrp:react_typing:op:ident} ensures that
+    $\rType$ equals $\Theta[x]$. The identifier $x$ is in \depSet{x}, ensured by
+    \Cref{eq:semantics:grfrp:theorems:determinism:deps:ident}, which implies that the current value
+    of $x$ in the context without oversampling (\CurrVal{\tyCtx[x]}{[\gamma_0[x], \dots, \gamma_n[x]]}) equals
+    its current value in the context with oversampling (\CurrVal{\tyCtx[x]}{[\gamma_0[x], \dots, \gamma_{n-1}[x],
+    \gamma'_n[x], \gamma'_{n+1}[x]]}) and if $\Theta[x]$ equals $\dType$ then $\gamma'_n[x]$ is
+    $\bot$.
+
+    The typing rule \nameref{rule:grust:typing:grfrp:flow_op:ident} ensures that $sty = \tyCtx[x]$.
+
+    The operational semantics rule \nameref{rule:semantics:grfrp:opsem:step:op:ident} ensures that
+    $s'_{n+2} = ()$ and $s_{n+1} = ()$, that $v_{n\bot} = \gamma_n[x]$, $v'_{n\bot} = \gamma'_n[x]$,
+    and $v'_{n+1\bot} = \gamma'_{n+1}[x]$, and that $[(i_{Tn}, t_{Tn})^+] = [(i'_{Tn}, t'_{Tn})^+] =
+        [(i'_{Tn+1}, t'_{Tn+1})^+] = \emptylist$.
+
+    It follows that $s'_{n+2} = s_{n+1}$, that the current value of $x$
+    (\CurrVal{sty}{[v_{0\bot}, \dots, v_{n\bot}]}) remains the same with oversampling (\CurrVal{sty}{[v_{0\bot},
+    \dots, v_{n-1\bot}, v'_{n\bot}, v'_{n+1\bot}]}), that if $\rType = \dType$ then $v'_{n\bot}$ is
+    $\bot$, that $[(i'_{Tn}, t'_{Tn})^+]$ is empty, and that $[(i'_{Tn+1}, t'_{Tn+1})^+]$ equals
+    $[(i_{Tn}, t_{Tn})^+]$.
+
+    \paragraph{Time}
+    Suppose $\sigma$ is \timeop, the time operation.
+
+    The operational semantics rule \nameref{rule:semantics:grfrp:opsem:step:op:time} ensures that:
+    \begin{equation*}
+        \begin{array}{cc}
+            s_0 = ()      & \sigmaOpSem{\gamma_0}{()}{\timeop}{t_0}{()}{t_0}{\,}                 \\
+            \dots         & \dots                                                                \\
+            s_{n+1} = ()  & \sigmaOpSem{\gamma_n}{()}{\timeop}{t_n}{()}{t_n}{\,}                 \\
+            s'_{n+1} = () & \sigmaOpSem{\gamma'_n}{()}{\timeop}{t'_n}{()}{t'_n}{\,}              \\
+            s'_{n+2} = () & \sigmaOpSem{\gamma'_{n+1}}{()}{\timeop}{t'_{n+1}}{()}{t'_{n+1}}{\,}.
+        \end{array}
+    \end{equation*}
+
+    The reactive typing rule \nameref{rule:semantics:grfrp:react_typing:op:time} ensures that
+    $\rType = \cType$.
+
+    \begin{align*}
+        [(i'_{Tn}, t'_{Tn})^+]                                                   & = \emptylist                                           \\
+        s'_{n+2}                                                                 & = () = s_{n+1}                                         \\
+        \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}, v'_{n+1\bot}]} & = \CurrVal{sty}{[t_0, \dots, t_{n-1}, t'_n, t'_{n+1}]} \\
+                                                                                 & = t'_{n+1} = t_n = \CurrVal{sty}{[t_0, \dots, t_n]}    \\
+                                                                                 & = \CurrVal{sty}{[v_{0\bot}, \dots, v_{n\bot}]}         \\
+        [(i'_{Tn+1}, t'_{Tn+1})^+]                                               & = \emptylist = [(i_{Tn}, t_{Tn})^+],
+    \end{align*}
+    which concludes the proof for the \timeop operator.
+
+    \paragraph{Sample}
+    Suppose $\sigma$ is \sample{\sigma}{T}, the sample of the event $\sigma$ on the period $T$.
+
+    The operational semantics rules \nameref{rule:semantics:grfrp:opsem:step:op:sample:propag},
+    \nameref{rule:semantics:grfrp:opsem:step:op:sample:timer} and
+    \nameref{rule:semantics:grfrp:opsem:step:op:sample:value} ensure there exist states $s_{\sigma 0}$,
+    \dots, $s_{\sigma n+1}$, $s'_{\sigma n+1}$ and $s'_{\sigma n+2}$ corresponding to the input $\sigma$, bottom
+    values $v_{\sigma 0\bot}$, \dots, $v_{\sigma n\bot}$, $v'_{\sigma n\bot}$ and $v'_{\sigma n+1\bot}$, timer resets
+    $[(i_{\sigma0}, t_{\sigma0})^+]$, \dots, $[(i_{\sigma n}, t_{\sigma n})^+]$, $[(i'_{\sigma n},
+        t'_{\sigma n})^+]$ and $[(i'_{\sigma n+1}, t'_{\sigma n+1})^+]$, and bottom values
+    $(v_{m0\bot})$, \dots, $(v_{mn+1\bot})$, $(v'_{mn+1\bot})$, $(v'_{mn+2\bot})$,
+    such that:
+    \begin{equation*}
+        \begin{array}{cc}
+            s_0 = (v_{m0\bot}, s_{\sigma 0})            & \sigmaOpSem{\gamma_0}{s_{\sigma 0}}{\sigma}{t_0}{s_{\sigma 1}}{v_{\sigma 0\bot}}{(i_{\sigma0}, t_{\sigma0})^+}                             \\
+            \dots                                       & \dots                                                                                                                                      \\
+            s_{n+1} = (v_{mn+1\bot}, s_{\sigma n+1})    & \sigmaOpSem{\gamma_n}{s_{\sigma n}}{\sigma}{t_n}{s_{\sigma n+1}}{v_{\sigma n\bot}}{(i_{\sigma n}, t_{\sigma n})^+}                         \\
+            s'_{n+1} = (v'_{mn+1\bot}, s'_{\sigma n+1}) & \sigmaOpSem{\gamma'_n}{s_{\sigma n}}{\sigma}{t'_n}{s'_{\sigma n+1}}{v'_{\sigma n\bot}}{(i'_{\sigma n}, t'_{\sigma n})^+}                   \\
+            s'_{n+2} = (v'_{mn+2\bot}, s'_{\sigma n+2}) & \sigmaOpSem{\gamma'_{n+1}}{s'_{\sigma n+1}}{\sigma}{t'_{n+1}}{s'_{\sigma n+2}}{v'_{\sigma n+1\bot}}{(i'_{\sigma n+1}, t'_{\sigma n+1})^+}.
+        \end{array}
+    \end{equation*}
+
+    The typing rule \nameref{rule:grust:typing:grfrp:flow_op:sample} ensures there exists a types
+    $ty_\sigma$ such that:
+    \begin{align*}
+        \flowTyped{\sigma}{\mayB{ty_\sigma}}.
+    \end{align*}
+
+    The reactive typing rule \nameref{rule:semantics:grfrp:react_typing:op:sample} ensures that
+    $\rType = \dType$ and:
+    \begin{equation*}
+        \opTypedReact{\Theta}{\sigma}{\dType}.
+    \end{equation*}
+
+    \Cref{eq:semantics:grfrp:theorems:determinism:deps:sample} ensures that for all $x$ in
+    \depSet{\sigma}, we have $x$ in \depSet{\sample{\sigma}{T}}, therefore the current value of $x$ in
+    the context without oversampling (encoded by the value \CurrVal{\tyCtx[x]}{[\gamma_0[x], \dots, \gamma_n[x]]})
+    equals its current value in the context with oversampling (encoded by
+    \CurrVal{\tyCtx[x]}{[\gamma_0[x], \dots, \gamma_{n-1}[x], \gamma'_n[x], \gamma'_{n+1}[x]]}), and
+    if $\Theta[x]$ equals $\dType$ then $\gamma'_n[x]$ is $\bot$.
+
+    It is then possible to apply the structural induction hypothesis on $\sigma$, which implies that
+    $s'_{\sigma n+2} = s_{\sigma n+2}$, $[(i'_{\sigma n}, t'_{\sigma n})^+]$ is empty, that the
+    timer resets $[(i'_{\sigma n+1}, t'_{\sigma n+1})^+]$ equals $[(i_{\sigma n}, t_{\sigma n})^+]$,
+    that the current value of the value of $\sigma$ without oversampling (\CurrVal{\mayB{ty_\sigma}}{[v_{\sigma 0\bot},
+                \dots, v_{\sigma n\bot}]}) equals the one with oversampling (\CurrVal{\mayB{ty_\sigma}}{[v_{\sigma 0\bot}, \dots,
+    v_{\sigma n-1\bot}, v'_{\sigma n\bot}, v'_{\sigma n+1\bot}]}), and that $v'_{\sigma n\bot}$ is $\bot$.
+
+    The presence of a timer identifier ($i_T$) in an update context ($\gamma$) can only come from
+    the propagation of a timer message (\timerMess{i_T}), as it is only shown by the rule
+    \nameref{rule:semantics:grfrp:opsem:step:service:timer}.
+    Therefore, timer identifiers are not present in update contexts during the oversampling at time
+    $t'_n$. The only possible step transition is the rule
+    \nameref{rule:semantics:grfrp:opsem:step:op:sample:propag} ($v'_{\sigma n\bot} = \bot$ disable
+    the rule \nameref{rule:semantics:grfrp:opsem:step:op:sample:value}).
+
+    The rule \nameref{rule:semantics:grfrp:opsem:step:op:sample:propag} ensures that:\footnote{The notation \myeq{IH} denotes the application of the induction hypothesis to establish the equality.}
+    \begin{align*}
+        s'_{n+1}               & = (v_{mn\bot}, s'_{\sigma n+1})                            \\
+        v'_{n\bot}             & = \bot                                                     \\
+        [(i'_{Tn}, t'_{Tn})^+] & = [(i'_{\sigma n}, t'_{\sigma n})^+] \myeq{IH} \emptylist.
+    \end{align*}
+
+    We can now prove that, in any transition case, the step after oversampling is equivalent to the
+    step without oversampling.
+    \begin{itemize}
+        \item Suppose there exist a value $v$ such that $v'_{\sigma n+1\bot} = v$.
+              The induction hypothesis ensures:
+              \begin{align*}
+                  \CurrVal{\mayB{ty_\sigma}}{[v_{\sigma 0\bot}, \dots, v_{\sigma n\bot}]} & = \CurrVal{\mayB{ty_\sigma}}{[v_{\sigma 0\bot}, \dots, v_{\sigma n-1\bot}, v'_{\sigma n\bot}, v'_{\sigma n+1\bot}]} \\
+                                                                                          & = \CurrVal{\mayB{ty_\sigma}}{[v_{\sigma 0\bot}, \dots, v_{\sigma n-1\bot}, \bot, v'_{\sigma n+1\bot}]}              \\
+                                                                                          & = \CurrVal{\mayB{ty_\sigma}}{[v_{\sigma 0\bot}, \dots, v_{\sigma n-1\bot}, v'_{\sigma n+1\bot}]}                    \\
+                                                                                          & \qquad \text{\cf \Cref{rule:semantics:grfrp:opsem:aux:intoVal:event}}                                               \\
+                                                                                          & \Rightarrow \quad v_{\sigma n\bot} = v'_{\sigma n+1\bot} = v                                                        \\
+                                                                                          & \qquad \text{\cf \Cref{lem:semantics:grfrp:theorems:oversampling:CurrVal:last}}.
+              \end{align*}
+
+              The rule \nameref{rule:semantics:grfrp:opsem:step:op:sample:value} can then be applied
+              on both steps (the one at $t_n$ and the one at $t'_{n+1}$) and ensures that:
+              \begin{align*}
+                  s'_{n+2}                   & = (v, s'_{\sigma n+2}) \myeq{IH} (v, s_{\sigma n+1})                                \\
+                  s_{n+1}                    & = (v, s_{\sigma n+1})                                                               \\
+                  v'_{n+1\bot}               & = \bot                                                                              \\
+                  v_{n\bot}                  & = \bot                                                                              \\
+                  [(i'_{Tn+1}, t'_{Tn+1})^+] & = [(i'_{\sigma n+1}, t'_{\sigma n+1})^+] \myeq{IH} [(i_{\sigma n}, t_{\sigma n})^+] \\
+                  [(i_{Tn}, t_{Tn})^+]       & = [(i_{\sigma n}, t_{\sigma n})^+],
+              \end{align*}
+              so that the current values are:
+              \begin{align*}
+                  \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n-1\bot}, v_{n\bot}]}                & = \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n-1\bot}, \bot]}            \\
+                                                                                                 & = \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n-1\bot}]}                  \\
+                                                                                                 & \qquad \text{\cf \Cref{rule:semantics:grfrp:opsem:aux:intoVal:signal}}  \\
+                  \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}, v'_{n+1\bot}]} & = \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n-1\bot}, \bot, \bot]}      \\
+                                                                                                 & = \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n-1\bot}]}                  \\
+                                                                                                 & \qquad \text{\cf \Cref{rule:semantics:grfrp:opsem:aux:intoVal:signal}},
+              \end{align*}
+              which implies:
+              \begin{align*}
+                  s'_{n+2}                                                                       & = s_{n+1}                                            \\
+                  \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}, v'_{n+1\bot}]} & = \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n\bot}]} \\
+                  [(i'_{Tn+1}, t'_{Tn+1})^+]                                                     & = [(i_{Tn}, t_{Tn})^+].
+              \end{align*}
+
+        \item Suppose $v'_{\sigma n+1\bot} = \bot$ and $\gamma'_{n+1}[i_T] \neq \bot$ (meaning there
+              is a timer at time $t'_{n+1}$). Because $t'_{n+1} = t_n$ and that \emph{no timers were
+                  reset during the oversampling} at time $t'_n$, the occurrence of the timer at
+              $t'_{n+1}$ implies the occurrence of the same timer at time $t_n$
+              ($\gamma_n[i_T] \neq \bot$).
+
+              The rule \nameref{rule:semantics:grfrp:opsem:step:op:sample:timer} can then be applied
+              on both steps and ensures that:
+              \begin{align*}
+                  s'_{n+2}                   & = (\bot, s'_{\sigma n+2}) \myeq{IH} (\bot, s_{\sigma n+1})                                                               \\
+                  s_{n+1}                    & = (\bot, s_{\sigma n+1})                                                                                                 \\
+                  v'_{n+1\bot}               & = v'_{mn+1\bot} = v_{mn\bot}                                                                                             \\
+                  v_{n\bot}                  & = v_{mn\bot}                                                                                                             \\
+                  [(i'_{Tn+1}, t'_{Tn+1})^+] & = [(i_T, t'_{n+1} + T), (i'_{\sigma n+1}, t'_{\sigma n+1})^+] \myeq{IH} [(i_T, t_n + T), (i_{\sigma n}, t_{\sigma n})^+] \\
+                  [(i_{Tn}, t_{Tn})^+]       & = [(i_T, t_n + T), (i_{\sigma n}, t_{\sigma n})^+],
+              \end{align*}
+              so that the current values are:
+              \begin{align*}
+                  \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n-1\bot}, v_{n\bot}]}                & = \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n-1\bot}, v_{mn\bot}]}       \\
+                  \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}, v'_{n+1\bot}]} & = \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n-1\bot}, \bot, v_{mn\bot}]} \\
+                                                                                                 & = \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n-1\bot}, v_{mn\bot}]}       \\
+                                                                                                 & \qquad \text{\cf \Cref{rule:semantics:grfrp:opsem:aux:intoVal:signal}},
+              \end{align*}
+              which implies:
+              \begin{align*}
+                  s'_{n+2}                                                                       & = s_{n+1}                                            \\
+                  \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}, v'_{n+1\bot}]} & = \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n\bot}]} \\
+                  [(i'_{Tn+1}, t'_{Tn+1})^+]                                                     & = [(i_{Tn}, t_{Tn})^+].
+              \end{align*}
+
+        \item Suppose $v'_{\sigma n+1\bot} = \bot$ and $\gamma'_{n+1}[i_T] = \bot$. It is the same
+              argument as in the previous point: because $t'_{n+1} = t_n$ and that no timers were
+              reset during the oversampling at time $t'_n$, the absence of the timer at $t'_{n+1}$
+              implies the absence of the same timer at time $t_n$ ($\gamma_n[i_T] = \bot$).
+
+              The rule \nameref{rule:semantics:grfrp:opsem:step:op:sample:propag} can then be
+              applied on both steps and ensures that:
+              \begin{align*}
+                  s'_{n+2}                   & = (v'_{mn+1\bot}, s'_{\sigma n+2}) = (v_{mn\bot}, s'_{\sigma n+2}) \myeq{IH} (v_{mn\bot}, s_{\sigma n+1}) \\
+                  s_{n+1}                    & = (v_{mn\bot}, s_{\sigma n+1})                                                                            \\
+                  v'_{n+1\bot}               & = \bot                                                                                                    \\
+                  v_{n\bot}                  & = \bot                                                                                                    \\
+                  [(i'_{Tn+1}, t'_{Tn+1})^+] & = [(i'_{\sigma n+1}, t'_{\sigma n+1})^+] \myeq{IH} [(i_{\sigma n}, t_{\sigma n})^+]                       \\
+                  [(i_{Tn}, t_{Tn})^+]       & = [(i_{\sigma n}, t_{\sigma n})^+],
+              \end{align*}
+              so that the current values are:
+              \begin{align*}
+                  \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n-1\bot}, v_{n\bot}]}                & = \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n-1\bot}, \bot]}            \\
+                                                                                                 & = \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n-1\bot}]}                  \\
+                                                                                                 & \qquad \text{\cf \Cref{rule:semantics:grfrp:opsem:aux:intoVal:signal}}  \\
+                  \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}, v'_{n+1\bot}]} & = \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n-1\bot}, \bot, \bot]}      \\
+                                                                                                 & = \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n-1\bot}]}                  \\
+                                                                                                 & \qquad \text{\cf \Cref{rule:semantics:grfrp:opsem:aux:intoVal:signal}},
+              \end{align*}
+              which implies:
+              \begin{align*}
+                  s'_{n+2}                                                                       & = s_{n+1}                                            \\
+                  \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}, v'_{n+1\bot}]} & = \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n\bot}]} \\
+                  [(i'_{Tn+1}, t'_{Tn+1})^+]                                                     & = [(i_{Tn}, t_{Tn})^+].
+              \end{align*}
+    \end{itemize}
+    We saw that in all cases we have:
+    \begin{align*}
+        s'_{n+2}                                                                       & = s_{n+1}                                            \\
+        \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}, v'_{n+1\bot}]} & = \CurrVal{ty_\sigma}{[v_{0\bot}, \dots, v_{n\bot}]} \\
+        [(i'_{Tn+1}, t'_{Tn+1})^+]                                                     & = [(i_{Tn}, t_{Tn})^+],
+    \end{align*}
+    which concludes the proof for the \kwf{sample} operator.
+
+    \paragraph{Component applications}
+    Suppose $\sigma$ is $f(\sigma^+)$, the application of the component $f$ on the flow operations
+    $\sigma^+$.
+
+    The operational semantics rules \nameref{rule:semantics:grfrp:opsem:step:op:app:propag} and
+    \nameref{rule:semantics:grfrp:opsem:step:op:app:value} ensure there exist states $s_{f0}$,
+    \dots, $s_{fn+1}$, $s'_{fn+1}$, and $s'_{fn+2}$ corresponding to the component $f$, states
+    $s_{i0}$, \dots, $s_{in+1}$, $s'_{in+1}$, and $s'_{in+2}$ for each input $\sigma$, bottom values
+    $v_{i0\bot}$, \dots, $v_{in\bot}$, $v'_{in\bot}$, and $v'_{in+1\bot}$ and timer resets
+    $[(i_{\sigma0}, t_{\sigma0})^+]$, \dots, $[(i_{\sigma n}, t_{\sigma n})^+]$,
+    $[(i'_{\sigma n}, t'_{\sigma n})^+]$, and $[(i'_{\sigma n+1}, t'_{\sigma n+1})^+]$ for each
+    input $\sigma$, and tuples of values $(v_{i0}^{\explast+})$, \dots, $(v_{in+1}^{\explast+})$,
+    $(v_{in+1}^{\explast\prime+})$, $(v_{in+2}^{\explast\prime+})$, $(v_{o0}^{\explast+})$, \dots,
+    $(v_{on+1}^{\explast+})$, $(v_{on+1}^{\explast\prime+})$, and $(v_{on+2}^{\explast\prime+})$
+    such that:
+    \begin{equation*}
+        \mathfoot{\begin{array}{cc}
+                s_0 = (s_{f0}, (v_{i0}^{\explast+}), (v_{o0}^{\explast+}), s_{i0}^+)                                   & \left(\sigmaOpSem{\gamma_0}{s_{i0}}{\sigma}{t_0}{s_{i1}}{v_{i0\bot}}{(i_{\sigma0}, t_{\sigma0})^+}\right)^+                             \\
+                \dots                                                                                                  & \dots                                                                                                                                   \\
+                s_{n+1} = (s_{fn+1}, (v_{in+1}^{\explast+}), (v_{on+1}^{\explast+}), s_{in+1}^+)                       & \left(\sigmaOpSem{\gamma_n}{s_{in}}{\sigma}{t_n}{s_{in+1}}{v_{in\bot}}{(i_{\sigma n}, t_{\sigma n})^+}\right)^+                         \\
+                s'_{n+1} = (s'_{fn+1}, (v_{in+1}^{\explast\prime+}), (v_{on+1}^{\explast\prime+}), s_{in+1}^{\prime+}) & \left(\sigmaOpSem{\gamma'_n}{s_{in}}{\sigma}{t'_n}{s'_{in+1}}{v'_{in\bot}}{(i'_{\sigma n}, t'_{\sigma n})^+}\right)^+                   \\
+                s'_{n+2} = (s'_{fn+2}, (v_{in+2}^{\explast\prime+}), (v_{on+2}^{\explast\prime+}), s_{in+2}^{\prime+}) & \left(\sigmaOpSem{\gamma'_{n+1}}{s'_{in+1}}{\sigma}{t'_{n+1}}{s'_{in+2}}{v'_{in+1\bot}}{(i'_{\sigma n+1}, t'_{\sigma n+1})^+}\right)^+.
+            \end{array}}
+    \end{equation*}
+
+    The typing rule \nameref{rule:grust:typing:grfrp:flow_op:compapp} ensures there exists a tuple
+    of types $(sty_i^+)$ such that:
+    \begin{align*}
+        \left(\flowTyped{\sigma}{sty_i}\right)^+.
+    \end{align*}
+
+    The reactive typing rule \nameref{rule:semantics:grfrp:react_typing:op:app} ensures that
+    there exists a tuple of reactive types $(\rType_i^+)$ such that:
+    \begin{equation*}
+        \left(\opTypedReact{\Theta}{\sigma}{\rType_i}\right)^+ \qquad
+        \compTypedReact{f}{\rType_i^+}{\rType^+}.
+    \end{equation*}
+
+    \Cref{eq:semantics:grfrp:theorems:determinism:deps:app} ensures that for all input $\sigma$ we
+    have $\depSet{\sigma} \subseteq \depSet{f(\sigma^+)}$. It implies that for all input $\sigma$
+    and $x$ in \depSet{\sigma} the current value of $x$ in the context without oversampling
+    (encoded by \CurrVal{\tyCtx[x]}{[\gamma_0[x], \dots, \gamma_n[x]]}) equals its current value in the context with
+    oversampling (encoded by \CurrVal{\tyCtx[x]}{[\gamma_0[x], \dots, \gamma_{n-1}[x], \gamma'_n[x], \gamma'_{n+1}[x]]}),
+    and if $\Theta[x]$ equals $\dType$ then $\gamma'_n[x]$ is $\bot$.
+
+    It is then possible to apply the structural induction hypothesis on each input $\sigma$, which
+    implies that $s'_{in+2} = s_{in+2}$, $[(i'_{\sigma n}, t'_{\sigma n})^+]$ is empty, that the
+    timer resets $[(i'_{\sigma n+1}, t'_{\sigma n+1})^+]$ equals $[(i_{\sigma n}, t_{\sigma n})^+]$,
+    that the current value of the value of $\sigma$ without oversampling (encoded by the value \CurrVal{sty_i}{[v_{i0\bot}, \dots,
+                v_{in\bot}]}) equals the one during the oversampling (encoded by the value \CurrVal{sty_i}{[v_{i0\bot}, \dots,
+    v_{in-1\bot}, v'_{in\bot}, v'_{in+1\bot}]}), and that if $\rType_i = \dType$ then $v'_{in\bot}$
+    is $\bot$.
+
+    \begin{itemize}
+        \item If $\left(v'_{in\bot} = \bot\right)^+$ (if the oversampling step has not produced any
+              update), then the rule \nameref{rule:semantics:grfrp:opsem:step:op:app:propag} is
+              applied. Therefore the state is unchanged ($s'_{n+1} = s_n$), all outputs $v'_{n\bot}$
+              are $\bot$, and $[(i'_{Tn}, t'_{Tn})^+] = [((i'_{\sigma n},t'_{\sigma n})^+)^+]
+                  \myeq{IH} \emptylist$.
+
+              Furthermore, $\left(v'_{in\bot} = \bot\right)^+$ implies that the last value
+              $\CurrVal{sty_i}{\mathfoot{[v_{i0\bot}, \dots, v_{in-1\bot}, v'_{in\bot}, v'_{in+1\bot}]}}$ equals
+              $\CurrVal{sty_i}{\mathfoot{[v_{i0\bot}, \dots, v_{in-1\bot}, v'_{in+1\bot}]}}$, which equals
+              $\CurrVal{sty_i}{\mathfoot{[v_{i0\bot}, \dots, v_{in-1\bot}, v_{in\bot}]}}$ by the induction hypothesis.
+              \Cref{lem:semantics:grfrp:theorems:oversampling:CurrVal:last} ensures that $v'_{in+1\bot}$
+              equals $v_{in\bot}$.
+
+              In that case, because of the determinism of components
+              (\cf \Cref{thm:semantics:grsync:theorems:determinism} for the determinism of the
+              denotational semantics and \Cref{thm:semantics:grsync:theorems:equivalence} for the
+              equivalence of operational and denotational semantics), both rules \nameref{rule:%
+                  semantics:grfrp:opsem:step:op:app:value} and \nameref{rule:semantics:grfrp:opsem:%
+                  step:op:app:propag} determine the output state $s'_{n+2}$, bottom values
+              $(v_{n+1\bot}^{\prime+})$ and timer resets $[(i'_{Tn+1}, t'_{Tn+1})^+]$ of the
+              component application purely based on the current state $s'_{n+1}$, input values
+              $(v'_{in+1\bot})$, and input timer resets $[(i'_{\sigma n+1}, t'_{\sigma n+1})^+]$.
+              Therefore, because $s'_{n+1} = s_n$, $v'_{in+1\bot} = v_{in\bot}$, and
+              $[(i'_{\sigma n+1}, t'_{\sigma n+1})^+] \myeq{IH} [(i_{\sigma n}, t_{\sigma n})^+]$,
+              we have:
+              \begin{align*}
+                  s'_{n+2}     & = s_{n+1}                                                                                                                                        \\
+                  v'_{n+1\bot} & = v_{n\bot}                                                                                                                                      \\
+                               & \Rightarrow \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n+1\bot}]} = \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v_{n\bot}]}             \\
+                               & \qquad \text{by application of \Cref{lem:semantics:grfrp:theorems:oversampling:CurrVal:last}}                                                    \\
+                               & \Rightarrow \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, \bot, v'_{n+1\bot}]} = \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v_{n\bot}]}       \\
+                               & \Rightarrow \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}, v'_{n+1\bot}]} = \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v_{n\bot}]} \\
+                               & \qquad \text{\cf \Cref{rule:semantics:grfrp:opsem:aux:intoVal:signal,rule:semantics:grfrp:opsem:aux:intoVal:event}}                              \\
+                               & [(i'_{Tn+1}, t'_{Tn+1})^+] = [((i'_{\sigma n+1}, t'_{\sigma n+1})^+)^+] \myeq{IH} [((i_{\sigma n}, t_{\sigma n})^+)^+] = [(i_{Tn}, t_{Tn})^+].
+              \end{align*}
+        \item If there exists $v'_{in\bot} \neq \bot$ (the oversampling has produce at least one
+              input update), then the rule \nameref{rule:semantics:grfrp:opsem:step:op:app:value} is
+              applied and we have:
+              \begin{align*}
+                   & (v'_{in} = \intoVal{sty_i}{v_{in}^{\explast}}{v'_{in\bot}})^+                                          \\
+                   & \compOpsem{s_{fn}}{v_{in}^{\prime+}}{f}{s'_{fn+1}}{v_{on}^{\prime+}}                                   \\
+                   & (v'_{n\bot} = \intoBot{sty}{v_{on}^{\explast}}{v'_{on}})^+                                             \\
+                   & s'_{n+1} = (s'_{fn+1}, (v_{in+1}^{\explast\prime+}), (v_{on+1}^{\explast\prime+}), s_{in+1}^{\prime+})
+                  = (s'_{fn+1}, v_{in}^{\prime+}, v_{on}^{\prime+}, s_{in+1}^{\prime+})                                     \\
+                   & [(i'_{Tn}, t'_{Tn})^+] = [((i'_{\sigma n},t'_{\sigma n})^+)^+] \myeq{IH} \emptylist.
+              \end{align*}
+
+              For all input $\sigma$, if $\rType_i = \dType$ then $v'_{in\bot} \myeq{IH} \bot$.
+              Then, if $\rType_i = \dType$, we have:
+              \begin{equation*}
+                  \begin{split}
+                      v'_{in} & = \intoVal{sty_i}{v_{in}^{\explast}}{v'_{in\bot}}   \\
+                              & \myeq{IH} \intoVal{sty_i}{v_{in}^{\explast}}{\bot}.
+                  \end{split}
+              \end{equation*}
+              The application of the oversampling theorem of components
+              (\Cref{thm:semantics:grsync:theorems:oversampling}) ensures that the state $s'_{fn+1}$
+              remains equal to $s_{fn}$ and for all output value $v'_{on}$, if $\rType = \dType$
+              then $v'_{on} = \intoVal{sty}{v_{on}^{\explast}}{\bot}$.
+
+              Then, for all output value $v'_{on}$ such that $\rType = \dType$, we have:
+              \begin{equation*}
+                  \begin{split}
+                      v'_{n\bot} & = \intoBot{sty}{v_{on}^{\explast}}{v'_{on}}                                                                                                                                                                     \\
+                                 & = \intoBot{sty}{v_{on}^{\explast}}{\intoVal{sty}{v_{on}^{\explast}}{\bot}}                                                                                                                                      \\
+                                 & = \bot                                                                                                                                                                                                          \\
+                                 & \qquad \text{\cf \Cref{rule:semantics:grfrp:opsem:aux:intoVal:signal,rule:semantics:grfrp:opsem:aux:intoBot:signal,rule:semantics:grfrp:opsem:aux:intoVal:event,rule:semantics:grfrp:opsem:aux:intoBot:event}.}
+                  \end{split}
+              \end{equation*}
+
+              In the case all $v_{in\bot}$ are equal to $\bot$ (and the rule
+              \nameref{rule:semantics:grfrp:opsem:step:op:app:propag} is applied), we can
+              still define $v_{in}$ to be $\intoVal{sty_i}{v_{in}^{\explast}}{v_{in\bot}}$.
+              The oversampling theorem of components (\Cref{thm:semantics:grsync:theorems:oversampling})
+              ensures that the resulting state of the step from $s_{fn}$ remains the same
+              (\ie equal to $s_{fn+1}$ in the \nameref{rule:semantics:grfrp:opsem:step:op:app:propag}
+              rule) and it defines output value $v_{on}$. In components, events are only
+              used in \kwf{when} equations to emit other events or update the values of
+              signals when they occur. Therefore, an absence of event does not produce any
+              signal change or event occurrence, meaning that all output $v_{n\bot}$ are
+              equal to \intoBot{sty}{v_{on}^{\explast}}{v_{on}} which is equal to $\bot$,
+              \ie equal to the output value of the rule
+              \nameref{rule:semantics:grfrp:opsem:step:op:app:propag}.
+              This prove that the rule \nameref{rule:semantics:grfrp:opsem:step:op:app:value}
+              and \nameref{rule:semantics:grfrp:opsem:step:op:app:propag} are equivalent,
+              we can then suppose in the rest of this proof that the rule
+              \nameref{rule:semantics:grfrp:opsem:step:op:app:value} is applied and that
+              we have:
+              \begin{align*}
+                   & (v_{in} = \intoVal{sty_i}{v_{in}^{\explast}}{v_{in\bot}})^+                                                                   \\
+                   & \compOpsem{s_{fn}}{v_{in}^+}{f}{s_{fn+1}}{v_{on}^+}                                                                           \\
+                   & (v_{n\bot} = \intoBot{sty}{v_{on}^{\explast}}{v_{on}})^+                                                                      \\
+                   & s_{n+1} = (s_{fn+1}, (v_{in+1}^{\explast+}), (v_{on+1}^{\explast+}), s_{in+1}^+) = (s_{fn+1}, v_{in}^+, v_{on}^+, s_{in+1}^+) \\
+                   & [(i_{Tn}, t_{Tn})^+] = [((i_{\sigma n}, t_{\sigma n})^+)^+] = [(i'_{Tn+1}, t'_{Tn+1})^+].
+              \end{align*}
+
+              Similarly, we suppose in the rest of this proof that the rule
+              \nameref{rule:semantics:grfrp:opsem:step:op:app:value} is applied for the oversampled
+              simulation and that we have:
+              \begin{align*}
+                   & (v'_{in+1} = \intoVal{sty_i}{v_{in+1}^{\explast\prime}}{v'_{in+1\bot}} = \intoVal{sty_i}{v'_{in}}{v'_{in+1\bot}})^+                                                              \\
+                   & \compOpsem{s_{fn}}{v_{in+1}^{\prime+}}{f}{s'_{fn+2}}{v_{on+1}^{\prime+}}                                                                                                         \\
+                   & (v'_{n+1\bot} = \intoBot{sty}{v_{on+1}^{\explast\prime}}{v'_{on+1}} = \intoBot{sty}{v'_{on}}{v'_{on+1}})^+                                                                       \\
+                   & s'_{n+2} = (s'_{fn+2}, (v_{in+2}^{\explast\prime+}), (v_{on+2}^{\explast\prime+}), s_{in+2}^{\prime+}) = (s'_{fn+2}, v_{in+1}^{\prime+}, v_{on+1}^{\prime+}, s_{in+2}^{\prime+}) \\
+                   & [(i'_{Tn+1}, t'_{Tn+1})^+] = [((i'_{\sigma n+1}, t'_{\sigma n+1})^+)^+] \myeq{IH} [((i_{\sigma n}, t_{\sigma n})^+)^+].
+              \end{align*}
+
+              For all input $v'_{in+1}$, we have three cases:
+              \begin{enumerate}
+                  \item Suppose $\rType_i = \dType$. It ensures that $v'_{in\bot} \myeq{IH} \bot$,
+                        which in turn implies:
+                        \begin{align*}
+                            \CurrVal{sty_i}{[v_{i0\bot}, \dots, v_{in\bot}]}               & \myeq{IH} \CurrVal{sty_i}{[v_{i0\bot}, \dots, v_{in-1\bot}, v'_{in\bot}, v'_{in+1\bot}]}                            \\
+                            \CurrVal{sty_i}{[v_{i0\bot}, \dots, v_{in-1\bot}, v_{in\bot}]} & = \CurrVal{sty_i}{[v_{i0\bot}, \dots, v_{in-1\bot}, \bot, v'_{in+1\bot}]}                                           \\
+                                                                                           & = \CurrVal{sty_i}{[v_{i0\bot}, \dots, v_{in-1\bot}, v'_{in+1\bot}]}                                                 \\
+                                                                                           & \qquad \text{\cf \Cref{rule:semantics:grfrp:opsem:aux:intoVal:signal,rule:semantics:grfrp:opsem:aux:intoVal:event}} \\
+                                                                                           & \Rightarrow \quad v_{in\bot} = v'_{in+1\bot}                                                                        \\
+                                                                                           & \qquad \text{\cf \Cref{lem:semantics:grfrp:theorems:oversampling:CurrVal:last}},
+                        \end{align*}
+                        then, if there exist $ty_i$ such that $sty_i = ty_i$ (\ie is a signal type):
+                        \begin{align*}
+                            v'_{in+1} & = \intoVal{ty_i}{v'_{in}}{v'_{in+1\bot}}                                     \\
+                                      & = \intoVal{ty_i}{\intoVal{ty_i}{v_{in}^{\explast}}{v'_{in\bot}}}{v_{in\bot}} \\
+                                      & = \intoVal{ty_i}{\intoVal{ty_i}{v_{in}^{\explast}}{\bot}}{v_{in\bot}}        \\
+                                      & = \intoVal{ty_i}{v_{in}^{\explast}}{v_{in\bot}}                              \\
+                                      & \qquad \text{\cf \Cref{rule:semantics:grfrp:opsem:aux:intoVal:signal}}       \\
+                                      & = v_{in},
+                        \end{align*}
+                        and, if there exist $ty_i$ such that $sty_i = \mayB{ty_i}$ (\ie is an event type):
+                        \begin{align*}
+                            v'_{in+1} & = \intoVal{\mayB{ty_i}}{v'_{in}}{v'_{in+1\bot}}                       \\
+                                      & = \intoVal{\mayB{ty_i}}{\_}{v_{in\bot}}                               \\
+                                      & = \intoVal{\mayB{ty_i}}{v_{in}^{\explast}}{v_{in\bot}}                \\
+                                      & \qquad \text{\cf \Cref{rule:semantics:grfrp:opsem:aux:intoVal:event}} \\
+                                      & = v_{in}.
+                        \end{align*}
+                  \item Suppose $\rType_i \neq \dType$ and $v'_{in+1\bot} = \bot$. Then, because
+                        only signals can be continuous in the reactive type system, there exist
+                        $ty_i$ such that $sty_i = ty_i$. It implies:
+                        \begin{align*}
+                            \CurrVal{ty_i}{[v_{i0\bot}, \dots, v_{in-1\bot}, v_{in\bot}]} & \myeq{IH} \CurrVal{ty_i}{[v_{i0\bot}, \dots, v_{in-1\bot}, v'_{in\bot}, v'_{in+1\bot}]} \\
+                                                                                          & = \CurrVal{ty_i}{[v_{i0\bot}, \dots, v_{in-1\bot}, v'_{in\bot}, \bot]}                  \\
+                                                                                          & = \CurrVal{ty_i}{[v_{i0\bot}, \dots, v_{in-1\bot}, v'_{in\bot}]}                        \\
+                                                                                          & \qquad \text{\cf \Cref{rule:semantics:grfrp:opsem:aux:intoVal:signal}}                  \\
+                                                                                          & \Rightarrow \quad v_{in\bot} = v'_{in\bot}                                              \\
+                                                                                          & \qquad \text{\cf \Cref{lem:semantics:grfrp:theorems:oversampling:CurrVal:last}},
+                        \end{align*}
+                        then:
+                        \begin{align*}
+                            v'_{in+1} & = \intoVal{ty_i}{v'_{in}}{v'_{in+1\bot}}                               \\
+                                      & = \intoVal{ty_i}{v'_{in}}{\bot}                                        \\
+                                      & = \intoVal{ty_i}{\intoVal{ty_i}{v_{in}^{\explast}}{v'_{in\bot}}}{\bot} \\
+                                      & = \intoVal{ty_i}{\intoVal{ty_i}{v_{in}^{\explast}}{v_{in\bot}}}{\bot}  \\
+                                      & = \intoVal{ty_i}{v_{in}^{\explast}}{v_{in\bot}}                        \\
+                                      & \qquad \text{\cf \Cref{rule:semantics:grfrp:opsem:aux:intoVal:signal}} \\
+                                      & = v_{in}.
+                        \end{align*}
+                  \item Suppose $\rType_i \neq \dType$ and $v'_{in+1\bot} \neq \bot$. Similarly,
+                        because only signals can be continuous in the reactive type system, there
+                        exist $ty_i$ such that $sty_i = ty_i$. It implies:
+                        \begin{align*}
+                            \CurrVal{sty_i}{[v_{i0\bot}, \dots, v_{in-1\bot}, v_{in\bot}]} & \myeq{IH} \CurrVal{sty_i}{[v_{i0\bot}, \dots, v_{in-1\bot}, v'_{in\bot}, v'_{in+1\bot}]} \\
+                                                                                           & = v'_{in+1\bot},
+                        \end{align*}
+                        \begin{align*}
+                            v_{in} & = \intoVal{sty_i}{v_{in}^{\explast}}{v_{in\bot}}                                                     \\
+                                   & = \intoVal{sty_i}{\intoVal{sty_i}{v_{in-1}^{\explast}}{v_{in-1\bot}}}{v_{in\bot}}                    \\
+                                   & \qquad \text{\cf semantics rules}                                                                    \\
+                                   & = \intoVal{sty_i}{v_{in-1}^{\explast}}{\CurrVal{sty_i}{[v_{in-1\bot}, v_{in\bot}]}}                  \\
+                                   & \qquad \text{\cf \Cref{rule:semantics:grfrp:opsem:aux:intoVal:signal}}                               \\
+                                   & \dots                                                                                                \\
+                                   & = \intoVal{sty_i}{v_{i0}^{\explast}}{\CurrVal{sty_i}{[v_{i0\bot}, \dots, v_{in-1\bot}, v_{in\bot}]}} \\
+                                   & = \intoVal{sty_i}{v_{i0}^{\explast}}{v'_{in+1\bot}}                                                  \\
+                                   & = v'_{in+1\bot}                                                                                      \\
+                                   & = \intoVal{sty_i}{v'_{in}}{v'_{in+1\bot}}                                                            \\
+                                   & = v'_{in+1}.
+                        \end{align*}
+              \end{enumerate}
+              In all cases, we have $v'_{in+1} = v_{in}$.
+
+              Because components are deterministic (\cf \Cref{thm:semantics:grsync:theorems:determinism}
+              for the determinism of the denotational semantics and \Cref{thm:semantics:grsync:theorems:equivalence}
+              for the equivalence of operational and denotational semantics), we have:
+              \begin{align*}
+                  s'_{fn+2} & = s_{fn+1} & (v'_{on+1} & = v_{on})^+,
+              \end{align*}
+              which ensures that for all output $v'_{n+1\bot}$ we have:
+              \begin{align*}
+                  v'_{n+1\bot} & = \intoBot{sty}{v'_{on}}{v'_{on+1}}                                                                        \\
+                  v'_{n+1\bot} & = \intoBot{sty}{v'_{on}}{v_{on}}                                                                           \\
+                  v'_{n+1\bot} & = \intoBot{sty}{\intoVal{sty}{v'_{on-1}}{v'_{n\bot}}}{v_{on}}                                              \\
+                               & \dots                                                                                                      \\
+                  v'_{n+1\bot} & = \intoBot{sty}{\intoVal{sty}{v_{o0}}{\CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}]}}}{v_{on}} \\
+                  v'_{n+1\bot} & = \left\{
+                  \begin{array}{ll}
+                      v_{on} & \text{if} \, sty = ty \wedge v_{on} \neq \intoVal{sty}{v_{o0}}{\CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}]}} \\
+                      \bot   & \text{if} \, sty = ty \wedge v_{on} =    \intoVal{sty}{v_{o0}}{\CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}]}} \\
+                      v      & \text{if} \, sty = \mayB{ty} \wedge v_{on} = \some{v}                                                                      \\
+                      \bot   & \text{if} \, sty = \mayB{ty} \wedge v_{on} = \none,
+                  \end{array}
+                  \right.                                                                                                                   \\
+                  v_{n\bot}    & = \left\{
+                  \begin{array}{ll}
+                      v_{on} & \text{if} \, sty = ty \wedge v_{on} \neq \intoVal{sty}{v_{o0}}{\CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}]}} \\
+                      \bot   & \text{if} \, sty = ty \wedge v_{on} =    \intoVal{sty}{v_{o0}}{\CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}]}} \\
+                      v      & \text{if} \, sty = \mayB{ty} \wedge v_{on} = \some{v}                                                          \\
+                      \bot   & \text{if} \, sty = \mayB{ty} \wedge v_{on} = \none,
+                  \end{array}
+                  \right.
+              \end{align*}
+              then, if $sty = \mayB{ty}$ we have $v'_{n+1\bot} = v_{n\bot}$ and thus (knowing that
+              $\rType = \dType$ so that $v'_{n\bot} = \bot$)
+              $\CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}, v'_{n+1\bot}]} =
+                  \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v_{n\bot}]}$, and if $sty = ty$ we have:
+              \begin{multline*}
+                  \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}, v'_{n+1\bot}]} \\
+                  = \left\{
+                  \begin{array}{l}
+                      v_{on}                                                                                                            \\
+                      \qquad  \text{if} \, v_{on} \neq \intoVal{ty}{v_{o0}}{\CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}]}} \\
+                      \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}]}                                                        \\
+                      \qquad  \text{if} \, v_{on} = \intoVal{ty}{v_{o0}}{\CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}]}}
+                  \end{array}
+                  \right.                                                                        \\
+                  = \left\{
+                  \begin{array}{ll}
+                      v_{on} & \text{if} \, \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}]} = \bot \wedge v_{on} \neq v_{o0} \\
+                      v_{on} & \text{if} \, \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}]} = v \wedge v_{on} \neq v         \\
+                      \bot   & \text{if} \, \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}]} = \bot \wedge v_{on} = v_{o0}    \\
+                      v      & \text{if} \, \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}]} = v \wedge v_{on} = v
+                  \end{array}
+                  \right.                                                                        \\
+                  = \left\{
+                  \begin{array}{ll}
+                      v_{on} & \text{if} \, \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}]} = \bot \wedge v_{on} \neq v_{o0} \\
+                      \bot   & \text{if} \, \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}]} = \bot \wedge v_{on} = v_{o0}    \\
+                      v_{on} & \text{if} \, \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}]} \neq \bot,
+                  \end{array}
+                  \right.
+              \end{multline*}
+              similarly we have:
+              \begin{multline*}
+                  \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v_{n\bot}]} \\
+                  = \left\{
+                  \begin{array}{l}
+                      v_{on}                                                                                                \\
+                      \qquad  \text{if} \, v_{on} \neq \intoVal{ty}{v_{o0}}{\CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}]}} \\
+                      \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}]}                                                        \\
+                      \qquad  \text{if} \, v_{on} = \intoVal{ty}{v_{o0}}{\CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}]}}
+                  \end{array}
+                  \right.                                                                        \\
+                  = \left\{
+                  \begin{array}{ll}
+                      v_{on} & \text{if} \, \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}]} = \bot \wedge v_{on} \neq v_{o0} \\
+                      v_{on} & \text{if} \, \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}]} = v \wedge v_{on} \neq v         \\
+                      \bot   & \text{if} \, \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}]} = \bot \wedge v_{on} = v_{o0}    \\
+                      v      & \text{if} \, \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}]} = v \wedge v_{on} = v
+                  \end{array}
+                  \right.                                                                        \\
+                  = \left\{
+                  \begin{array}{ll}
+                      v_{on} & \text{if} \, \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}]} = \bot \wedge v_{on} \neq v_{o0} \\
+                      \bot   & \text{if} \, \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}]} = \bot \wedge v_{on} = v_{o0}    \\
+                      v_{on} & \text{if} \, \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}]} \neq \bot,
+                  \end{array}
+                  \right.
+              \end{multline*}
+              so that we have $\CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}, v'_{n+1\bot}]} =
+                  \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v_{n\bot}]}$.
+
+              For the new state $s'_{n+2}$, we have:
+              \begin{equation*}
+                  \begin{split}
+                      s'_{n+2} & = (s'_{fn+2}, v_{in+1}^{\prime+}, v_{on+1}^{\prime+}, s_{in+2}^{\prime+}) \\
+                               & = (s_{fn+1}, v_{in}^+, v_{on}^+, s_{in+1}^+)                              \\
+                               & = s_{n+1}.
+                  \end{split}
+              \end{equation*}
+    \end{itemize}
+    In all cases, the state following the oversampling is equal to the not oversampled simulation
+    ($s'_{n+2} = s_{n+1}$), the current values of all output flows with and without oversampling are
+    the same ($\CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}, v'_{n+1\bot}]} =
+        \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v_{n\bot}]}$), we have no resets when oversampling
+    ($[(i'_{Tn}, t'_{Tn})^+]$ is empty), the timer resets following the oversampling are equal to
+    the ones without oversampling ($[(i'_{Tn+1}, t'_{Tn+1})^+] = [(i_{Tn}, t_{Tn})^+]$), and for all
+    discrete output flow (\ie such that $\rType = \dType$) the oversampling induce no changes
+    ($v'_{n\bot} = \bot$).
+
+    \paragraph{Other flow operations}
+
+    The proof of other flow operators follows the same principle as the proof of the
+    \sample{\sigma}{T} operation:
+
+    \begin{enumerate}
+        \item The different operational semantics rules for the flow operation ensure the existence
+              of sequences of states corresponding to the inner flow operations ($s_{\sigma 0}$,
+              \dots, $s_{\sigma n+1}$, $s'_{\sigma n+1}$ and $s'_{\sigma n+2}$ corresponding to
+              $\sigma$ for the \sample{\sigma}{T} operation), sequence of bottom values
+              corresponding to the updates of those inner flow operation ($v_{\sigma 0\bot}$, \dots,
+              $v_{\sigma n\bot}$, $v'_{\sigma n\bot}$ and $v'_{\sigma n+1\bot}$ for the
+              \sample{\sigma}{T} operation), along with their sequence of lists of timer resets
+              ($[(i_{\sigma0},t_{\sigma0})^+]$, \dots, $[(i_{\sigma n}, t_{\sigma n})^+]$,
+              $[(i'_{\sigma n}, t'_{\sigma n})^+]$ and $[(i'_{\sigma n+1}, t'_{\sigma n+1})^+]$ for
+              the \sample{\sigma}{T} operation), and sequence of state values ($(v_{m0\bot})$,
+              \dots, $(v_{mn+1\bot})$, $(v'_{mn+1\bot})$, $(v'_{mn+2\bot})$ for the
+              \sample{\sigma}{T} operation).
+        \item The typing rules, reactive typing rules, and dependency sets gives makes it possible
+              to use the induction hypothesis on the inner flow operations. This adds constraints on
+              the update values, timer resets, and states of inner flow operations.
+        \item We process the oversampling step first (at $t'_n$) to prove that there is no timer
+              resets produced at that time and no updates for discrete flows. For flow operations
+              depending on timers, we know that the presence of a timer identifier ($i_T$) in an
+              update context ($\gamma$) can only come from the propagation of a timer message
+              (\timerMess{i_T}), as it is only shown by the rule
+              \nameref{rule:semantics:grfrp:opsem:step:service:timer}. Therefore, timer identifiers
+              are not present in update contexts during the oversampling. It restrains the possible
+              step transitions for the oversampling (only the rules
+              \nameref{rule:semantics:grfrp:opsem:step:op:sample:propag} and
+              \nameref{rule:semantics:grfrp:opsem:step:op:sample:value} are suitable for the
+              \sample{\sigma}{T}, but as the induction hypothesis and the reactive type system
+              ensures $v'_{\sigma n\bot} = \bot$, the rule
+              \nameref{rule:semantics:grfrp:opsem:step:op:sample:value} is disabled).
+        \item We then prove that, in any transition case from the operational semantics, the step
+              after oversampling is equivalent to the step without oversampling.
+              For example, we proved for the \sample{\sigma}{T} flow operation that in all cases we
+              have:
+              \begin{align*}
+                  s'_{n+2}                                                                 & = s_{n+1}                                      \\
+                  \CurrVal{sty}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}, v'_{n+1\bot}]} & = \CurrVal{sty}{[v_{0\bot}, \dots, v_{n\bot}]} \\
+                  [(i'_{Tn+1}, t'_{Tn+1})^+]                                               & = [(i_{Tn}, t_{Tn})^+].
+              \end{align*}
+    \end{enumerate}
+
+    \setcounter{paragraph}{0}
+\end{skippableproof}
+
+\begin{lemma}[Oversampling of \GRFRP reactive statements]
+    \label{lem:semantics:grfrp:theorems:oversampling:stmts}
+    Let $stmt^+$ be a sequence of statements in a program \G with a typing context \tyCtx, and
+    let $\Theta$ be a reactive typing context such that:
+    \begin{equation*}
+        \left(\stmtTyped{stmt}\right)^* \qquad \stmtTypedReact{\Theta}{stmt^+}.
+    \end{equation*}
+    For
+    all $n \ge 1$;
+    all states $s_0$, \dots, $s_{n+1}$, $s'_{n+1}$, and $s'_{n+2}$ corresponding to $stmt^+$;
+    all input update contexts $\gamma_{i0}$, \dots, $\gamma_{in}$, $\gamma'_{in}$, and $\gamma'_{in+1}$;
+    all output update contexts $\gamma_{o0}$, \dots, $\gamma_{on}$, $\gamma'_{on}$, and $\gamma'_{on+1}$;
+    all triggering inputs $(i_0, t_0, v_0)$, \dots, $(i_n, t_n, v_n)$, $(i'_n, t'_n, v'_n)$, and $(i'_{n+1}, t'_{n+1}, v'_{n+1})$;
+    all lists of outputs $[(x_0, v_0)^+]$, \dots, $[(x_n, v_n)^+]$, $[(x'_n, v'_n)^+]$, and $[(x'_{n+1}, v'_{n+1})^+]$; and
+    all lists of timer resets $[(i_{T0}, t_{T0})^+]$, \dots, $[(i_{Tn}, t_{Tn})^+]$, $[(i'_{Tn}, t'_{Tn})^+]$, and $[(i'_{Tn+1}, t'_{Tn+1})^+]$
+    such that:
+    \begin{equation*}
+        \begin{array}{c}
+            t'_n \le t'_{n+1} \qquad (i'_{n+1}, t'_{n+1}, v'_{n+1}) = (i_n, t_n, v_n) \qquad  s_0 = \initstate{stmt^+}                                       \\
+            \forall k \in \{0, \dots, n\}, \quad \stmtOpSem{\gamma_{ik}}{s_k}{stmt^+}{i_k, t_k, v_k}{\gamma_{ok}}{s_{k+1}}{(x_k, v_k)^+}{(i_{Tk}, t_{Tk})^+} \\
+            \stmtOpSem{\gamma'_{in}}{s_n}{stmt^+}{i'_n, t'_n, v'_n}{\gamma'_{on}}{s'_{n+1}}{(x'_n, v'_n)^+}{(i'_{Tn}, t'_{Tn})^+}                            \\
+            \stmtOpSem{\gamma'_{in+1}}{s'_{n+1}}{stmt^+}{i'_{n+1}, t'_{n+1}, v'_{n+1}}{\gamma'_{on+1}}{s'_{n+2}}{(x'_{n+1}, v'_{n+1})^+}{(i'_{Tn+1}, t'_{Tn+1})^+},
+        \end{array}
+    \end{equation*}
+    if $i'_n$ is not a timer identifier and not in \importSet{stmt^+}, then we have: % \todo{timer identifier set}, best would be not a timer nor a dependency of the statements
+    \begin{multline*}
+        \left[\begin{array}{l}
+                \forall x \in \depSet{stmt^+}, \; \left(\Theta[x] = \dType \Rightarrow \gamma'_{in}[x] = \bot\right) \\
+                \quad \wedge \left(\CurrVal{\tyCtx[x]}{[\gamma_{i0}[x], \dots, \gamma_{in}[x]]} = \CurrVal{\tyCtx[x]}{[\gamma_{i0}[x], \dots, \gamma_{in-1}[x], \gamma'_{in}[x], \gamma'_{in+1}[x]]}\right)
+            \end{array}\right]
+        \\ \Rightarrow \\
+        \begin{array}{l}
+            \left[\begin{array}{l}
+                          \forall y \in \declSet{stmt^+}, \; \left(\Theta[y] = \dType \Rightarrow \gamma'_{on}[y] = \bot\right) \\
+                          \quad \wedge \left(\CurrVal{\tyCtx[y]}{[\gamma_{o0}[y], \dots, \gamma_{on}[y]]} = \CurrVal{\tyCtx[y]}{[\gamma_{o0}[y], \dots, \gamma_{on-1}[y], \gamma'_{on}[y], \gamma'_{on+1}[y]]}\right)
+                      \end{array}\right] \\
+            \wedge \quad s'_{n+2} = s_{n+1} \wedge [(x'_{n+1}, v'_{n+1})^+] = [(x_n, v_n)^+] \wedge [(i'_{Tn+1}, t'_{Tn+1})^+] = [(i_{Tn}, t_{Tn})^+]                                                                                                                                                                                                                                        \\
+            \wedge \quad [(x'_n, v'_n)^+] = \emptylist \wedge [(i'_{Tn}, t'_{Tn})^+] = \emptylist.
+        \end{array}
+    \end{multline*}
+
+    This lemma formalizes the behavior of flow statements, $stmt^+$, during an oversampling step.
+    It states that if, after $n$ simulation steps, all discrete dependencies of $stmt^+$ (of type
+    \dType) are oversampled at step $n+1$, then this intermediate step has no lasting effect.
+    Specifically, a computation performed from this new state yields the same result as one
+    performed from the state at step $n$. This implies that the internal state does not change
+    ($s'_{n+2} = s_{n+1}$), timer resets are preserved ($[(i'_{Tn}, t'_{Tn})^+] = \emptylist$ and
+    $[(i'_{Tn+1}, t'_{Tn+1})^+] = [(i_{Tn}, t_{Tn})^+]$), and discrete flows are oversampled
+    ($\gamma'_{on}[y] = \bot$). Furthermore, exported values are unchanged
+    ($[(x'_n, v'_n)^+] = \emptylist$ and $[(x'_{n+1}, v'_{n+1})^+] = [(x_n, v_n)^+]$), and flows
+    have identical current values ($\CurrVal{\tyCtx[y]}{[\dots, \gamma_{on}[y]]} =
+        \CurrVal{\tyCtx[y]}{[\dots, \gamma_{on-1}[y], \gamma'_{on}[y], \gamma'_{on+1}[y]]}$).
+\end{lemma}
+\begin{skippableproof}
+    Let $stmt^+$ be a sequence of statements in a program \G with a typing context \tyCtx, and
+    let $\Theta$ be a reactive typing context such that:
+    \begin{equation*}
+        \left(\stmtTyped{stmt}\right)^* \qquad \stmtTypedReact{\Theta}{stmt^+}.
+    \end{equation*}
+    Let $n \ge 1$;
+    let $s_0$, \dots, $s_{n+1}$, $s'_{n+1}$, and $s'_{n+2}$ be states corresponding to $stmt^+$;
+    let $\gamma_0$, \dots, $\gamma_n$, $\gamma'_n$, and $\gamma'_{n+1}$ be input update contexts;
+    let $\gamma_{o0}$, \dots, $\gamma_{on}$, $\gamma'_{on}$, and $\gamma'_{on+1}$ be output update contexts;
+    let $(i_0, t_0, v_0)$, \dots, $(i_n, t_n, v_n)$, $(i'_n, t'_n, v'_n)$, and $(i'_{n+1}, t'_{n+1}, v'_{n+1})$ be triggering inputs;
+    let $[(x_0, v_0)^+]$, \dots, $[(x_n, v_n)^+]$, $[(x'_n, v'_n)^+]$, and $[(x'_{n+1}, v'_{n+1})^+]$ be lists of outputs; and
+    let $[(i_{T0}, t_{T0})^+]$, \dots, $[(i_{Tn}, t_{Tn})^+]$, $[(i'_{Tn}, t'_{Tn})^+]$, and $[(i'_{Tn+1}, t'_{Tn+1})^+]$ be lists of timer resets
+    such that:
+    \begin{equation*}
+        \begin{array}{c}
+            t'_n \le t'_{n+1} \qquad (i'_{n+1}, t'_{n+1}, v'_{n+1}) = (i_n, t_n, v_n) \qquad  s_0 = \initstate{stmt^+}                                       \\
+            \forall k \in \{0, \dots, n\}, \quad \stmtOpSem{\gamma_{ik}}{s_k}{stmt^+}{i_k, t_k, v_k}{\gamma_{ok}}{s_{k+1}}{(x_k, v_k)^+}{(i_{Tk}, t_{Tk})^+} \\
+            \stmtOpSem{\gamma'_n}{s_n}{stmt^+}{i'_n, t'_n, v'_n}{\gamma'_{on}}{s'_{n+1}}{(x'_n, v'_n)^+}{(i'_{Tn}, t'_{Tn})^+}                               \\
+            \stmtOpSem{\gamma'_{n+1}}{s'_{n+1}}{stmt^+}{i'_{n+1}, t'_{n+1}, v'_{n+1}}{\gamma'_{on+1}}{s'_{n+2}}{(x'_{n+1}, v'_{n+1})^+}{(i'_{Tn+1}, t'_{Tn+1})^+}.
+        \end{array}
+    \end{equation*}
+    Suppose $i'_n$ is not a timer identifier and not in \importSet{stmt^+}, and that
+    we have:
+    \begin{multline*}
+        \forall x \in \depSet{stmt^+}, \; \left(\Theta[x] = \dType \Rightarrow \gamma'_n[x] = \bot\right) \\
+        \wedge \left(\CurrVal{\tyCtx[x]}{[\gamma_0[x], \dots, \gamma_n[x]]} = \CurrVal{\tyCtx[x]}{[\gamma_0[x], \dots, \gamma_{n-1}[x], \gamma'_n[x], \gamma'_{n+1}[x]]}\right).
+    \end{multline*}
+
+    We proceed by structural induction on $stmt^+$:.
+    \begin{itemize}
+        \item Suppose $stmt^+$ is the empty block of statements $\{\skp\}$.
+
+              The operational rule \nameref{rule:semantics:grfrp:opsem:step:stmt:skip} ensures that:
+              \begin{align*}
+                  s_0      & = () & \gamma_{o0}    & = \gamma_0      & s_1      & = () & (x_0, v_0)^+           & = \emptylist & (i_{T0}, t_{T0})^+       & = \emptylist  \\
+                  s_n      & = () & \gamma_{on}    & = \gamma_n      & s_{n+1}  & = () & (x_n, v_n)^+           & = \emptylist & (i_{Tn}, t_{Tn})^+       & = \emptylist  \\
+                  s_n      & = () & \gamma'_{on}   & = \gamma'_n     & s'_{n+1} & = () & (x'_n, v'_n)^+         & = \emptylist & (i'_{Tn}, t'_{Tn})^+     & = \emptylist  \\
+                  s'_{n+1} & = () & \gamma'_{on+1} & = \gamma'_{n+1} & s'_{n+2} & = () & (x'_{n+1}, v'_{n+1})^+ & = \emptylist & (i'_{Tn+1}, t'_{Tn+1})^+ & = \emptylist.
+              \end{align*}
+
+              Therefore we have:
+              \begin{align*}
+                  [(i'_{Tn}, t'_{Tn})^+]     & = \emptylist           &
+                                             &                        &
+                  [(x'_n, v'_n)^+]           & = \emptylist             \\
+                  [(i'_{Tn+1}, t'_{Tn+1})^+] & = [(i_{Tn}, t_{Tn})^+] &
+                  s'_{n+2}                   & = s_{n+1}              &
+                  [(x'_{n+1}, v'_{n+1})^+]   & = [(x_n, v_n)^+].
+              \end{align*}
+
+              \Cref{eq:semantics:grfrp:theorems:determinism:sets:decl:skip} states that
+              $\declSet{\skp} = \emptyset$, which implies that:
+              \begin{equation*}
+                  \begin{array}{l}
+                      \forall y \in \declSet{\skp}, \; \left(\Theta[y] = \dType \Rightarrow \gamma'_{on}[y] = \bot\right) \\
+                      \quad \wedge \left(\CurrVal{\tyCtx[y]}{[\gamma_{o0}[y], \dots, \gamma_{on}[y]]} = \CurrVal{\tyCtx[y]}{[\gamma_{o0}[y], \dots, \gamma_{on-1}[y], \gamma'_{on}[y], \gamma'_{on+1}[y]]}\right).
+                  \end{array}
+              \end{equation*}
+
+        \item Suppose $stmt^+$ can be decomposed into $\import{x}, stmt^+$.
+
+              The operational rules \nameref{rule:semantics:grfrp:opsem:step:stmt:import:present}
+              and \nameref{rule:semantics:grfrp:opsem:step:stmt:import:absent} ensure that there
+              exist update environments $\gamma_{i0}$, \dots, $\gamma_{in}$, $\gamma'_{in}$, and
+              $\gamma'_{in+1}$ such that for all $k \in \{0, \dots, n\}$:
+              \begin{equation*}
+                  \begin{array}{c}
+                      \gamma_{ik} =
+                      \left\{
+                      \begin{array}{ll}
+                          \gamma_k \ctxconcat [v_k/x] & \text{if} \; x = i_k    \\
+                          \gamma_k                    & \text{if} \; x \neq i_k
+                      \end{array}
+                      \right. \\
+                      \stmtOpSem{\gamma_{ik}}{s_k}{stmt^+}{i_k, t_k, v_k}{\gamma_{ok}}{s_{k+1}}{(x_k, v_k)^+}{(i_{Tk}, t_{Tk})^+}
+                  \end{array}
+              \end{equation*}
+              and
+              \begin{equation*}
+                  \begin{array}{c}
+                      \gamma'_{in} =
+                      \left\{
+                      \begin{array}{ll}
+                          \gamma'_n \ctxconcat [v'_n/x] & \text{if} \; x = i'_n    \\
+                          \gamma'_n                     & \text{if} \; x \neq i'_n
+                      \end{array}
+                      \right.                                                                                                               \\
+                      \stmtOpSem{\gamma'_{in}}{s_n}{stmt^+}{i'_n, t'_n, v'_n}{\gamma'_{on}}{s'_{n+1}}{(x'_n, v'_n)^+}{(i'_{Tn}, t'_{Tn})^+} \\
+                      \gamma'_{in+1} =
+                      \left\{
+                      \begin{array}{ll}
+                          \gamma'_{n+1} \ctxconcat [v'_{n+1}/x] & \text{if} \; x = i'_{n+1}    \\
+                          \gamma'_{n+1}                         & \text{if} \; x \neq i'_{n+1}
+                      \end{array}
+                      \right.                                                                                                               \\
+                      \stmtOpSem{\gamma'_{in+1}}{s'_{n+1}}{stmt^+}{i'_{n+1}, t'_{n+1}, v'_{n+1}}{\gamma'_{on+1}}{s'_{n+2}}{(x'_{n+1}, v'_{n+1})^+}{(i'_{Tn+1}, t'_{Tn+1})^+}.
+                  \end{array}
+              \end{equation*}
+
+              Because $i'_n$ is not in \importSet{\import{x}, stmt^+}, then
+              \Cref{eq:semantics:grfrp:theorems:determinism:sets:import:import} ensures that
+              $x \neq i'_n$, so that we have $\gamma'_{in} = \gamma'_n$.
+              %
+              It implies that:
+              \begin{align*}
+                  \CurrVal{\tyCtx[x]}{\left[\begin{array}{l}
+                                                        \gamma_{i0}[x],   \\
+                                                        \dots,            \\
+                                                        \gamma_{in-1}[x], \\
+                                                        \gamma'_{in}[x],  \\
+                                                        \gamma'_{in+1}[x]
+                                                    \end{array}\right]} & = \CurrVal{\tyCtx[x]}{\left[\begin{array}{l}
+                                                                                                          \text{if} \; x = i_0 \; \text{then} \; v_0 \; \text{else} \; \bot,         \\
+                                                                                                          \dots,                                                                     \\
+                                                                                                          \text{if} \; x = i_{n-1} \; \text{then} \; v_{n-1} \; \text{else} \; \bot, \\
+                                                                                                          \text{if} \; x = i'_n \; \text{then} \; v'_n \; \text{else} \; \bot,       \\
+                                                                                                          \text{if} \; x = i'_{n+1} \; \text{then} \; v'_{n+1} \; \text{else} \; \bot
+                                                                                                      \end{array}\right]} \\
+                                                             & = \CurrVal{\tyCtx[x]}{\left[\begin{array}{l}
+                                                                                                       \text{if} \; x = i_0 \; \text{then} \; v_0 \; \text{else} \; \bot,         \\
+                                                                                                       \dots,                                                                     \\
+                                                                                                       \text{if} \; x = i_{n-1} \; \text{then} \; v_{n-1} \; \text{else} \; \bot, \\
+                                                                                                       \bot                                                                       \\
+                                                                                                       \text{if} \; x = i_n \; \text{then} \; v_n \; \text{else} \; \bot
+                                                                                                   \end{array}\right]}    \\
+                                                             & = \CurrVal{\tyCtx[x]}{\left[\begin{array}{l}
+                                                                                                       \text{if} \; x = i_0 \; \text{then} \; v_0 \; \text{else} \; \bot, \\
+                                                                                                       \dots,                                                             \\
+                                                                                                       \text{if} \; x = i_n \; \text{then} \; v_n \; \text{else} \; \bot
+                                                                                                   \end{array}\right]}            \\
+                                                             & = \CurrVal{\tyCtx[x]}{[\gamma_{i0}[x], \dots, \gamma_{in}[x]]}.
+              \end{align*}
+
+              \Cref{eq:semantics:grfrp:theorems:equivalence:deps:import} ensures that
+              $\depSet{stmt^+} \subseteq \depSet{\import{x}, stmt^+} \cup \{x\}$. We have as initial
+              hypothesis:
+              \begin{multline*}
+                  \forall y \in \depSet{\import{x}, stmt^+}, \; \left(\Theta[y] = \dType \Rightarrow \gamma'_n[y] = \bot\right) \\
+                  \wedge \left(\CurrVal{\tyCtx[y]}{[\gamma_0[y], \dots, \gamma_n[y]]} = \CurrVal{\tyCtx[y]}{[\gamma_0[y], \dots, \gamma_{n-1}[y], \gamma'_n[y], \gamma'_{n+1}[y]]}\right),
+              \end{multline*}
+              which implies:
+              \begin{multline*}
+                  \forall y \in \depSet{\import{x}, stmt^+}, \; \left(\Theta[y] = \dType \Rightarrow \gamma'_{in}[y] = \bot\right) \\
+                  \wedge \left(\CurrVal{\tyCtx[y]}{[\gamma_{i0}[y], \dots, \gamma_{in}[y]]} = \CurrVal{\tyCtx[y]}{[\gamma_{i0}[y], \dots, \gamma_{in-1}[y], \gamma'_{in}[y], \gamma'_{in+1}[y]]}\right).
+              \end{multline*}
+              And because $\gamma'_{in} = \gamma'_n$, we shown that:
+              \begin{multline*}
+                  \gamma'_{in}[x] = \bot \\
+                  \wedge \left(\CurrVal{\tyCtx[x]}{[\gamma_{i0}[x], \dots, \gamma_{in}[x]]} = \CurrVal{\tyCtx[x]}{[\gamma_{i0}[x], \dots, \gamma_{in-1}[x], \gamma'_{in}[x], \gamma'_{in+1}[x]]}\right),
+              \end{multline*}
+              so that in the end we have:
+              \begin{multline*}
+                  \forall y \in \depSet{stmt^+}, \; \left(\Theta[y] = \dType \Rightarrow \gamma'_{in}[y] = \bot\right) \\
+                  \wedge \left(\CurrVal{\tyCtx[y]}{[\gamma_{i0}[y], \dots, \gamma_{in}[y]]} = \CurrVal{\tyCtx[y]}{[\gamma_{i0}[y], \dots, \gamma_{in-1}[y], \gamma'_{in}[y], \gamma'_{in+1}[y]]}\right).
+              \end{multline*}
+
+              \Cref{eq:semantics:grfrp:theorems:determinism:sets:import:import} also ensures that
+              $i'_n \notin \importSet{stmt^+}$. We can then apply the structural induction
+              hypothesis on $stmt^+$, so that we have $[(i'_{Tn}, t'_{Tn})^+] = \emptylist$,
+              $[(x'_n, v'_n)^+] = \emptylist$, $[(i'_{Tn+1}, t'_{Tn+1})^+] =
+                  [(i_{Tn}, t_{Tn})^+]$, $[(x'_{n+1}, v'_{n+1})^+] = [(x_n, v_n)^+]$,
+              $s'_{n+2} = s_{n+1}$, and:
+              \begin{multline*}
+                  \forall y \in \declSet{stmt^+}, \; \left(\Theta[y] = \dType \Rightarrow \gamma'_{on}[y] = \bot\right) \\
+                  \wedge \left(\CurrVal{\tyCtx[y]}{[\gamma_{o0}[y], \dots, \gamma_{on}[y]]} = \CurrVal{\tyCtx[y]}{[\gamma_{o0}[y], \dots, \gamma_{on-1}[y], \gamma'_{on}[y], \gamma'_{on+1}[y]]}\right).
+              \end{multline*}
+
+              Because the operational semantics of statements adds new identifiers to the input
+              context in order to produce the output context, we have:
+              \begin{align*}
+                  \gamma_{o0}[x]    & = \gamma_{i0}[x]    &
+                  \dots             &                     &
+                  \gamma_{on}[x]    & = \gamma_{in}[x]    &
+                  \gamma'_{on}[x]   & = \gamma'_{in}[x]   &
+                  \gamma'_{on+1}[x] & = \gamma'_{in+1}[x]
+              \end{align*}
+              \begin{equation*}
+                  \CurrVal{\tyCtx[x]}{[\gamma_{o0}[x], \dots, \gamma_{on-1}[x], \gamma'_{on}[x], \gamma'_{on+1}[x]]} = \CurrVal{\tyCtx[x]}{[\gamma_{o0}[x], \dots, \gamma_{on}[x]]}.
+              \end{equation*}
+
+              \Cref{eq:semantics:grfrp:theorems:determinism:sets:decl:import} ensures that
+              \declSet{\import{x}, stmt^+} equals $\{x\} \cup \declSet{stmt^+}$, and so:
+              \begin{multline*}
+                  \forall y \in \declSet{\import{x}, stmt^+}, \; \left(\Theta[y] = \dType \Rightarrow \gamma'_{on}[y] = \bot\right) \\
+                  \wedge \left(\CurrVal{\tyCtx[y]}{[\gamma_{o0}[y], \dots, \gamma_{on}[y]]} = \CurrVal{\tyCtx[y]}{[\gamma_{o0}[y], \dots, \gamma_{on-1}[y], \gamma'_{on}[y], \gamma'_{on+1}[y]]}\right).
+              \end{multline*}
+
+        \item Suppose $stmt^+$ can be decomposed into $\export{x}, stmt^+$.
+
+              The operational rules \nameref{rule:semantics:grfrp:opsem:step:stmt:export:value}
+              and \nameref{rule:semantics:grfrp:opsem:step:stmt:export:bottom} ensure that there
+              exist output lists $[(x_{i0}, v_{i0})^+]$, \dots, $[(x_{in}, v_{in})^+]$, $[(x'_{in}, v'_{in})^+]$, and
+              $[(x'_{in+1}, v'_{in+1})^+]$ such that for all $k \in \{0, \dots, n\}$:
+              \begin{equation*}
+                  \begin{array}{c}
+                      {[(x_k, v_k)^+]} =
+                      \left\{
+                      \begin{array}{ll}
+                          {[(x, v), (x_{ik}, v_{ik})^+]} & \text{if} \; \gamma_k[x] = v    \\
+                          {[(x_{ik}, v_{ik})^+]}         & \text{if} \; \gamma_k[x] = \bot
+                      \end{array}
+                      \right. \\
+                      \stmtOpSem{\gamma_k}{s_k}{stmt^+}{i_k, t_k, v_k}{\gamma_{ok}}{s_{k+1}}{(x_{ik}, v_{ik})^+}{(i_{Tk}, t_{Tk})^+}
+                  \end{array}
+              \end{equation*}
+              and:
+              \begin{equation*}
+                  \begin{array}{c}
+                      {[(x'_n, v'_n)^+]} =
+                      \left\{
+                      \begin{array}{ll}
+                          {[(x, v), (x'_{in}, v'_{in})^+]} & \text{if} \; \gamma'_n[x] = v    \\
+                          {[(x'_{in}, v'_{in})^+]}         & \text{if} \; \gamma'_n[x] = \bot
+                      \end{array}
+                      \right.                                                                                                                  \\
+                      \stmtOpSem{\gamma'_n}{s_n}{stmt^+}{i'_n, t'_n, v'_n}{\gamma'_{on}}{s'_{n+1}}{(x'_{in}, v'_{in})^+}{(i'_{Tn}, t'_{Tn})^+} \\
+                      {[(x'_{n+1}, v'_{n+1})^+]} =
+                      \left\{
+                      \begin{array}{ll}
+                          {[(x, v), (x'_{in+1}, v'_{in+1})^+]} & \text{if} \; \gamma'_{n+1}[x] = v    \\
+                          {[(x'_{in+1}, v'_{in+1})^+]}         & \text{if} \; \gamma'_{n+1}[x] = \bot
+                      \end{array}
+                      \right.                                                                                                                  \\
+                      \stmtOpSem{\gamma'_{n+1}}{s'_{n+1}}{stmt^+}{i'_{n+1}, t'_{n+1}, v'_{n+1}}{\gamma'_{on+1}}{s'_{n+2}}{(x'_{in+1}, v'_{in+1})^+}{(i'_{Tn+1}, t'_{Tn+1})^+}.
+                  \end{array}
+              \end{equation*}
+
+              \Cref{eq:semantics:grfrp:theorems:equivalence:deps:export} ensures that
+              \depSet{\export{x}, stmt^+} equals $\{x\} \cup \depSet{stmt^+}$, so that:
+              \begin{multline*}
+                  \forall y \in \depSet{stmt^+}, \; \left(\Theta[y] = \dType \Rightarrow \gamma'_n[y] = \bot\right) \\
+                  \wedge \left(\CurrVal{\tyCtx[y]}{[\gamma_0[y], \dots, \gamma_n[y]]} = \CurrVal{\tyCtx[y]}{[\gamma_0[y], \dots, \gamma_{n-1}[y], \gamma'_n[y], \gamma'_{n+1}[y]]}\right),
+              \end{multline*}
+
+              \Cref{eq:semantics:grfrp:theorems:determinism:sets:import:export} ensures that
+              $i'_n \notin \importSet{stmt^+}$. We can then apply the structural induction
+              hypothesis on $stmt^+$, so that we have $[(i'_{Tn}, t'_{Tn})^+] = \emptylist$,
+              $[(x'_{in}, v'_{in})^+] = \emptylist$, $[(i'_{Tn+1}, t'_{Tn+1})^+] =
+                  [(i_{Tn}, t_{Tn})^+]$, $[(x'_{in+1}, v'_{in+1})^+] = [(x_{in}, v_{in})^+]$,
+              $s'_{n+2} = s_{n+1}$, and:
+              \begin{multline*}
+                  \forall y \in \declSet{stmt^+}, \; \left(\Theta[y] = \dType \Rightarrow \gamma'_{on}[y] = \bot\right) \\
+                  \wedge \left(\CurrVal{\tyCtx[y]}{[\gamma_{o0}[y], \dots, \gamma_{on}[y]]} = \CurrVal{\tyCtx[y]}{[\gamma_{o0}[y], \dots, \gamma_{on-1}[y], \gamma'_{on}[y], \gamma'_{on+1}[y]]}\right).
+              \end{multline*}
+
+              \Cref{eq:semantics:grfrp:theorems:determinism:sets:decl:export} ensures that
+              \declSet{\export{x}, stmt^+} equals \declSet{stmt^+}, and so:
+              \begin{multline*}
+                  \forall y \in \declSet{\export{x}, stmt^+}, \; \left(\Theta[y] = \dType \Rightarrow \gamma'_{on}[y] = \bot\right) \\
+                  \wedge \left(\CurrVal{\tyCtx[y]}{[\gamma_{o0}[y], \dots, \gamma_{on}[y]]} = \CurrVal{\tyCtx[y]}{[\gamma_{o0}[y], \dots, \gamma_{on-1}[y], \gamma'_{on}[y], \gamma'_{on+1}[y]]}\right).
+              \end{multline*}
+
+              The rule \nameref{rule:semantics:grfrp:react_typing:stmt:export} ensures that
+              $\Theta[x] = \dType$. Because $x$ is in $\depSet{\export{x}, stmt^+}$, we have
+              (initial hypothesis) $\gamma'_n[x] = \bot$. It implies that $[(x_n, v_n)^+]$ equals
+              $[(x_{in}, v_{in})^+]$, which is empty.
+
+              The initial hypothesis also ensures that:
+              \begin{align*}
+                  \CurrVal{\tyCtx[x]}{[\gamma_0[x], \dots, \gamma_n[x]]} & = \CurrVal{\tyCtx[x]}{[\gamma_0[x], \dots, \gamma_{n-1}[x], \gamma'_n[x], \gamma'_{n+1}[x]]} \\
+                                                                         & = \CurrVal{\tyCtx[x]}{[\gamma_0[x], \dots, \gamma_{n-1}[x], \bot, \gamma'_{n+1}[x]]}         \\
+                                                                         & = \CurrVal{\tyCtx[x]}{[\gamma_0[x], \dots, \gamma_{n-1}[x], \gamma'_{n+1}[x]]}               \\
+                                                                         & \Rightarrow \gamma_n[x] = \gamma'_{n+1}[x],
+              \end{align*}
+              and therefore:
+
+              \begin{align*}
+                  {[(x'_{n+1}, v'_{n+1})^+]} & =
+                  \left\{
+                  \begin{array}{ll}
+                      {[(x, v), (x'_{in+1}, v'_{in+1})^+]} & \text{if} \; \gamma'_{n+1}[x] = v    \\
+                      {[(x'_{in+1}, v'_{in+1})^+]}         & \text{if} \; \gamma'_{n+1}[x] = \bot
+                  \end{array}
+                  \right.                                          \\
+                                             & =
+                  \left\{
+                  \begin{array}{ll}
+                      {[(x, v), (x_{in}, v_{in})^+]} & \text{if} \; \gamma_n[x] = v    \\
+                      {[(x_{in}, v_{in})^+]}         & \text{if} \; \gamma_n[x] = \bot
+                  \end{array}
+                  \right.                                          \\
+                                             & = {[(x_n, v_n)^+]}.
+              \end{align*}
+
+        \item Suppose $stmt^+$ can be decomposed into $\decl{x^+}{\sigma}, stmt^+$.
+
+              The rule \nameref{rule:semantics:grfrp:opsem:step:stmt:decl} ensures that
+              there exist
+              states $s_{\sigma 0}$, \dots, $s_{\sigma n}$, $s'_{\sigma n}$, and $s'_{\sigma n+1}$ corresponding to the flow operation $\sigma$,
+              states $s_{i0}$, \dots, $s_{in}$, $s'_{in}$, and $s'_{in+1}$ corresponding to the remaining statements $stmt^+$,
+              timer resets $[(i_{\sigma 0}, t_{\sigma 0})^+]$, \dots, $[(i_{\sigma n}, t_{\sigma n})^+]$, $[(i'_{\sigma n}, t'_{\sigma n})^+]$, and $[(i'_{\sigma n+1}, t'_{\sigma n+1})^+]$ from $\sigma$,
+              timer resets $[(i_{i0}, t_{i0})^+]$, \dots, $[(i_{in}, t_{in})^+]$, $[(i'_{in}, t'_{in})^+]$, and $[(i'_{in+1}, t'_{in+1})^+]$ from $stmt^+$,
+              update environments $\gamma_{i0}$, \dots, $\gamma_{in}$, $\gamma'_{in}$, and $\gamma'_{in+1}$, and
+              lists of bottom values $[v_{0\bot}^+]$, \dots, $[v_{n\bot}^+]$, $[v_{n\bot}^{\prime+}]$, and $[v_{n+1\bot}^{\prime+}]$, and
+              such that for all $k \in \{0, \dots, n\}$:
+              \begin{equation*}
+                  \begin{array}{c}
+                      s_k = (s_{\sigma k}, s_{ik})                                                                                                                \quad
+                      \gamma_{ik} = \gamma_k \ctxconcat [(v_{k\bot}/x)^+]                                                                                         \quad
+                      { [(i_{Tk}, t_{Tk})^+] = [(i_{\sigma k}, t_{\sigma k})^+, (i_{ik}, t_{ik})^+] }                                  \\
+                      \sigmaOpSem{\gamma_k}{s_{\sigma k}}{\sigma}{t_k}{s_{\sigma  k+1}}{v_{k\bot}^+}{(i_{\sigma k}, t_{\sigma k})^+}   \\
+                      \stmtOpSem{\gamma_{ik}}{s_{ik}}{stmt^+}{i_k, t_k, v_k}{\gamma_{ok}}{s_{i k+1}}{(x_k, v_k)^+}{(i_{ik}, t_{ik})^+} \\
+                  \end{array}
+              \end{equation*}
+              and:
+              \begin{equation*}
+                  \begin{array}{c}
+                      s'_n = (s'_{\sigma n}, s'_{in})                                                                                                             \quad
+                      \gamma'_{in} = \gamma'_n \ctxconcat [(v'_{n\bot}/x)^+]                                                                                      \quad
+                      { [(i'_{Tn}, t'_{Tn})^+] = [(i'_{\sigma n}, t'_{\sigma n})^+, (i'_{in}, t'_{in})^+] }                                                       \\
+                      \sigmaOpSem{\gamma'_n}{s'_{\sigma n}}{\sigma}{t'_n}{s'_{\sigma n+1}}{v_{n\bot}^{\prime+}}{(i'_{\sigma n}, t'_{\sigma n})^+}                 \\
+                      \stmtOpSem{\gamma'_{in}}{s'_{in}}{stmt^+}{i'_n, t'_n, v'_n}{\gamma'_{on}}{s'_{in+1}}{(x'_n, v'_n)^+}{(i'_{in}, t'_{in})^+}                  \\
+                      s'_{n+1} = (s'_{\sigma n+1}, s'_{in+1})                                                                                                     \quad
+                      \gamma'_{in+1} = \gamma'_{n+1} \ctxconcat [(v'_{n+1\bot}/x)^+]                                                                              \\
+                      { [(i'_{Tn+1}, t'_{Tn+1})^+] = [(i'_{\sigma n+1}, t'_{\sigma n+1})^+, (i'_{in+1}, t'_{in+1})^+] }                                           \\
+                      \sigmaOpSem{\gamma'_{n+1}}{s'_{\sigma n+1}}{\sigma}{t'_{n+1}}{s'_{\sigma n+2}}{v_{n+1\bot}^{\prime+}}{(i'_{\sigma n+1}, t'_{\sigma n+1})^+} \\
+                      \stmtOpSem{\gamma'_{in+1}}{s'_{in+1}}{stmt^+}{i'_{n+1}, t'_{n+1}, v'_{n+1}}{\gamma'_{on+1}}{s'_{in+2}}{(x'_{n+1}, v'_{n+1})^+}{(i'_{in+1}, t'_{in+1})^+}.
+                  \end{array}
+              \end{equation*}
+
+              The typing rules \nameref{rule:grust:typing:grfrp:flow_stmt:let} and
+              \nameref{rule:grust:typing:grfrp:flow_stmt:def} ensures that we have:
+              \begin{equation*}
+                  \flowTyped{\sigma}{(\tyCtx[x])^+}.
+              \end{equation*}
+
+              \Cref{eq:semantics:grfrp:theorems:equivalence:deps:decl} ensures that
+              \depSet{\sigma} is included in \depSet{\decl{x^+}{\sigma}, stmt^+}, so that:
+              \begin{multline*}
+                  \forall y \in \depSet{\sigma}, \; \left(\Theta[y] = \dType \Rightarrow \gamma'_n[y] = \bot\right) \\
+                  \wedge \left(\CurrVal{\tyCtx[y]}{[\gamma_0[y], \dots, \gamma_n[y]]} = \CurrVal{\tyCtx[y]}{[\gamma_0[y], \dots, \gamma_{n-1}[y], \gamma'_n[y], \gamma'_{n+1}[y]]}\right).
+              \end{multline*}
+              We can then apply \Cref{lem:semantics:grfrp:theorems:oversampling:op}, which ensures:
+              \begin{equation*}
+                  \begin{array}{c}
+                      [(i'_{\sigma n}, t'_{\sigma n})^+] = \emptylist \quad [(i'_{\sigma n+1}, t'_{\sigma n+1})^+] = [(i_{\sigma n}, t_{\sigma n})^+] \\
+                      s'_{\sigma n+2} = s_{\sigma n+1} \quad \left(\Theta[x] = \dType \Rightarrow v'_{n\bot} = \bot\right)^+                          \\
+                      \left(\CurrVal{\tyCtx[x]}{[v_{0\bot}, \dots, v_{n\bot}]} = \CurrVal{\tyCtx[x]}{[v_{0\bot}, \dots, v_{n-1\bot}, v'_{n\bot}, v'_{n+1\bot}]}\right)^+,
+                  \end{array}
+              \end{equation*}
+              thus we have:
+              \begin{multline}\label{eq:semantics:grfrp:theorems:oversampling:stmt:decl:defs}
+                  \forall y \in \{x^+\}, \; \Theta[y] = \dType \Rightarrow \gamma'_{in}[y] = \bot \\
+                  \wedge \left(\CurrVal{\tyCtx[y]}{[\gamma_{i0}[y], \dots, \gamma_{in}[y]]} = \CurrVal{\tyCtx[y]}{[\gamma_{i0}[y], \dots, \gamma_{in-1}[y], \gamma'_{in}[y], \gamma'_{in+1}[y]]}\right),
+              \end{multline}
+
+              \Cref{eq:semantics:grfrp:theorems:equivalence:deps:decl} also ensures that
+              $\depSet{stmt^+} \subseteq \depSet{\decl{x^+}{\sigma}, stmt^+} \cup \{x^+\}$. We have
+              as initial hypothesis:
+              \begin{multline*}
+                  \forall y \in \depSet{\decl{x^+}{\sigma}, stmt^+}, \; \left(\Theta[y] = \dType \Rightarrow \gamma'_n[y] = \bot\right) \\
+                  \wedge \left(\CurrVal{\tyCtx[y]}{[\gamma_0[y], \dots, \gamma_n[y]]} = \CurrVal{\tyCtx[y]}{[\gamma_0[y], \dots, \gamma_{n-1}[y], \gamma'_n[y], \gamma'_{n+1}[y]]}\right),
+              \end{multline*}
+              which implies:
+              \begin{multline*}
+                  \forall y \in \depSet{\decl{x^+}{\sigma}, stmt^+}, \; \left(\Theta[y] = \dType \Rightarrow \gamma'_{in}[y] = \bot\right) \\
+                  \wedge \left(\CurrVal{\tyCtx[y]}{[\gamma_{i0}[y], \dots, \gamma_{in}[y]]} = \CurrVal{\tyCtx[y]}{[\gamma_{i0}[y], \dots, \gamma_{in-1}[y], \gamma'_{in}[y], \gamma'_{in+1}[y]]}\right).
+              \end{multline*}
+              so that, with \Cref{eq:semantics:grfrp:theorems:oversampling:stmt:decl:defs}, we have:
+              \begin{multline*}
+                  \forall y \in \depSet{stmt^+}, \; \left(\Theta[y] = \dType \Rightarrow \gamma'_{in}[y] = \bot\right) \\
+                  \wedge \left(\CurrVal{\tyCtx[y]}{[\gamma_{i0}[y], \dots, \gamma_{in}[y]]} = \CurrVal{\tyCtx[y]}{[\gamma_{i0}[y], \dots, \gamma_{in-1}[y], \gamma'_{in}[y], \gamma'_{in+1}[y]]}\right).
+              \end{multline*}
+
+              \Cref{eq:semantics:grfrp:theorems:determinism:sets:import:decl} also ensures that
+              $i'_n \notin \importSet{stmt^+}$. We can then apply the structural induction
+              hypothesis on $stmt^+$, so that we have $[(i'_{in}, t'_{in})^+] = \emptylist$,
+              $[(x'_n, v'_n)^+] = \emptylist$, $[(i'_{in+1}, t'_{in+1})^+] =
+                  [(i_{in}, t_{in})^+]$, $[(x'_{n+1}, v'_{n+1})^+] = [(x_n, v_n)^+]$,
+              $s'_{in+2} = s_{in+1}$, and:
+              \begin{multline*}
+                  \forall y \in \declSet{stmt^+}, \; \left(\Theta[y] = \dType \Rightarrow \gamma'_{on}[y] = \bot\right) \\
+                  \wedge \left(\CurrVal{\tyCtx[y]}{[\gamma_{o0}[y], \dots, \gamma_{on}[y]]} = \CurrVal{\tyCtx[y]}{[\gamma_{o0}[y], \dots, \gamma_{on-1}[y], \gamma'_{on}[y], \gamma'_{on+1}[y]]}\right).
+              \end{multline*}
+
+              Because the operational semantics of statements adds new identifiers to the input
+              context in order to produce the output context,
+              for all defined identifier $x$ we have:
+              \begin{align*}
+                  \gamma_{o0}[x]    & = \gamma_{i0}[x]    &
+                  \dots             &                     &
+                  \gamma_{on}[x]    & = \gamma_{in}[x]    &
+                  \gamma'_{on}[x]   & = \gamma'_{in}[x]   &
+                  \gamma'_{on+1}[x] & = \gamma'_{in+1}[x]
+              \end{align*}
+              \begin{equation*}
+                  \CurrVal{\tyCtx[x]}{[\gamma_{o0}[x], \dots, \gamma_{on-1}[x], \gamma'_{on}[x], \gamma'_{on+1}[x]]} = \CurrVal{\tyCtx[x]}{[\gamma_{o0}[x], \dots, \gamma_{on}[x]]}.
+              \end{equation*}
+
+              \Cref{eq:semantics:grfrp:theorems:determinism:sets:decl:decl} states that
+              \declSet{\decl{x^+}{\sigma}, stmt^+} equals $\declSet{stmt^+} \cup {x^+}$, and so:
+              \begin{multline*}
+                  \forall y \in \declSet{\decl{x^+}{\sigma}, stmt^+}, \; \left(\Theta[y] = \dType \Rightarrow \gamma'_{on}[y] = \bot\right) \\
+                  \wedge \left(\CurrVal{\tyCtx[y]}{[\gamma_{o0}[y], \dots, \gamma_{on}[y]]} = \CurrVal{\tyCtx[y]}{[\gamma_{o0}[y], \dots, \gamma_{on-1}[y], \gamma'_{on}[y], \gamma'_{on+1}[y]]}\right).
+              \end{multline*}
+    \end{itemize}
+\end{skippableproof}
+
+\begin{theorem}[Oversampling]
+    \label{thm:semantics:grfrp:theorems:oversampling}
+    Let \service{F}{stmt^+} be a service in a program \G with a typing context \tyCtx, and let
+    $\Theta$ be a reactive typing context such that:
+    \begin{equation*}
+        \itemTyped{\service{F}{stmt^+}} \qquad \servTypedReact{\service{F}{stmt^+}}.
+    \end{equation*}
+    For all $n \ge 1$;
+    all states $s_0$, \dots, $s_{n+1}$, $s'_{n+1}$, and $s'_{n+2}$ corresponding to $F$;
+    all timer queues $\tau_0$, \dots, $\tau_n$, $\tau'_{n+1}$, and $\tau'_{n+2}$;
+    all messages $\mess_0$, \dots, $\mess_n$, $\mess'_n$, and $\mess'_{n+1}$; and
+    all timestamps $t_0$, \dots, $t_n$, $t'_n$, and $t'_{n+1}$;
+    all lists of outputs $[(x_0, v_0)^+]$, \dots, $[(x_n, v_n)^+]$, $[(x'_n, v'_n)^+]$, and $[(x'_{n+1}, v'_{n+1})^+]$
+    such that:
+    \begin{equation*}
+        \begin{array}{c}
+            t'_n \le t'_{n+1} \qquad (\mess'_{n+1}, t'_{n+1}) = (\mess_n, t_n) \qquad s_0 = \initstate{F} \qquad \tau_0 = \inittimer{F} \\
+            \forall k \in \{0, \dots, n\}, \quad \serviceOpSem{s_k}{\tau_k}{F}{\mess_k}{t_k}{s_1}{\tau_{k+1}}{(x_k, v_k)^+}             \\
+            \serviceOpSem{s_n}{\tau_n}{F}{\mess'_n}{t_n}{s'_{n+1}}{\tau'_{n+1}}{(x'_n, v'_n)^+}                                         \\
+            \serviceOpSem{s_{n+1}}{\tau_{n+1}}{F}{\mess'_{n+1}}{t_{n+1}}{s'_{n+2}}{\tau'_{n+2}}{(x'_{n+1}, v'_{n+1})^+},
+        \end{array}
+    \end{equation*}
+    if there exist an identifier $i \notin \importSet{F}$ and a value $v_i$ such that
+    $\mess'_n = \inputMess{i}{v_i}$, then we have: % \todo{unknown timer message}
+    \begin{align*}
+        \tau'_{n+1} & = \tau_n     &          &           & [(x'_n, v'_n)^+]         & = \emptylist      \\
+        \tau'_{n+2} & = \tau_{n+1} & s'_{n+2} & = s_{n+1} & [(x'_{n+1}, v'_{n+1})^+] & = [(x_n, v_n)^+].
+    \end{align*}
+
+    This lemma formalizes the behavior of a service, $F$, when it receives an input that it does not
+    import. It states that if, after $n$ simulation steps, $F$ receives such an input at step $n+1$,
+    this intermediate step has no lasting effect. A computation performed from this new state
+    produces the same result as one performed from the state at step $n$. This implies that the
+    internal state of the service does not change ($s'_{n+2} = s_{n+1}$), the timer queues are
+    unaffected ($\tau'_{n+1} = \tau_n$ and $\tau'_{n+2} = \tau_{n+1}$), and the exported values are
+    preserved ($[(x'_n, v'_n)^+] = \emptylist$ and $[(x'_{n+1}, v'_{n+1})^+] = [(x_n, v_n)^+]$).
+\end{theorem}
+\begin{skippableproof}
+    Let \service{F}{stmt^+} be a service in a program \G with a typing context \tyCtx, let
+    $\Theta$ be a reactive typing context such that:
+    \begin{equation*}
+        \itemTyped{\service{F}{stmt^+}} \qquad \servTypedReact{\service{F}{stmt^+}}.
+    \end{equation*}
+    Let $n \ge 1$, let $s_0$, \dots, $s_{n+1}$, $s'_{n+1}$, and $s'_{n+2}$ be states corresponding
+    to $F$, let $\tau_0$, \dots, $\tau_n$, $\tau'_{n+1}$, and $\tau'_{n+2}$ be timer
+    queues, let $\mess_0$, \dots, $\mess_n$, $\mess'_n$, and $\mess'_{n+1}$ be messages, and let
+    $[(x_0, v_0)^+]$, \dots, $[(x_n, v_n)^+]$, $[(x'_n, v'_n)^+]$, and $[(x'_{n+1}, v'_{n+1})^+]$ be
+    lists of outputs such that:
+    \begin{equation*}
+        \begin{array}{c}
+            t'_n \le t'_{n+1} = t_n \qquad s_0 = \initstate{F} \qquad \tau_0 = \inittimer{F}                                \\
+            \forall k \in \{0, \dots, n\}, \quad \serviceOpSem{s_k}{\tau_k}{F}{\mess_k}{t_k}{s_1}{\tau_{k+1}}{(x_k, v_k)^+} \\
+            \serviceOpSem{s_n}{\tau_n}{F}{\mess'_n}{t_n}{s'_{n+1}}{\tau'_{n+1}}{(x'_n, v'_n)^+}                             \\
+            \serviceOpSem{s_{n+1}}{\tau_{n+1}}{F}{\mess'_{n+1}}{t_{n+1}}{s'_{n+2}}{\tau'_{n+2}}{(x'_{n+1}, v'_{n+1})^+}.
+        \end{array}
+    \end{equation*}
+
+    Suppose there exist an identifier $i$ not in \importSet{F} and a value $v_i$ such that
+    $\mess'_n$ equals \inputMess{i}{v_i}.
+
+    The operational semantics rules \nameref{rule:semantics:grfrp:opsem:step:service:input} and
+    \nameref{rule:semantics:grfrp:opsem:step:service:timer} ensure there exist
+    input update contexts $\gamma_{i0}$, \dots, $\gamma_{in}$, $\gamma'_{in}$, and $\gamma'_{in+1}$;
+    output update contexts $\gamma_{o0}$, \dots, $\gamma_{on}$, $\gamma'_{on}$, and $\gamma'_{on+1}$;
+    triggering inputs $(i_0, t_0, v_0)$, \dots, $(i_n, t_n, v_n)$, $(i'_n, t'_n, v'_n)$, and $(i'_{n+1}, t'_{n+1}, v'_{n+1})$;
+    lists of outputs $[(x_0, v_0)^+]$, \dots, $[(x_n, v_n)^+]$, $[(x'_n, v'_n)^+]$, and $[(x'_{n+1}, v'_{n+1})^+]$; and
+    lists of timer resets $[(i_{T0}, t_{T0})^+]$, \dots, $[(i_{Tn}, t_{Tn})^+]$, $[(i'_{Tn}, t'_{Tn})^+]$, and $[(i'_{Tn+1}, t'_{Tn+1})^+]$
+    such that for all $k \in \{0, \dots, n\}$:
+    \begin{equation*}
+        \begin{array}{c}
+            (\gamma_{ik}, v_k, \tau_{k+1}) =
+            \left\{
+            \begin{array}{lll}
+                ([()/i_k],    & (),  & \reset{\tau}{[(i_{Tk}, t_{Tk})^+]})                                                           \\
+                              &      & \hspace{-1cm} \text{if} \; \mess_k = \timerMess{i_k} \wedge \tau_k = (i_k, t_k) \diamond \tau \\
+                (\emptygamma, & v_i, & \reset{\tau_k}{[(i_{Tk}, t_{Tk})^+]})                                                         \\
+                              &      & \hspace{-1cm} \text{if} \; \mess_k = \inputMess{i_k}{v_i}
+            \end{array}
+            \right. \\
+            \stmtOpSem{\gamma_{ik}}{s_k}{stmt^+}{i_k, t_k, v_k}{\gamma_{ok}}{s_{k+1}}{(x_k, v_k)^+}{(i_{Tk}, t_{Tk})^+}
+        \end{array}
+    \end{equation*}
+    and:
+    \begin{equation*}
+        \begin{array}{c}
+            (\gamma'_{in}, v'_n, \tau'_{n+1}) =
+            \left\{
+            \begin{array}{lll}
+                ([()/i'_n],   & (),  & \reset{\tau}{[(i'_{Tn}, t'_{Tn})^+]})                                                             \\
+                              &      & \hspace{-1cm} \text{if} \; \mess'_n = \timerMess{i'_n} \wedge \tau_n = (i'_n, t'_n) \diamond \tau \\
+                (\emptygamma, & v_i, & \reset{\tau_n}{[(i'_{Tn}, t'_{Tn})^+]})                                                           \\
+                              &      & \hspace{-1cm} \text{if} \; \mess'_n = \inputMess{i'_n}{v_i}
+            \end{array}
+            \right.                                                                                                               \\
+            \stmtOpSem{\gamma'_{in}}{s_n}{stmt^+}{i'_n, t'_n, v'_n}{\gamma'_{on}}{s'_{n+1}}{(x'_n, v'_n)^+}{(i'_{Tn}, t'_{Tn})^+} \\
+            (\gamma'_{in+1}, v'_{n+1}, \tau'_{n+2}) =
+            \left\{
+            \begin{array}{lll}
+                ([()/i'_{n+1}], & (),  & \reset{\tau}{[(i'_{Tn+1}, t'_{Tn+1})^+]})                                                                              \\
+                                &      & \hspace{-1cm} \text{if} \; \mess'_{n+1} = \timerMess{i'_{n+1}} \wedge \tau'_{n+1} = (i'_{n+1}, t'_{n+1}) \diamond \tau \\
+                (\emptygamma,   & v_i, & \reset{\tau'_{n+1}}{[(i'_{Tn+1}, t'_{Tn+1})^+]})                                                                       \\
+                                &      & \hspace{-1cm} \text{if} \; \mess'_{n+1} = \inputMess{i'_{n+1}}{v_i}
+            \end{array}
+            \right.                                                                                                               \\
+            \stmtOpSem{\gamma'_{in+1}}{s'_{n+1}}{stmt^+}{i'_{n+1}, t'_{n+1}, v'_{n+1}}{\gamma'_{on+1}}{s'_{n+2}}{(x'_{n+1}, v'_{n+1})^+}{(i'_{Tn+1}, t'_{Tn+1})^+}.
+        \end{array}
+    \end{equation*}
+
+    We supposed that $\mess'_n = \inputMess{i}{v_i}$, with $i \notin \importSet{F}$, which implies:
+    \begin{align*}
+        \gamma'_{in} & = \emptygamma & v'_n & = v_i & \tau'_{n+1} & = \reset{\tau_n}{[(i'_{Tn}, t'_{Tn})^+]}.
+    \end{align*}
+
+    \Cref{eq:semantics:grfrp:theorems:determinism:sets:import:service} states that \importSet{F}
+    equals \importSet{stmt^+}.
+
+    Let $x \in \depSet{stmt^+}$, then we have:
+    \begin{align*}
+        \gamma'_{in}[x]   & = \emptygamma[x] = \bot \\
+        \gamma'_{in+1}[x] & =
+        \left\{
+        \begin{array}{ll}
+            [()/i'_{n+1}][x] & \text{if} \; \mess'_{n+1} = \timerMess{i'_{n+1}} \wedge \tau'_{n+1} = (i'_{n+1}, t'_{n+1}) \diamond \tau \\
+            \emptygamma[x]   & \text{if} \; \mess'_{n+1} = \inputMess{i'_{n+1}}{v_i}
+        \end{array}
+        \right.                                     \\
+                          & =
+        \left\{
+        \begin{array}{ll}
+            \bot & \text{if} \; \mess'_{n+1} = \timerMess{i'_{n+1}} \wedge \tau'_{n+1} = (i'_{n+1}, t'_{n+1}) \diamond \tau \\
+            \bot & \text{if} \; \mess'_{n+1} = \inputMess{i'_{n+1}}{v_i}
+        \end{array}
+        \right.                                     \\
+                          & = \bot                  \\
+        \gamma_{in}[x]    & =
+        \left\{
+        \begin{array}{ll}
+            [()/i_{n}][x]  & \text{if} \; \mess_{n} = \timerMess{i_{n}} \wedge \tau_{n} = (i_{n}, t_{n}) \diamond \tau \\
+            \emptygamma[x] & \text{if} \; \mess_{n} = \inputMess{i_{n}}{v_i}
+        \end{array}
+        \right.                                     \\
+                          & = \bot
+    \end{align*}
+    \begin{align*}
+        \CurrVal{\tyCtx[x]}{[\gamma_{i0}[x], \dots, \gamma_{in-1}[x], \gamma'_{in}[x], \gamma'_{in+1}[x]]} & = \CurrVal{\tyCtx[x]}{[\gamma_{i0}[x], \dots, \gamma_{in-1}[x], \bot, \bot]}      \\
+                                                                                                           & = \CurrVal{\tyCtx[x]}{[\gamma_{i0}[x], \dots, \gamma_{in-1}[x], \gamma_{in}[x]]},
+    \end{align*}
+    which implies:
+    \begin{multline*}
+        \forall x \in \depSet{stmt^+}, \; \left(\Theta[x] = \dType \Rightarrow \gamma'_{in}[x] = \bot\right) \\
+        \wedge \left(\CurrVal{\tyCtx[x]}{[\gamma_{i0}[x], \dots, \gamma_{in}[x]]} = \CurrVal{\tyCtx[x]}{[\gamma_{i0}[x], \dots, \gamma_{in-1}[x], \gamma'_{in}[x], \gamma'_{in+1}[x]]}\right).
+    \end{multline*}
+
+    The application of \Cref{lem:semantics:grfrp:theorems:oversampling:stmts} ensures that:
+    \begin{multline*}
+        \forall y \in \declSet{stmt^+}, \; \left(\Theta[y] = \dType \Rightarrow \gamma'_{on}[y] = \bot\right) \\
+        \wedge \left(\CurrVal{\tyCtx[y]}{[\gamma_{o0}[y], \dots, \gamma_{on}[y]]} = \CurrVal{\tyCtx[y]}{[\gamma_{o0}[y], \dots, \gamma_{on-1}[y], \gamma'_{on}[y], \gamma'_{on+1}[y]]}\right)
+    \end{multline*}
+    and:
+    \begin{align*}
+        [(i'_{Tn}, t'_{Tn})^+]     & = \emptylist           &          &           & [(x'_n, v'_n)^+]         & = \emptylist      \\
+        [(i'_{Tn+1}, t'_{Tn+1})^+] & = [(i_{Tn}, t_{Tn})^+] & s'_{n+2} & = s_{n+1} & [(x'_{n+1}, v'_{n+1})^+] & = [(x_n, v_n)^+].
+    \end{align*}
+
+    Finally, because we supposed $\mess'_{n+1} = \mess_n$, we have:
+    \begin{align*}
+        \tau'_{n+1} & = \reset{\tau_n}{[(i'_{Tn}, t'_{Tn})^+]} = \reset{\tau_n}{\emptylist} = \tau_n \\
+        \tau'_{n+2} & =
+        \left\{
+        \begin{array}{lll}
+            \reset{\tau}{[(i'_{Tn+1}, t'_{Tn+1})^+]}        & \text{if} \; \mess'_{n+1} = \timerMess{i'_{n+1}}              \\
+                                                            & \quad \wedge \tau'_{n+1} = (i'_{n+1}, t'_{n+1}) \diamond \tau \\
+            \reset{\tau'_{n+1}}{[(i'_{Tn+1}, t'_{Tn+1})^+]} & \text{if} \; \mess'_{n+1} = \inputMess{i'_{n+1}}{v_i}
+        \end{array}
+        \right.                                                                                      \\
+                    & =
+        \left\{
+        \begin{array}{lll}
+            \reset{\tau}{[(i_{Tn}, t_{Tn})^+]}   & \text{if} \; \mess_n = \timerMess{i_n} \wedge \tau_n = (i_n, t_n) \diamond \tau \\
+            \reset{\tau_n}{[(i_{Tn}, t_{Tn})^+]} & \text{if} \; \mess_n = \inputMess{i_n}{v_i}
+        \end{array}
+        \right.                                                                                      \\
+                    & = \tau_{n+1}.
+    \end{align*}
+\end{skippableproof}
+
+\paragraph{Summary}
+In conclusion, this section established the oversampling property, a cornerstone of the \GRust
+execution model. The main theorem, \Cref{thm:semantics:grfrp:theorems:oversampling}, formally proves
+that a service's behavior is driven solely by changes to its imported flows.
+%
+By demonstrating that an evaluation triggered by an unimported flow---an oversampling step---%
+produces no outputs and leaves the service state and timers unchanged, we confirm that such
+computations are inert.
+%
+The proof was built upon a key lemma for reactive flow operations, which required introducing a
+history-aware \smf{curr} function to formally compare flow values across computation steps.
+%
+This oversampling guarantee is crucial: it provides the formal justification for adopting an
+efficient, event-driven execution model for services without compromising the semantic integrity of
+the underlying reactive components.

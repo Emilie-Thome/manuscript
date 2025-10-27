@@ -1,0 +1,717 @@
+\subsection{Causality in \GRSync}
+\label{sec:semantics:grsync:causality}
+
+This section gives formal definition to the causality of \GRSync constructs.
+%
+In everyday language, causality refers to the cause-and-effect relationship between several
+phenomena: it is the influence by which one phenomenon (the cause) contributes to the production of
+another phenomenon (the effect), with the same cause producing the same effects under the same
+conditions.
+%
+Similarly, in synchronous programming, we say that a component is \emph{causal} if the same input
+flows produce the same output flows.
+
+Causality verification is performed statically at compile time. It involves analyzing the
+relationships between defined identifiers (formalized in \Cref{sec:semantics:grsync:causality:defs}) and their
+dependencies to construct a dependency order (defined in \Cref{sec:semantics:grsync:causality:dependencies}).
+A component, and more generally a block of equations, is causal if no identifier depends on itself
+(as formalized in \Cref{sec:semantics:grsync:causality:causal}).
+%
+From this dependency order, we can classify identifiers based on the maximum length of their
+dependency chains. This classification is referred to as the \emph{rank}
+(defined in \Cref{sec:semantics:grsync:causality:rank}). Using ranks, we enable an inductive
+reasoning on identifiers defined by a causal block of equations (\Cref{sec:semantics:grsync:causality:induction})
+and derive a scheduling (\Cref{sec:semantics:grsync:causality:scheduling}) in which equations can
+be computed without any deadlock caused by circular dependencies.
+
+\subsubsection{Defined identifiers}
+\label{sec:semantics:grsync:causality:defs}
+
+\newcommand{\defs}[1]{{\ensuremath{\textit{defs}\left(#1\right)}}}
+
+Equations, patterns, and event patterns introduce identifiers into scope. To reason formally about
+causality, we define the function $\defs{\epsilon}$, which returns the set of identifiers defined
+by a given \GRSync construct $\epsilon$ (an equation, a pattern, or an event pattern).
+
+\begin{definition}[Definition set]
+    Let $\epsilon$ be an element of \GRSync. The set of identifiers defined by $\epsilon$ is
+    denoted \defs{\epsilon}, and its definition is given in
+    \Crefrange{rule:semantics:grsync:causality:defs:eq}%
+    {rule:semantics:grsync:causality:defs:epat:edge}.
+\end{definition}
+
+\paragraph{Equations}
+
+A block of equations defines the union of those defined by each equation (\Cref{rule:semantics:%
+    grsync:causality:defs:eq}). A declaration $x^+ = e$ defines the identifiers on its left-hand
+side, which are $x^+$ (\Cref{rule:semantics:grsync:causality:defs:eq:decl}). In \kwf{match}
+equations, the defined identifiers are the $\kwf{vars}\{x^+\}$ (\Cref{rule:semantics:grsync:%
+    causality:defs:eq:match}). In \kwf{when} equations, the defined identifiers are the
+$\kwf{vars}\{x^+\}$ plus the memories of the signals defined in \init{x_m^+ = c^+} (\Cref{rule:%
+    semantics:grsync:causality:defs:eq:when}).
+
+\begin{align}
+    \defs{eq^+}                                                           & = \bigsqcup \defs{eq}^+ \label{rule:semantics:grsync:causality:defs:eq}              \\
+    \defs{x^+ = e}                                                        & = \{x^+\} \label{rule:semantics:grsync:causality:defs:eq:decl}                       \\
+    \defs{\matchTab{e}{x^+}{(\branch{pat_i^+}{e_i}{eq_i^+})^+}}           & = \{x^+\} \label{rule:semantics:grsync:causality:defs:eq:match}                      \\
+    \defs{\whenTab{x^+}{x_m^+ = c^+}{(\branch{epat_i^+}{e_i}{eq_i^+})^+}} & = \{x^+\} \cup \{\last{x_m}^+\} \label{rule:semantics:grsync:causality:defs:eq:when}
+\end{align}
+
+\paragraph{Patterns}
+
+Patterns define identifiers when matching values. A tuple pattern $pat^+$ defines the union of its
+sub-patterns (\Cref{rule:semantics:grsync:causality:defs:pat}). A constant $c$ or a wildcard
+\verb|_| defines no identifier (\Crefrange{rule:semantics:grsync:causality:defs:pat:const}%
+{rule:semantics:grsync:causality:defs:pat:wild}). An identifier pattern $x$ defines the
+identifier $x$ (\Cref{rule:semantics:grsync:causality:defs:pat:ident}).
+
+\begin{align}
+    \defs{pat^+} & = \bigsqcup \defs{pat}^+ \label{rule:semantics:grsync:causality:defs:pat} \\
+    \defs{x}     & = \{x\} \label{rule:semantics:grsync:causality:defs:pat:ident}            \\
+    \defs{c}     & = \emptyset \label{rule:semantics:grsync:causality:defs:pat:const}        \\
+    \defs{\_}    & = \emptyset \label{rule:semantics:grsync:causality:defs:pat:wild}
+\end{align}
+
+\paragraph{Event patterns}
+
+Event patterns define identifiers upon event detection. A tuple $epat^+$ defines the union of its
+components (\Cref{rule:semantics:grsync:causality:defs:epat}). An event detection \detect{x}{y} defines
+$x$ (\Cref{rule:semantics:grsync:causality:defs:epat:event}), while a rising edge $e$ defines
+no identifier (\Cref{rule:semantics:grsync:causality:defs:epat:edge}).
+
+\begin{align}
+    \defs{epat^+}        & = \bigsqcup \defs{epat}^+ \label{rule:semantics:grsync:causality:defs:epat} \\
+    \defs{\detect{x}{y}} & = \{x\} \label{rule:semantics:grsync:causality:defs:epat:event}             \\
+    \defs{e}             & = \emptyset \label{rule:semantics:grsync:causality:defs:epat:edge}
+\end{align}
+
+\subsubsection{Dependencies}
+\label{sec:semantics:grsync:causality:dependencies}
+
+Dependencies express how a computation---or the definition of an identifier---may rely on the value
+of other identifiers. They form the foundation for scheduling and for detecting causality
+violations. This section defines how to extract dependencies from \GRSync constructs and how to
+derive the dependency relation between identifiers.
+
+\paragraph{Dependency set of constructs}
+\label{sec:semantics:grsync:causality:dependencies:deps}
+
+\newcommand{\deps}[1]{{\ensuremath{\textit{deps}\left(#1\right)}}}
+
+Before defining a dependency order between identifiers, we first need to define what are the
+identifiers that need to be available before performing a computation. Those identifiers are
+collected in a dependency set.
+
+\begin{definition}[Dependency set of constructs]
+    Let $\epsilon$ be an element of \GRSync (an expression, an equation, or an event pattern).
+    The set of dependencies of $\epsilon$ is denoted \deps{\epsilon}, and its definition is given in
+    \Crefrange{rule:semantics:grsync:causality:dependencies:deps:e:const}%
+    {rule:semantics:grsync:causality:dependencies:deps:epat:edge}.
+\end{definition}
+
+\subparagraph{Expressions}
+
+The dependencies of an expression are the identifiers that are needed for its evaluation.
+%
+A constant expression $c$ introduces no dependencies, as its value is always accessible.
+%
+An identifier usage $x$ introduces a dependency on the identifier $x$, reflecting that the current
+value of $x$ is required.
+%
+A memory access expression of the form $\last{x}$ depends on the previous value of $x$,
+represented as a dependency on $\last{x}$.
+%
+An event emission expression \emit{e} depends on the same identifiers as the expression $e$
+itself, since $e$ must be evaluated to determine the emitted value.
+%
+An operation $op(e^+)$ depends on the union of the dependencies of the sub-expressions
+$e^+$, each argument $e$ must be computable before the operator $op$ can be applied.
+%
+Finally, a component application $f(e^+)$ similarly depends on the union of the dependencies
+of its arguments $e^+$, since the arguments must be evaluated prior to the call.
+
+\begin{align}
+    \deps{c}        & = \emptyset \label{rule:semantics:grsync:causality:dependencies:deps:e:const}        \\
+    \deps{x}        & = \{x\} \label{rule:semantics:grsync:causality:dependencies:deps:e:ident}            \\
+    \deps{\last{x}} & = \{\last{x}\} \label{rule:semantics:grsync:causality:dependencies:deps:e:last}      \\
+    \deps{\emit{e}} & = \deps{e} \label{rule:semantics:grsync:causality:dependencies:deps:e:emit}          \\
+    \deps{op(e^+)}  & = \bigcup \deps{e}^+ \label{rule:semantics:grsync:causality:dependencies:deps:e:op}  \\
+    \deps{f(e^+)}   & = \bigcup \deps{e}^+ \label{rule:semantics:grsync:causality:dependencies:deps:e:app}
+\end{align}
+
+\subparagraph{Equations}
+
+The dependencies of equations are the identifiers required to be available in order to compute the
+equation.
+%
+A block of equations $eq^+$ depends on the union of the dependencies of each individual equation in
+the block, minus the identifiers they define, as they are computed by the equations and then not
+pre-required.
+%
+In a declaration of the form $x^+ = e$, the dependencies are exactly those of the expression $e$, as
+$e$ must be evaluated to define the values of $x^+$.
+%
+The dependencies of a \kwf{match} equation of the form \match{e}{x^+}{
+    (\branch{pat_i^+}{e_i}{eq_i^+})^+} come from different sources. First, it include the
+dependencies of the matched expression $e$. Then, each branch introduces two additional dependency
+sources: the guard $e_i$ and the corresponding equation block $eq_i^+$.
+%
+A \kwf{when} equation of the form \when{x^+}{x_m^+ = c^+}{(\branch{epat_i^+}{e_i}{eq_i^+})^+}
+similarly depends on the contents of each of its branches. For each branch, the event pattern
+$epat_i^+$ may introduce dependencies (\eg for event detection), the guard expression $e_i$
+introduces other dependencies, and the associated block of equations $eq_i^+$ also contributes.
+But the block of equations $eq_i^+$ represent flow updates, so all the identifiers defined by the
+\kwf{when} equation have to be removed, along the memories of defined signals ($\last{x_m}^+$). It
+was not necessary in \kwf{match} equations since $x^+$ are all defined in each branch.
+
+\begin{align}
+    \deps{eq^+}                                                                      & =
+    \left(\bigcup \deps{eq}^+\right) \backslash \defs{eq^+}
+    \label{rule:semantics:grsync:causality:dependencies:deps:eq}                         \\
+    \deps{x^+ = e}                                                                   & =
+    \deps{e}
+    \label{rule:semantics:grsync:causality:dependencies:deps:eq:decl}                    \\
+    \deps{\mathtiny{\matchTab{e}{x^+}{(\branch{pat_i^+}{e_i}{eq_i^+})^+}}}           & =
+    \deps{e} \cup \bigcup \left(\deps{e_i} \cup \deps{eq_i^+} \backslash \defs{pat_i^+}\right)^+
+    \label{rule:semantics:grsync:causality:dependencies:deps:eq:match}                   \\
+    \deps{\mathtiny{\whenTab{x^+}{x_m^+ = c^+}{(\branch{epat_i^+}{e_i}{eq_i^+})^+}}} & =
+    \begin{array}{l}
+        \bigcup \left(\deps{epat_i^+} \cup \deps{e_i} \cup \deps{eq_i^+} \backslash \defs{epat_i^+}\right)^+ \\
+        \qquad \backslash (\{x^+\} \cup \{\last{x_m}^+\})
+    \end{array}
+    \label{rule:semantics:grsync:causality:dependencies:deps:eq:when}
+\end{align}
+
+\subparagraph{Event patterns}
+
+Event patterns introduce dependencies because their evaluation relies on identifier values.
+%
+A tuple event pattern $epat^+$ depends on the union of the dependencies of its sub-patterns.
+%
+A detection pattern of the form \detect{x}{y} introduces a dependency on the identifier $y$, as the event
+is triggered by the value of $y$.
+%
+Rising edge patterns, expressions denoted by $e$, inherit their dependencies directly from the
+expression $e$ itself.
+
+\begin{align}
+    \deps{epat^+}        & = \bigcup \deps{epat}^+ \label{rule:semantics:grsync:causality:dependencies:deps:epat} \\
+    \deps{\detect{x}{y}} & = \{y\} \label{rule:semantics:grsync:causality:dependencies:deps:epat:event}           \\
+    \deps{e}             & = \deps{e} \label{rule:semantics:grsync:causality:dependencies:deps:epat:edge}
+\end{align}
+
+\paragraph{Renaming function}
+\label{sec:semantics:grsync:causality:dependencies:renaming}
+
+Now that we have defined what are the required identifiers to be available for all the \GRSync
+constructs that involve computations, we want to define a dependency relation that represents the
+evaluation order for identifiers.
+%
+This operation is simple for declaration statements ($x^+ = e$), the declared identifiers ($x^+$)
+clearly depends on the identifiers needed to compute the expression ($e$) that defines their
+behavior. However, it is more complicated for \kwf{match} or \kwf{when} equations, where the
+different branches implies different dependency order. In order to avoid the detection of false
+causality breaches, we use a renaming technique~\cite{bourke:hal-03936656}: each branch of a
+\kwf{match} or \kwf{when} equation is associated with a renaming function, which assigns unique
+names to the identifiers defined within that branch, ensuring they do not conflict with other
+branches.
+
+The dependency order is usually represented as a graph where nodes are its identifiers and edges are
+the dependency relation between two nodes. The dependency graphs of causal components are acyclic:
+a cycle implies that an identifier depends on itself.
+
+For example, consider the \GRSync \kwf{match} equation shown in
+\Cref{fig:semantics:grsync:causality:dependencies:renaming:example:code}.
+In this equation, the identifier \idf{x} depends on \idf{y} when \idf{ck} is \true, and
+conversely, \idf{y} depends on \idf{x} when \idf{ck} is \false. This is perfectly valid, as
+\idf{x} and \idf{y} can be computed in both branches.
+%
+However, if no renaming is applied during causality analysis, the global dependency order will
+incorrectly merge the branch-local orders. This produces a circular dependency:
+`\idf{y} depends on \idf{x}, which depends on \idf{y}`, leading to a false causality breach.
+
+\begin{figure}[!ht]
+    \centering
+    \begin{subfigure}[b]{0.3\textwidth}
+        \begin{lstlisting}[language=GRust]
+match ck {
+    true  => {
+        let x: int = y;
+        let y: int = 0;
+    }
+    false => {
+        let x: int = 0;
+        let y: int = x;
+    }
+}
+\end{lstlisting}
+        \caption[\GRSync \kwf{match} equation.]%
+        {\GRSync \kwf{match} equation.}
+        \label{fig:semantics:grsync:causality:dependencies:renaming:example:code}
+    \end{subfigure}
+    \quad
+    \begin{subfigure}[b]{0.3\textwidth}
+        \begin{align}
+            \sigma_\true(\idf{x})  & = \idf{x}_\true \label{eq:semantics:grsync:causality:dependencies:renaming:example:rename:true:x}   \\
+            \sigma_\true(\idf{y})  & = \idf{y}_\true \label{eq:semantics:grsync:causality:dependencies:renaming:example:rename:true:y}   \\
+            \sigma_\false(\idf{x}) & = \idf{x}_\false \label{eq:semantics:grsync:causality:dependencies:renaming:example:rename:false:x} \\
+            \sigma_\false(\idf{y}) & = \idf{y}_\false \label{eq:semantics:grsync:causality:dependencies:renaming:example:rename:false:y}
+        \end{align}
+        \caption[Renaming functions for the \kwf{match} equation.]%
+        {The renaming functions.}
+        \label{fig:semantics:grsync:causality:dependencies:renaming:example:rename}
+    \end{subfigure}
+    \quad
+    \begin{subfigure}[b]{0.3\textwidth}
+        \centering
+        \scalebox{0.8}{\footnotesize
+            \begin{tikzpicture}[node distance = 0.6cm, line width=0.5pt]
+                % Place nodes
+                \node (center) at (0, 0) {};
+                \node[gray, ellipse, draw, dashed, above =of center,
+                    minimum width=4cm, minimum height=2cm] (ellipse1) {};
+                \node[gray, ellipse, draw, dashed, below =of center,
+                    minimum width=4cm, minimum height=2cm] (ellipse2) {};
+                \node[gray, above =of center] (ck1) {\true};
+                \node[gray, below =of center] (ck2) {\false};
+                \node [circle, draw, minimum width=1.2cm] (x) at (360/6 * 3:2cm) {$\idf{x}$};
+                \node [circle, draw, minimum width=1.2cm] (y) at (360/6 * 6:2cm) {$\idf{y}$};
+                \node [circle, draw, minimum width=1.2cm] (x1) at (360/6 * 4:2cm)
+                {$\idf{x}_\true$};
+                \node [circle, draw, minimum width=1.2cm] (y1) at (360/6 * 5:2cm)
+                {$\idf{y}_\true$};
+                \node [circle, draw, minimum width=1.2cm] (x2) at (360/6 * 2:2cm)
+                {$\idf{x}_\false$};
+                \node [circle, draw, minimum width=1.2cm] (y2) at (360/6 * 1:2cm)
+                {$\idf{y}_\false$};
+
+                \draw[->,>=latex] (x) to[bend right=15] (x1);
+                \draw[->,>=latex] (x) to[bend left=15] (x2);
+                \draw[->,>=latex] (y) to[bend left=15] (y1);
+                \draw[->,>=latex] (y) to[bend right=15] (y2);
+                \draw[->,>=latex] (x1) to[bend right=15] (y1);
+                \draw[->,>=latex] (y2) to[bend right=15] (x2);
+            \end{tikzpicture}}
+        \caption[Dependency graph for the \kwf{match} equation.]%
+        {Graph representing the dependency order, with branch-specific renaming.}
+        \label{fig:semantics:grsync:causality:dependencies:renaming:example:graph}
+    \end{subfigure}
+
+    \caption[Renaming example with a \kwf{match} equation.]%
+    {A \kwf{match} equation where each branch introduces different dependencies:
+        \idf{x} depends on \idf{y} when \idf{ck} is \true, and \idf{y} depends on \idf{x}
+        when \idf{ck} is \false.}
+    \label{fig:semantics:grsync:causality:dependencies:renaming:example}
+\end{figure}
+
+To avoid this issue, each branch assigns fresh, unique names to the identifiers it defines. In the
+compiler, these names are generated automatically. In this example, \idf{x} and \idf{y} are renamed
+to $\idf{x}_\true$ and $\idf{y}_\true$ in the \true branch, and to
+$\idf{x}_\false$ and $\idf{y}_\false$ in the \false branch.
+%
+The corresponding renaming functions, $\sigma_\true$ for the \true branch and
+$\sigma_\false$ for the \false branch, are defined in
+\Crefrange{eq:semantics:grsync:causality:dependencies:renaming:example:rename:true:x}%
+{eq:semantics:grsync:causality:dependencies:renaming:example:rename:false:y}.
+%
+This transformation results in the dependency order represented by the graph shown in
+\Cref{fig:semantics:grsync:causality:dependencies:renaming:example:graph}, where
+$\idf{x}_\true$ depends on $\idf{y}_\true$,
+$\idf{y}_\false$ depends on $\idf{x}_\false$.
+%
+The global identifiers \idf{x} and \idf{y} then depend on their renamed counterparts:
+\idf{x} depends on $\idf{x}_\true$ and $\idf{x}_\false$,
+and likewise for \idf{y}.
+%
+This graph cleanly separates the dependencies of each branch while preserving global relationships,
+eliminating false causality violations.
+
+\begin{definition}[Renaming function]
+    \label{def:semantics:grsync:causality:dependencies:renaming}
+    Let $\mathcal{V}$ be a set of identifiers.
+    The function $\sigma: \mathcal{V} \rightarrow \idSet$ is a \emph{renaming function on
+        $\mathcal{V}$} if for all identifiers $x, y \in \mathcal{V}$:
+    $$\sigma(x) = \sigma(y) \Leftrightarrow x = y.$$
+    %
+    The set of all renaming functions on $\mathcal{V}$ is denoted by $\Sigma_\mathcal{V}$.
+
+    Let $\sigma_1, \sigma_2$ be two renaming functions on a domain $\mathcal{V}$.
+    $\sigma_1$ and $\sigma_2$ are \emph{disjoint on $\mathcal{S} \subseteq \mathcal{V}$}, denoted by
+    $\sigma_1 \sqcap \sigma_2$, if for all identifier $x \in \mathcal{S}$:
+    $$\sigma_1(x) = \sigma_2(x) \Leftrightarrow \sigma_1 = \sigma_2.$$
+    %
+    A set $\{\sigma^+\}$ of renaming functions on a domain $\mathcal{V}$ is disjoint on
+    $\mathcal{S} \subseteq \mathcal{V}$, denoted by $\bigsqcap \sigma^+$, if all its renaming
+    functions are disjoint with each other on $\mathcal{S}$.
+
+    Let $pat^+$ be a matching pattern, $\mathcal{V}$ and $\mathcal{S}$ be sets of identifiers such that
+    $\mathcal{S} \subseteq \mathcal{V}$ and, for all $x \in \mathcal{S}$, $x_{pat^+}$ is not in
+    $\mathcal{V}$. We denote by $\sigma^{\mathcal{S}}_{pat^+}$ the function that maps every
+    identifier $x \in \mathcal{S}$ to a labelled version $x_{pat^+}$, any other identifier
+    $x \in \mathcal{V} \backslash \mathcal{S}$ is mapped to itself.
+    $$\sigma^{\mathcal{S}}_{pat^+} : x \in \mathcal{V} \mapsto
+        \left\{
+        \begin{array}{ll}
+            x_{pat^+} & \text{if} \, x \in \mathcal{S} \\
+            x         & \text{otherwise}
+        \end{array}
+        \right.$$
+\end{definition}
+
+\begin{lemma}[Renaming function from patterns]
+    \label{lem:semantics:grsync:causality:dependencies:renaming}
+    Let $\mathcal{P}$ be a set of matching patterns, $\mathcal{V}$ and $\mathcal{S}$ be sets of
+    identifiers such that $\mathcal{S} \subseteq \mathcal{V}$ and, for all $x \in \mathcal{S}$ and
+    $pat^+ \in \mathcal{P}$, $x_{pat^+}$ is not in $\mathcal{V}$.
+    %
+    For all $pat^+ \in \mathcal{P}$, the function $\sigma^{\mathcal{S}}_{pat^+}$, previously defined
+    in \Cref{def:semantics:grsync:causality:dependencies:renaming}, is a renaming function on $\mathcal{V}$.
+    %
+    The set $\{\sigma^{\mathcal{S}}_{pat^+} \mid pat^+ \in \mathcal{P}\}$, denoted by
+    $\Sigma^{\mathcal{S}}_{\mathcal{P}}$, is disjoint on $\mathcal{S}$.
+\end{lemma}
+\begin{skippableproof}
+    Let $\mathcal{P}$ be a set of matching patterns, $\mathcal{V}$ and $\mathcal{S}$ be sets of
+    identifiers such that $\mathcal{S} \subseteq \mathcal{V}$ and, for all $x \in \mathcal{S}$ and
+    $pat^+ \in \mathcal{P}$, $x_{pat^+}$ is not in $\mathcal{V}$.
+
+    Let $pat^+ \in \mathcal{P}$, and $x, y \in \mathcal{V}$ such that
+    $\sigma^{\mathcal{S}}_{pat^+}(x) = \sigma^{\mathcal{S}}_{pat^+}(y)$.
+    For all $z \in \mathcal{V}$, if $z \in \mathcal{S}$ then
+    $\sigma^{\mathcal{S}}_{pat^+}(z) = z_{pat^+} \notin \mathcal{V}$, else
+    $\sigma^{\mathcal{S}}_{pat^+}(z) = z \in \mathcal{V}$.
+    Therefore, $x \in \mathcal{S}$ if and only if $y \in \mathcal{S}$.
+    We proceed by case analysis:
+    \begin{itemize}
+        \item Suppose $x \in \mathcal{S}$ and $y \in \mathcal{S}$.
+              Therefore, $\sigma^{\mathcal{S}}_{pat^+}(x) = x_{pat^+}$ and
+              $\sigma^{\mathcal{S}}_{pat^+}(y) = y_{pat^+}$. The hypothesis $x_{pat^+} = y_{pat^+}$
+              implies that $x = y$.
+
+        \item Suppose $x \notin \mathcal{S}$ and $y \notin \mathcal{S}$.
+              Therefore, $\sigma^{\mathcal{S}}_{pat^+}(x) = x$ and
+              $\sigma^{\mathcal{S}}_{pat^+}(y) = y$. The equality hypothesis leads to $x = y$.
+    \end{itemize}
+    Then we have $\sigma^{\mathcal{S}}_{pat^+}(x) = \sigma^{\mathcal{S}}_{pat^+}(y)$ that implies
+    $x = y$. The other direction of the equivalence is verified, we can say that
+    $\sigma^{\mathcal{S}}_{pat^+}$ is a renaming function on $\mathcal{V}$.
+
+    Let $pat^+_1, pat^+_2 \in \mathcal{P}$ and $x \in \mathcal{S}$ such that
+    $\sigma^{\mathcal{S}}_{pat_1^+}(x) = \sigma^{\mathcal{S}}_{pat_2^+}(x)$.
+    %
+    We know that $\sigma^{\mathcal{S}}_{pat_{1,2}^+}(x) = x_{pat_{1,2}^+}$, therefore the equality
+    hypothesis implies that $x_{pat_{1}^+} = x_{pat_{2}^+}$ which implies that $pat_1^+$ equals
+    $pat_2^+$.
+    %
+    Then the set $\Sigma^{\mathcal{S}}_{\mathcal{P}}$ is disjoint on $\mathcal{S}$.
+\end{skippableproof}
+
+\paragraph{Dependency relation}
+\label{sec:semantics:grsync:causality:dependencies:rel}
+
+\newcommand{\depRel}[3]{{\ensuremath{#2 \, {\gtrdot}_{\mathtiny{#1}} \, #3}}}
+\newcommand{\depOrd}[3]{{\ensuremath{#2 \, {>}_{\mathtiny{#1}} \, #3}}}
+
+We want to define a relation between identifier that represents the fact that an identifier has to
+be evaluated before an other identifier, because the latter depends on the first one.
+
+\begin{definition}[Dependency relation]
+    Let $eq^+$ be a set of \GRSync equations, and $x$ and $y$ two identifiers.
+    The relation $\depRel{eq^+}{x}{y}$, defined in
+    \Crefrange{rule:semantics:grsync:causality:dependencies:rel:eq}%
+    {rule:semantics:grsync:causality:dependencies:rel:eq:when}, holds when $x$ depends on $y$ in $eq^+$,
+    meaning that the computation of $x$ needs the computation of $y$ to be performed.
+\end{definition}
+
+\subparagraph{Blocks of equations}
+
+The dependency relation over a set of equations $eq^+$ holds whenever it holds for one of its
+individual equations. If there exists an equation $eq$ in $eq^+$ where the dependency relation holds
+between identifiers $x$ and $y$, then it holds for the entire set $eq^+$.
+
+\begin{equation}
+    \depRel{eq^+}{}{} = \bigcup \depRel{eq}{}{}^+ \label{rule:semantics:grsync:causality:dependencies:rel:eq}
+\end{equation}
+
+\subparagraph{Declarations}
+
+In the case of a declaration of the form $x^+ = e$, the identifier $x$ depends on the identifiers
+required to evaluate the expression $e$.
+
+\begin{equation}
+    \depRel{x^+ = e}{}{} = \{x^+\} \times \deps{e} \label{rule:semantics:grsync:causality:dependencies:rel:eq:decl}
+\end{equation}
+
+\subparagraph{Match}
+
+In a \kwf{match} equation of the form:
+$$\match{e}{x^+}{(\branch{pat_i^+}{e_i}{eq_i^+})^+},$$
+the dependency relation is determined by various elements.
+%
+The identifiers $x^+$ being defined by the \kwf{match} equation depend on the expression $e$ that
+is evaluated to determine the matching branch and on the guard $e_i$ of every branch.
+%
+For each branch of pattern $pat_i^+$, the equation block $eq_i^+$ introduces local dependencies that
+have to be considered. However, as previously discussed in Paragraph~\ref{sec:semantics:grsync:causality:dependencies:renaming},
+a simple union of those dependencies will lead to false causality breaches. The local dependencies
+have to be renamed using the set of renaming functions
+$\{\sigma^{x^+}_{pat^+} \mid pat^+ \in \{(pat_i^+)^+\}\}$, defined in
+\Cref{def:semantics:grsync:causality:dependencies:renaming}, disjoint on $x^+$
+(\Cref{lem:semantics:grsync:causality:dependencies:renaming}), that maps an identifier $x$ defined by the
+\kwf{match} equation to a labelled version $x_{pat^+}$ and other identifiers to themselves.
+%
+The globally defined identifiers also depend on the branch-local ones.
+
+\begin{equation}
+    \begin{split}
+        \depRel{\matchTab{e}{x^+}{(\branch{pat_i^+}{e_i}{eq_i^+})^+}}{}{} =
+         & \{x^+\} \times \left( \deps{e}
+        \cup \bigcup \deps{e_i}^+
+        \cup \bigcup \sigma^{x^+}_{pat_i^+}\left(\{x^+\}\right)\right)         \\
+         & \cup \bigcup \sigma^{x^+}_{pat_i^+}\left(\depRel{eq_i^+}{}{}\right)
+    \end{split}
+    \label{rule:semantics:grsync:causality:dependencies:rel:eq:match}
+\end{equation}
+
+\subparagraph{When}
+
+The dependency relation for \kwf{when} constructs follows a similar pattern.
+%
+The event patterns $epat_i^+$ used in the branches introduce dependencies on the
+identifiers involved in those patterns, as they determine when the branch is activated. In the
+presence of guard expressions $e_i$, identifiers $x^+$ defined by the \kwf{when} construct also
+depend on these guards, as the guards must be evaluated before proceeding with the corresponding
+branch.
+%
+Similarly to the \kwf{match} equation, the blocks of equations $eq_i^+$ within the branches
+contribute to the dependency relation.
+%
+The dependency relation also accounts for memory of signals, that can be used in all branches. For
+all signal identifier $y$ defined by the \kwf{when} equation and all event pattern used in its
+branches $epat^+$, $y$ and $\sigma^{x^+}_{epat^+}(y)$ depend on $\last{y}$.
+%
+Similarly to the \kwf{match} equation, the globally defined identifiers depend on the branch-local ones.
+
+\begin{equation}
+    \begin{split}
+        \depRel{\whenTab{x^+}{x_m^+ = c^+}{(\branch{epat_i^+}{e_i}{eq_i^+})^+}}{}{} =
+         & \{x^+\} \times \left( \bigcup \deps{epat_i}^+
+        \cup \bigcup \deps{e_i}^+
+        \cup \bigcup \sigma^{x^+}_{epat_i^+}\left(\{x^+\}\right)\right)         \\
+         & \cup \left(\{x_m^+\}
+        \cup \bigcup \sigma^{x_m^+}_{epat_i^+}\left(\{x_m^+\}\right)\right)
+        \times \left\{(\last{x_m})^+\right\}                                    \\
+         & \cup \bigcup \sigma^{x^+}_{epat_i^+}\left(\depRel{eq_i^+}{}{}\right)
+    \end{split}
+    \label{rule:semantics:grsync:causality:dependencies:rel:eq:when}
+\end{equation}
+
+\paragraph{Dependency order}
+\label{sec:semantics:grsync:causality:dependencies:depOrd}
+
+The relation \depRel{eq^+}{}{} only represents direct dependencies in $eq^+$. We can extend this
+relation with transitivity, which defines the relation \depRel{eq^+}{}{} representing an order in
+which identifiers of $eq^+$ should be computed.
+
+\begin{definition}[Dependency order]
+    Let $eq^+$ be a set of \GRSync equations.
+    The transitive closure of the relation \depRel{eq^+}{}{} is denoted by \depOrd{eq^+}{}{}.
+\end{definition}
+
+\subsubsection{Causality Property}
+\label{sec:semantics:grsync:causality:causal}
+
+The causality of a component is a key predicate in \Crefrange{thm:semantics:grsync:theorems:productivity}{thm:semantics:grsync:theorems:equivalence},
+as it states that no identifier from the component depends on itself, so that a mechanized
+computation of the outputs from the inputs is possible.
+%
+The causality property is formally defined in \Cref{def:semantics:grsync:causality:causal:prop}.
+
+\begin{definition}[Causality property]
+    \label{def:semantics:grsync:causality:causal:prop}
+    Let $eq^+$ be a set of equations. The equations $eq^+$ are \emph{causal} \iff there is no
+    identifier $x$ such that \depOrd{eq^+}{x}{x}, or in other words \iff \depOrd{eq^+}{}{} is a
+    strict partial order.
+
+    A \component{f}{x^+_i}{x^+_o}{eq^+}{x^+_m = c^+} is \emph{causal} \iff its equations $eq^+$ are
+    causal.
+\end{definition}
+
+Later in this section, we will prove that the causality of a component implies the existence of
+scheduling (\Cref{prop:semantics:grsync:causality:scheduling}) in which equations can be computed
+without any deadlock caused by circular dependencies.
+
+\subsubsection{Rank}
+\label{sec:semantics:grsync:causality:rank}
+
+\newcommand{\rank}[2]{{\ensuremath{\textit{rk}_{#1}(#2)}}}
+
+In a causal component, identifiers can be classified by dependency depth, that is the maximum length
+of their dependency sequence. We call it the rank of the identifier and define it as follows.
+
+\begin{definition}[Rank]
+    \label{def:semantics:grsync:causality:rank}
+    Let $eq^+$ be a causal set of equations. If $x$ is an identifier, $\rank{eq^+}{x}$ denotes the
+    rank of $x$ and is defined as follows:
+    \begin{equation*}
+        \rank{eq^+}{x} = \text{max}\left(\left\{n \left| \begin{array}{l}
+                x_0, \dots, x_n \in \defs{eq^+} \cup \deps{eq^+}, \\
+                \qquad x_0 = x \, \wedge \, \forall k \in [0, n - 1], \, \depOrd{eq^+}{x_k}{x_{k+1}}
+            \end{array}\right.\right\}\right)
+    \end{equation*}
+\end{definition}
+
+\begin{lemma}[Rank well-defined]
+    \label{lem:semantics:grsync:causality:rank:well_def}
+    Let $eq^+$ be a causal set of equations and $x$ be an identifier.
+    The rank $\rank{eq^+}{x}$ is well-defined.
+\end{lemma}
+\begin{skippableproof}
+    Let $eq^+$ be a causal set of equations and $x$ be an identifier.
+    %
+    There exists at least one a simple sequence satisfying the elaboration of $\rank{eq^+}{x}$:
+    $(x_0)$ with $x_0 = x$.
+    %
+    For all $n \in \N$ and sequences $x_0, \dots, x_n \in \defs{eq^+} \cup \deps{eq^+}$
+    such that $x_0 = x$ and $\depOrd{eq^+}{x_k}{x_{k+1}}$ for all $k \in [0, n - 1]$, we have $n$
+    bounded by $\left|\defs{eq^+} \cup \deps{eq^+}\right|$ (otherwise an identifier would appear
+    twice in the sequence, creating a causality violation).
+    %
+    Therefore, the maximum size of such sequences exists and the rank $\rank{eq^+}{x}$ is
+    well-defined.
+\end{skippableproof}
+
+\begin{lemma}[Rank decreases]
+    \label{lem:semantics:grsync:causality:rank:decrease}
+    Let $eq^+$ be a causal set of equations.
+    For all identifiers $x$ and $y$ in $\defs{eq^+} \cup \deps{eq^+}$:
+    $$\depOrd{eq^+}{x}{y} \Rightarrow \rank{eq^+}{x} > \rank{eq^+}{y}.$$
+\end{lemma}
+\begin{skippableproof}
+    Let $eq^+$ be a causal set of equations, and $x, y \in \defs{eq^+} \cup \deps{eq^+}$ such that
+    $\depOrd{eq^+}{x}{y}$.
+    %
+    \Cref{lem:semantics:grsync:causality:rank:well_def} ensures there exists a sequence
+    $(y_0, \dots, y_n) \in \defs{eq^+} \cup \deps{eq^+}$ such that $\rank{eq^+}{y} = n$, $y_0 = y$,
+    and $\depOrd{eq^+}{y_k}{y_{k+1}}$ holds for all $k \in [0, n - 1]$. We have
+    $$
+        (x, y_0, \dots, y_n) \in \left\{(z_0, \dots, z_m) \mid
+        z_0 = x \,
+        \wedge \, \forall k \in [0, m - 1], \, \depOrd{eq^+}{z_k}{z_{k+1}}
+        \right\},
+    $$
+    which implies that $\rank{eq^+}{x} \ge n+1$, and finally $\rank{eq^+}{x} > \rank{eq^+}{y}$.
+\end{skippableproof}
+
+\begin{lemma}[Bounded]
+    \label{lem:semantics:grsync:causality:rank:bounded}
+    Let $eq^+$ be a causal set of equations.
+    For all identifier $x \in \defs{eq^+} \cup \deps{eq^+}$, we have $\rank{eq^+}{x} \le |eq^+|$.
+\end{lemma}
+\begin{skippableproof}
+    Let $eq^+$ be a causal set of equations. Let $x \in \defs{eq^+} \cup \deps{eq^+}$ be an
+    identifier such that $r = \rank{eq^+}{x}$.
+    %
+    Therefore there exist a sequence $(x_0, \dots, x_r) \in \defs{eq^+} \cup \deps{eq^+}$ such that
+    $x_0 = x$ and $\forall k \in [0, n - 1], \, \depOrd{eq^+}{x_k}{x_{k+1}}$.
+
+    All identifiers in the sequence $(x_0, \dots, x_r)$ are different (otherwise $eq^+$ would not be
+    causal), and all identifiers in $(x_0, \dots, x_{r-1})$ are defined in $eq^+$ (otherwise there
+    would be no dependency relation between them).\footnote{The identifier $x_r$ might not be
+        defined by $eq^+$, we just know that $x_{r-1}$ depends on it in $eq^+$ which implies that
+        $x_{r-1}$ is defined in those equations.}
+
+    The dependency relation induced by an equation is identical for all the identifiers it defines.
+    Therefore, there cannot be two identifiers of this sequence that are defined by the same
+    equation $eq' \in eq^+$, as they would introduce a causality loop.
+
+    Therefor, all identifiers in the sequence $(x_0, \dots, x_r)$ are from different equations.
+    It implies that $r \le |eq^+|$.
+\end{skippableproof}
+
+\subsubsection{Induction}
+\label{sec:semantics:grsync:causality:induction}
+
+Reasoning about \GRSync components often requires establishing properties for all identifiers
+defined or used in a component. Since the dependency relation in causal components is acyclic, we
+can process identifiers in an order that respects their dependencies. This approach motivates an
+induction principle based on the structure of these dependencies.
+
+This idea is formalized in the \emph{causal induction}~\cite{bourke:hal-03936656}, where a property
+is proven for an identifier by assuming it holds for all its dependencies. In this manuscript, we
+use an equivalent induction principle based on the \emph{rank} of identifiers, as previously
+defined.
+
+\begin{definition}[Rank induction]
+    \label{def:semantics:grsync:causality:induction:rank}
+    Let $eq^+$ be a causal set of equations, and let $S = \defs{eq^+} \cup \deps{eq^+}$ denote the
+    set of all relevant identifiers for the set of equations.
+    Let \P{x} be a property on the identifier $x \in S$.
+    Suppose:
+    \begin{itemize}
+        \item \textit{Base case:} \P{x} holds for all $x \in S$ with $\rank{eq^+}{x} = 0$.
+        \item \textit{Inductive step:} For any $n > 0$, if \P{y} holds for all $y \in S$ with
+              $\rank{eq^+}{y} < n$, then \P{x} holds for all $x \in S$ with $\rank{eq^+}{x} = n$.
+    \end{itemize}
+    Then \P{x} holds for all $x \in S$.
+\end{definition}
+
+\begin{lemma}[Soundness of rank induction]
+    \label{lem:semantics:grsync:causality:induction:soundness}
+    The rank induction principle is sound.
+\end{lemma}
+\begin{skippableproof}
+    By \Cref{lem:semantics:grsync:causality:rank:well_def} and
+    \Cref{lem:semantics:grsync:causality:rank:bounded}, for any causal set of equations $eq^+$, the
+    rank function \rank{eq^+}{x} assigns a natural number to each identifier $x \in S$, and the set
+    of possible ranks is finite.
+    %
+    The set of natural numbers \N is well-founded under the usual order $<$, meaning it has no
+    infinite descending chains. The induction principle stated above is thus a direct application
+    of well-founded induction on \N.
+
+    Since the base case holds for rank $0$, and the inductive step ensures the property for rank
+    $n$ based on all smaller ranks, it follows by induction that \P{x} holds for all $x \in S$.
+\end{skippableproof}
+
+\subsubsection{Scheduling}
+\label{sec:semantics:grsync:causality:scheduling}
+
+Causality in a set of equations guarantees that there are no cyclic dependencies among identifiers.
+\Cref{prop:semantics:grsync:causality:scheduling} states that a valid scheduling exists: there is an
+order in which the identifiers can be defined such that, for each one, all of its dependencies are
+resolved beforehand.
+
+\begin{proposition}
+    \label{prop:semantics:grsync:causality:scheduling}
+    Let $eq^+$ be a causal set of equations. There exists a
+    scheduling $(x_0, \dots, x_n)$ such that $\{x_0, \dots, x_n\} = \defs{eq^+} \cup \deps{eq^+}$,
+    and for all $k \in [0, n]$ and $y \in \defs{eq^+} \cup \deps{eq^+}$ such that
+    $\depOrd{eq^+}{x_k}{y}$, we have $y \in \{x_0, \dots, x_{k-1}\}$.
+\end{proposition}
+\begin{skippableproof}
+    Let $eq^+$ be a causal set of equations. We will schedule the identifiers based on their rank in
+    increasing order.
+    %
+    \Cref{lem:semantics:grsync:causality:rank:well_def} ensures that all
+    $x \in \defs{eq^+} \cup \deps{eq^+}$ has a rank and then will be scheduled.
+    %
+    \Cref{lem:semantics:grsync:causality:rank:bounded} states that the rank is bounded, so that we
+    can define $R = \text{max}(\{\rank{eq^+}{x} \mid x \in \defs{eq^+}\})$.
+    %
+    We can then classify the identifiers defined in $eq^+$ by their rank and establish the sets
+    $X_r = \{x \mid x \in \defs{eq^+} \wedge \rank{eq^+}{x} = r\}$ for all $r \in [0, R]$.
+    %
+    \Cref{lem:semantics:grsync:causality:rank:decrease} ensures that for all rank $r \in [0, R]$,
+    identifier $x \in X_r$, and identifier $y \in \defs{eq^+} \cup \deps{eq^+}$ such that
+    $\depOrd{eq^+}{x}{y}$, we have $\rank{eq^+}{x} > \rank{eq^+}{y}$. It implies that $y$ is
+    scheduled before $x$ in the scheduling $(X_{r \in [0, R]})$.
+\end{skippableproof}
+
+\begin{remark}
+    This scheduling methodology is an implementation of the topological sorting on the graph whose
+    nodes are the identifiers and the edges are the dependency relation \depRel{eq^+}{}{}.
+    %
+    Another implementation, using another notion of rank that loops on the direct computation of the
+    scheduling order, can be found in \cite{izerrouken:hal-02270296}.
+\end{remark}

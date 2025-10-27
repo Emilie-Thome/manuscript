@@ -1,0 +1,596 @@
+%% -------------Commands
+%% Sectioning
+% Headers
+\pagestyle{fancy}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\sectionmark}[1]{\markright{#1}}
+\renewcommand{\chaptermark}[1]{\markboth{#1}{#1}}
+\fancyhf{} % clear all header and foot fields
+\setlength{\headheight}{15pt}
+\fancyhead[RE]{\nouppercase{\itshape\ifthenelse{ \equal{\thechapter}{} }{ \leftmark }{ \chaptername~\thechapter~--~\leftmark }}}
+\fancyhead[LO]{\nouppercase{\itshape\ifthenelse{ \equal{\thechapter}{} }{ \leftmark }{ \thesection~--~\rightmark }}}
+\fancyhead[LE,RO]{\thepage}
+% Displays
+\titleformat{\chapter}[display]{\raggedleft\huge}{\chaptername~\thechapter}{-12pt}{\rule{\linewidth}{0.8pt}\\[-2pt]\Huge\bfseries}
+\titleformat{\section}{\normalfont\Large\bfseries}{\thesection}{1em}{}[{\titlerule[0.1pt]}]
+% Numbering
+\setcounter{secnumdepth}{5}
+\renewcommand\thechapter{\Alph{chapter}}
+\renewcommand\thesection{\Roman{section}}
+\renewcommand\thesubsection{\thesection.\arabic{subsection}}
+\renewcommand\thesubsubsection{\thesubsection.\alph{subsubsection}}
+\renewcommand\theparagraph{\roman{paragraph}}
+\renewcommand\thesubparagraph{\fnsymbol{subparagraph}}
+\counterwithout{figure}{chapter}
+\renewcommand\thefigure{\arabic{figure}}
+\renewcommand\thelstlisting{\arabic{lstlisting}}
+\renewcommand\thetable{\arabic{table}}
+\renewcommand\theequation{\arabic{equation}}
+% chapter with ToC environment
+\newenvironment{chapterWithToc}[2]{
+    \chapter{#1}
+    %% Label
+    #2
+
+    %% ToC
+    \startcontents[sections]
+    \vspace{-20pt}
+    {\raggedleft\bfseries\Large Contents}
+    \vspace{-10pt}\par
+    \noindent\rule{\linewidth}{0.4pt}
+    \vspace{-15pt}
+    \begin{center}
+        \begin{minipage}{0.95\linewidth}
+            {\setstretch{1.2}\bfseries\small \printcontents[sections]{}{1}[1]{}}
+        \end{minipage}
+    \end{center}
+    \vspace{0pt}
+    \noindent\rule{\linewidth}{0.4pt}
+    \vspace{10pt}
+
+    %% Content
+    \noindent
+}{\stopcontents[sections]}
+
+%% Article commands
+\newcommand{\todo}[1]{\textcolor{red}{TODO: #1}}
+\newcommand{\christine}[1]{\textcolor{blue}{Christine: #1}}
+\newcommand{\emilie}[1]{\textcolor{green}{Émilie: #1}}
+\def\reff{\textcolor{red}{[??]}\xspace}
+
+%% Automatic "skippable proof"
+\newcounter{proofskipper} % create a new counter
+% define the new environment
+\newenvironment{skippableproof}[1][\proofname]{%
+    \stepcounter{proofskipper}%
+    \begin{proof}[#1 \emph{
+                \hypersetup{linkbordercolor={0 0 1}}%
+            \hyperlink{proof:end:\theproofskipper}{\color{blue!70!black}{(skip)}}}]%
+        }{%
+        \hypertarget{proof:end:\theproofskipper}{}%
+    \end{proof}%
+}
+
+%% URLs
+\def\URLgrust{\url{https://github.com/langrust/grust}}
+\def\URLgrbook{\url{https://github.com/langrust/grbook}}
+
+%% Abbreviations
+\def\resp{\textit{resp.}\xspace}
+\def\etc{\textit{etc.}\xspace}
+\def\cf{\textit{cf.}\xspace}
+\def\eg{\textit{e.g.},\xspace}
+\def\ie{\textit{i.e.},\xspace}
+\def\via{\textit{via}\xspace}
+\def\idem{\textit{idem}\xspace}
+\def\ala{\textit{à la}\xspace}
+\def\iff{\textit{iff}\xspace}
+\def\apriori{\textit{a priori}\xspace}
+\def\defacto{\textit{de facto}\xspace}
+\def\versus{\textit{versus}\xspace}
+% factored terms
+\def\ampere{\textnormal{Ampère}\xspace}
+\def\ausar{\textnormal{\textsc{Autosar}}\xspace}
+\def\sdv{\textnormal{\textsc{Sdv}}\xspace}
+\def\ecu{\textnormal{\textsc{Ecu}}\xspace}
+\def\ecus{\textnormal{\textsc{Ecu}s}\xspace}
+\def\iso{\textnormal{\textsc{Iso}~26262}\xspace}
+\def\dsl{\textnormal{\textsc{Dsl}}\xspace}
+\def\wcet{\textnormal{\textsc{Wcet}}\xspace}
+\def\frp{\textnormal{\textsc{Frp}}\xspace}
+\def\aeb{\textnormal{\textsc{Aeb}}\xspace}
+\def\Asil{\textnormal{\textsc{Asil}}\xspace}
+\def\ampere{{Ampère}\xspace}
+\def\sldv{\textnormal{\textsc{Simulink Design Verifier}}\xspace}
+\def\pololu{\textnormal{\textit{Pololu 3$\pi^{+}$ 32u4 OLED}}\xspace}
+\def\crazyflie{\textnormal{\textit{Crazyflie}}\xspace}
+\def\dispute{\textnormal{\textit{dispute}}\xspace}
+\def\disgrust{\textnormal{\textit{disgrust}}\xspace}
+\def\perfetto{\textnormal{\texttt{Perfetto}}\xspace}
+
+%% GRust and other languages names
+\def\GRust{\textnormal{\textsc{GRust}}\xspace}
+\def\GRSync{\textnormal{\textsc{GRsync}}\xspace}
+\def\GRFRP{\textnormal{\textsc{GRfrp}}\xspace}
+\def\GReact{\textnormal{\textsc{GReact}}\xspace}
+\def\GReusot{\textnormal{\textsc{GReusot}}\xspace}
+\def\Creusot{\textnormal{\textsc{Creusot}}\xspace}
+\def\Ci{\textnormal{\textsc{C}}\xspace}
+\def\Cpp{\textnormal{\textsc{C}}++\xspace}
+\def\Haskell{\textnormal{\textsc{Haskell}}\xspace}
+\def\Yampa{\textnormal{\textsc{Yampa}}\xspace}
+\def\JavaScript{\textnormal{\textsc{JavaScript}}\xspace}
+\def\Elm{\textnormal{\textsc{Elm}}\xspace}
+\def\ReactiveX{\textnormal{\textsc{ReactiveX}}\xspace}
+\def\Lustre{\textnormal{\textsc{Lustre}}\xspace}
+\def\Scade{\textnormal{\textsc{Scade}}\xspace}
+\def\Esterel{\textnormal{\textsc{Estèrel}}\xspace}
+\def\Signal{\textnormal{\textsc{Signal}}\xspace}
+\def\Rust{\textnormal{\textsc{Rust}}\xspace}
+\def\RustBelt{\textnormal{\textsc{RustBelt}}\xspace}
+\def\Caml{\textnormal{\textsc{Ocaml}}\xspace}
+\def\Velus{\textnormal{\textsc{Vélus}}\xspace}
+\def\Zelus{\textnormal{\textsc{Zélus}}\xspace}
+\def\FramaC{\textnormal{\textsc{Frama-C}}\xspace}
+\def\Simulink{\textnormal{\textsc{Simulink}}\xspace}
+\def\Stateflow{\textnormal{\textsc{Stateflow}}\xspace}
+\def\Scade{\textnormal{\textsc{Scade}}\xspace}
+\def\Signal{\textnormal{\textsc{Signal}}\xspace}
+\def\Esterel{\textnormal{\textsc{Ésterel}}\xspace}
+\def\Prelude{\textnormal{\textsc{Prelude}}\xspace}
+\def\LustreC{\textnormal{\textsc{LustreC}}\xspace}
+\def\Heptagon{\textnormal{\textsc{Heptagon}}\xspace}
+\def\GLustre{\textnormal{\textsc{GLustre}}\xspace}
+\def\BenchIt{\textnormal{\textsc{BenchIt}}\xspace}
+\def\ferrocene{\textnormal{\textsc{Ferrocene}}\xspace}
+
+%% Not formal
+%
+% syntax
+%
+% basics
+\definecolor{BrownType}{RGB}{182,86,17}
+\definecolor{Darkgoldenrod}{RGB}{184,134,11}
+\definecolor{PurpleKeyword}{RGB}{184,84,212}
+\newcommand{\tyf}[1]{\texttt{\textcolor{BrownType}{#1}}}
+\newcommand{\fkf}[1]{\texttt{\textcolor{Darkgoldenrod}{#1}}}
+\newcommand{\kft}[1]{\texttt{\textcolor{PurpleKeyword}{#1}}}
+\newcommand{\kfm}[1]{\texttt{\textcolor{PurpleKeyword}{$\bm{#1}$}}}
+% program items types
+\def\Prog{\texttt{Prog}\xspace}
+\newcommand{\many}[1]{\ensuremath{#1^*}}
+\def\Item{\texttt{Item}\xspace}
+\def\InterItem{\texttt{InterItem}\xspace}
+\def\ServItem{\texttt{ServItem}\xspace}
+\def\FunItem{\texttt{FunItem}\xspace}
+\def\CompItem{\texttt{CompItem}\xspace}
+\def\TY{\tyf{type}\xspace}
+\def\boolTY{\tyf{bool}\xspace}
+\def\intTY{\tyf{int}\xspace}
+\def\floatTY{\tyf{float}\xspace}
+\def\unitTY{\tyf{unit}\xspace}
+% grfrp
+\newcommand{\importX}[1]{\ensuremath{\kft{import} \: #1\kft{;}}}
+\newcommand{\exportX}[1]{\ensuremath{\kft{export} \: #1\kft{;}}}
+\newcommand{\interval}[2]{\ensuremath{\kft{[}#1\kft{,} \: #2\kft{]}}}
+\newcommand{\block}[1]{\ensuremath{\kft{\{} \: #1 \: \kft{\}}}}
+\newcommand{\servItem}[3]{\ensuremath{\kft{service} \: #1 \: \kft{@}#2 \: \block{#3}}}
+\newcommand{\letStmt}[2]{\ensuremath{\kft{let} \: #1 \: \kfm{=} \: #2\kft{;}}}
+\newcommand{\defStmt}[2]{\ensuremath{#1 \: \kfm{=} \: #2\kft{;}}}
+\newcommand{\compApp}[2]{\ensuremath{#1\kft{(}#2\kft{)}}}
+\def\GReactExpr{\texttt{GReactExpr}\xspace}
+\def\INT{\texttt{INT}\xspace}
+\def\FlowStmt{\texttt{Stmt}\xspace}
+\def\FlowOp{\texttt{FlowOp}\xspace}
+\def\FlowKind{\fkf{kind}\xspace}
+\def\signalKind{\fkf{signal}\xspace}
+\def\eventKind{\fkf{event}\xspace}
+\newcommand{\typed}[3]{\ensuremath{#1 \: #2 \: \kft{:} \: #3}}
+\def\ID{\texttt{ID}\xspace}
+% greact 
+\newcommand{\unopExpr}[2]{\ensuremath{\kft{#1(}#2\kft{)}}}
+\newcommand{\binopExpr}[3]{\ensuremath{\kft{#1(}#2\kft{,} \: #3\kft{)}}}
+\newcommand{\onchangeExpr}[1]{\unopExpr{on\_change}{#1}}
+\newcommand{\persistExpr}[1]{\unopExpr{persist}{#1}}
+\newcommand{\scanExpr}[2]{\binopExpr{scan}{#1}{#2}}
+\newcommand{\sampleExpr}[2]{\binopExpr{sample}{#1}{#2}}
+\newcommand{\timeoutExpr}[2]{\binopExpr{timeout}{#1}{#2}}
+\newcommand{\mergeExpr}[2]{\binopExpr{merge}{#1}{#2}}
+\newcommand{\throttleExpr}[2]{\binopExpr{throttle}{#1}{#2}}
+\def\timeExpr{\kft{time()}\xspace}
+\def\DELTA{\texttt{DELTA}\xspace}
+% other types 
+\def\STY{\tyf{stype}\xspace}
+\newcommand{\opt}[1]{\ensuremath{#1\kft{?}}}
+% grsync
+\def\Expr{\texttt{Expr}\xspace}
+\def\Decl{\texttt{Decl}\xspace}
+\def\Eq{\texttt{Eq}\xspace}
+\def\Pat{\texttt{Pat}\xspace}
+\def\EPat{\texttt{EPat}\xspace}
+\def\CST{\texttt{CST}\xspace}
+\def\OP{\texttt{OP}\xspace}
+\def\STY{\tyf{stype}\xspace}
+\newcommand{\returnStmt}[1]{\ensuremath{\kft{return} \: \Expr\kft{;}}}
+\newcommand{\funItem}[5][]{%
+    \ensuremath{\kft{function} \: #2 \: \kft{(}#3\kft{)} \: \kfm{\rightarrow} \: #4 \:
+        \ifthenelse{ \equal{#1}{} }{ }{\; #1 \; }
+        \block{#5 \: \returnStmt{\Expr}}}
+}
+\newcommand{\compItem}[5][]{%
+    \ensuremath{\kft{component} \: #2 \: \kft{(}#3\kft{)} \: \kfm{\rightarrow} \: \kft{(}#4\kft{)} \:
+        \ifthenelse{ \equal{#1}{} }{ }{\; #1 \; }
+        \block{#5}}
+}
+\newcommand{\setEq}[1][]{%
+    \ifthenelse{ \equal{#1}{} }
+    {\kft{\{} \many{\Eq} \kft{\}}}
+    {\kft{\{} \many{\Eq_{#1}} \kft{\}}}
+}
+\newcommand{\declEq}[2]{\ensuremath{\kft{let} \: #1 \kfm{=} \: #2\kft{;}}}
+\newcommand{\defEq}[2]{\ensuremath{#1 \: \kfm{=} \: #2\kft{;}}}
+\newcommand{\initEq}[2]{\ensuremath{\kft{init} \: #1 \: \kfm{=} \: #2\kft{;}}}
+\newcommand{\matchX}[2]{\ensuremath{\kft{match} \: #1 \: \block{#2}}}
+\newcommand{\whenEq}[2]{\ensuremath{\kft{when} \: \kft{\{} \: #1\kft{,} \: #2 \kft{\}}}}
+\newcommand{\normBr}[2]{\ensuremath{#1 \: \kfm{\Rightarrow} \: #2}}
+\newcommand{\initBr}[1]{\ensuremath{\kft{init} \: \kfm{\Rightarrow} \: \block{#1}}}
+\newcommand{\lastExpr}[1]{\ensuremath{\kft{last} \: #1}}
+\newcommand{\emitExpr}[1]{\ensuremath{\kft{emit} \: #1}}
+\newcommand{\opExpr}[1]{\ensuremath{\OP\kft{(}#1\kft{)}}}
+\newcommand{\appExpr}[2]{\ensuremath{#1\kft{(}#2\kft{)}}}
+\newcommand{\gPat}[2]{\ensuremath{#1 \: (\kft{if} \: #2)?}}
+\newcommand{\tuple}[1]{\ensuremath{\kft{(}\many{#1}\kft{)}}}
+%
+% identifier usage system
+%
+% type system notations color
+\definecolor{LapisLazuli}{RGB}{38,97,156}
+\newcommand{\tsf}[1]{\texttt{\textcolor{LapisLazuli}{#1}}}
+\def\scope{\tsf{scope}\xspace}
+\def\importScope{\tsf{import}\xspace}
+\def\exportScope{\tsf{export}\xspace}
+\def\inputScope{\tsf{input}\xspace}
+\def\outputScope{\tsf{output}\xspace}
+\def\localScope{\tsf{local}\xspace}
+\def\memoryScope{\tsf{memory}\xspace}
+% set of identifiers
+\def\IDs{\texttt{IDs}\xspace}
+% program context
+\def\G{\ensuremath{G}\xspace}
+% rules
+\newcommand{\idUsage}[3]{\ensuremath{#1 \vdash_{\textit{id}}^{\textit{#2}} #3}}
+\newcommand{\progIdUsage}[1]{\idUsage{\G}{prog}{#1}}
+\newcommand{\itemIdUsage}[1]{\idUsage{\G}{item}{#1}}
+\newcommand{\stmtIdUsage}[2]{\idUsage{#1}{stmt}{\block{#2}}}
+\newcommand{\flowIdUsage}[2]{\idUsage{#1}{op}{#2}}
+\newcommand{\eqIdUsage}[2]{\idUsage{#1}{eq}{#2}}
+\newcommand{\declIdUsage}[2]{\idUsage{#1}{block}{\block{#2}}}
+\newcommand{\exprIdUsage}[2]{\idUsage{#1}{expr}{#2}}
+\newcommand{\epatIdUsage}[2]{\idUsage{#1}{epat}{#2}}
+% kinds of usage
+\definecolor{GreenString}{RGB}{140,170,50}
+\newcommand{\exports}[2]{\ensuremath{#1 \; \textcolor{GreenString}{\textbf{\texttt{`export'}}} \; #2}}
+\newcommand{\declares}[2]{\ensuremath{#1 \; \textcolor{GreenString}{\textbf{\texttt{`decl'}}} \; #2}}
+\newcommand{\inits}[2]{\ensuremath{#1 \; \textcolor{GreenString}{\textbf{\texttt{`init'}}} \; #2}}
+\newcommand{\defines}[2]{\ensuremath{#1 \; \textcolor{GreenString}{\textbf{\texttt{`def'}}} \; #2}}
+%
+% type system
+%
+% flow type
+\newcommand{\kind}[2][]{%
+    \ifthenelse{ \equal{#1}{} }
+    {\ensuremath{\FlowKind \: #2}}
+    {\ensuremath{\FlowKind_{#1} \: #2}}
+}
+\newcommand{\event}[1]{\ensuremath{\eventKind \: #1}}
+\newcommand{\signal}[1]{\ensuremath{\signalKind \: #1}}
+% typing context
+\def\tyCtx{\ensuremath{\Gamma}\xspace}
+% rules
+\newcommand{\typing}[2]{\ensuremath{\tyCtx, \G \vdash_{\textit{type}}^{\textit{#1}} #2}}
+\newcommand{\progTyped}[1]{\ensuremath{\typing{prog}{#1}}}
+\newcommand{\itemTyped}[1]{\ensuremath{\typing{item}{#1}}}
+\newcommand{\stmtTyped}[1]{\ensuremath{\typing{stmt}{#1}}}
+\newcommand{\eqTyped}[1]{\ensuremath{\typing{eq}{#1}}}
+\newcommand{\epatTyped}[1]{\ensuremath{\typing{epat}{#1}}}
+\newcommand{\patTyped}[2]{\ensuremath{\typing{pat}{#1}: [#2]}}
+\newcommand{\flowTyped}[2]{\ensuremath{\typing{op}{#1}: [#2]}}
+\newcommand{\exprTyped}[2]{\ensuremath{\typing{expr}{#1}: [#2]}}
+
+%% Formal syntax commands
+\newcommand{\kwf}[1]{\ttf{\color{blue!50!black}{#1}}}
+\newcommand{\smf}[1]{\ttf{\color{red!50!black}{#1}}}
+\newcommand{\idf}[1]{\ttf{\color{green!40!black}{#1}}}
+\newcommand{\ttf}[1]{\ensuremath{\mathtt{{#1}}}}
+
+%% Examples commands
+\newcommand{\changed}[1]{\textcolor{red}{#1}}
+\newcommand{\updated}[1]{\textcolor{blue}{#1}}
+\newcommand{\stored}[1]{\textcolor{green!40!black}{#1}}
+\newcommand{\local}[1]{\textcolor{gray}{#1}}
+
+%% Helpers
+\makeatletter
+\newcommand{\pushright}[1]{\ifmeasuring@#1\else\omit\hfill$\displaystyle#1$\fi\ignorespaces}
+\newcommand{\pushleft}[1]{\ifmeasuring@#1\else\omit$\displaystyle#1$\hfill\fi\ignorespaces}
+\makeatother
+\newcommand{\mathsmall}[1]{\mbox{\small\ensuremath{#1}}}
+\newcommand{\mathfoot}[1]{\mbox{\footnotesize\ensuremath{#1}}}
+\newcommand{\mathtiny}[1]{\mbox{\tiny\ensuremath{#1}}}
+\newcommand{\myeq}[1]{\ensuremath{\overset{\mathrm{#1}}{=}}}
+\newcommand{\mkcell}[1]{\begin{tabular}[t]{@{}l@{}}#1\end{tabular}}
+
+%% Inference rules
+\definecolor{redish}{RGB}{193,18,31}
+\newcommand{\myinfer}[3]{\inferrule[\text{\textnormal{{\textcolor{redish}{({\footnotesize\textsc{#3}})}}}}]{#1}{#2}}
+%% inference kind label & construct oriented labels
+% ID usage
+\newcommand{\inferID}[3]{\myinfer{#1}{#2}{{\tiny Wid}#3}}
+\newcommand{\inferIDFlowStmt}[3]{\inferID{#1}{#2}{{\scriptsize Stmt}#3}}
+\newcommand{\inferIDFlow}[3]{\inferID{#1}{#2}{{\scriptsize Flow}#3}}
+\newcommand{\inferIDDecl}[3]{\inferID{#1}{#2}{{\scriptsize Fun}#3}}
+\newcommand{\inferIDEq}[3]{\inferID{#1}{#2}{{\scriptsize Eq}#3}}
+\newcommand{\inferIDE}[3]{\inferID{#1}{#2}{{\scriptsize E}#3}}
+\newcommand{\inferIDEPat}[3]{\inferID{#1}{#2}{{\scriptsize EPat}#3}}
+% Export
+\newcommand{\inferEXP}[3]{\myinfer{#1}{#2}{{\tiny Exp}#3}}
+% definitions
+\newcommand{\inferDEF}[3]{\myinfer{#1}{#2}{{\tiny Def}#3}}
+\newcommand{\inferDEFFlowStmt}[3]{\inferDEF{#1}{#2}{{\scriptsize Stmt}#3}}
+\newcommand{\inferDEFEq}[3]{\inferDEF{#1}{#2}{{\scriptsize Eq}#3}}
+% declarations
+\newcommand{\inferDECL}[3]{\myinfer{#1}{#2}{{\tiny Decl}#3}}
+\newcommand{\inferDECLFlowStmt}[3]{\inferDECL{#1}{#2}{{\scriptsize Stmt}#3}}
+\newcommand{\inferDECLEq}[3]{\inferDECL{#1}{#2}{{\scriptsize Eq}#3}}
+\newcommand{\inferDECLPat}[3]{\inferDECL{#1}{#2}{{\scriptsize Pat}#3}}
+\newcommand{\inferDECLEPat}[3]{\inferDECL{#1}{#2}{{\scriptsize EPat}#3}}
+% init
+\newcommand{\inferINIT}[3]{\myinfer{#1}{#2}{{\tiny Init}#3}}
+\newcommand{\inferINITEq}[3]{\inferINIT{#1}{#2}{{\scriptsize Eq}#3}}
+% Type system
+\newcommand{\inferTY}[3]{\myinfer{#1}{#2}{{\tiny Wty}#3}}
+\newcommand{\inferTYFlowStmt}[3]{\inferTY{#1}{#2}{{\scriptsize Stmt}#3}}
+\newcommand{\inferTYFlow}[3]{\inferTY{#1}{#2}{{\scriptsize Flow}#3}}
+\newcommand{\inferTYEq}[3]{\inferTY{#1}{#2}{{\scriptsize Eq}#3}}
+\newcommand{\inferTYE}[3]{\inferTY{#1}{#2}{{\scriptsize E}#3}}
+\newcommand{\inferTYPat}[3]{\inferTY{#1}{#2}{{\scriptsize Pat}#3}}
+\newcommand{\inferTYEPat}[3]{\inferTY{#1}{#2}{{\scriptsize EPat}#3}}
+% Opsem
+\newcommand{\inferOPSEM}[3]{\myinfer{#1}{#2}{{\tiny Step}#3}}
+\newcommand{\inferOPSEMMess}[3]{\inferOPSEM{#1}{#2}{{\scriptsize Mess}#3}}
+\newcommand{\inferOPSEMFlowStmt}[3]{\inferOPSEM{#1}{#2}{{\scriptsize Stmt}#3}}
+\newcommand{\inferOPSEMFlow}[3]{\inferOPSEM{#1}{#2}{{\scriptsize Flow}#3}}
+\newcommand{\inferOPSEMEq}[3]{\inferOPSEM{#1}{#2}{{\scriptsize Eq}#3}}
+\newcommand{\inferOPSEME}[3]{\inferOPSEM{#1}{#2}{{\scriptsize E}#3}}
+\newcommand{\inferOPSEMPat}[3]{\inferOPSEM{#1}{#2}{{\scriptsize Pat}#3}}
+\newcommand{\inferOPSEMEPat}[3]{\inferOPSEM{#1}{#2}{{\scriptsize EPat}#3}}
+% Denot
+\newcommand{\inferDENOT}[3]{\myinfer{#1}{#2}{{\tiny Denot}#3}}
+\newcommand{\inferDENOTFlowStmt}[3]{\inferDENOT{#1}{#2}{{\scriptsize Stmt}#3}}
+\newcommand{\inferDENOTFlow}[3]{\inferDENOT{#1}{#2}{{\scriptsize Flow}#3}}
+\newcommand{\inferDENOTEq}[3]{\inferDENOT{#1}{#2}{{\scriptsize Eq}#3}}
+\newcommand{\inferDENOTE}[3]{\inferDENOT{#1}{#2}{{\scriptsize E}#3}}
+\newcommand{\inferDENOTPat}[3]{\inferDENOT{#1}{#2}{{\scriptsize Pat}#3}}
+\newcommand{\inferDENOTEPat}[3]{\inferDENOT{#1}{#2}{{\scriptsize EPat}#3}}
+% React
+\newcommand{\inferREACT}[3]{\myinfer{#1}{#2}{{\tiny React}#3}}
+\newcommand{\inferREACTFlowStmt}[3]{\inferREACT{#1}{#2}{{\scriptsize Stmt}#3}}
+\newcommand{\inferREACTFlow}[3]{\inferREACT{#1}{#2}{{\scriptsize Flow}#3}}
+\newcommand{\inferREACTEq}[3]{\inferREACT{#1}{#2}{{\scriptsize Eq}#3}}
+\newcommand{\inferREACTE}[3]{\inferREACT{#1}{#2}{{\scriptsize E}#3}}
+\newcommand{\inferREACTPat}[3]{\inferREACT{#1}{#2}{{\scriptsize Pat}#3}}
+\newcommand{\inferREACTEPat}[3]{\inferREACT{#1}{#2}{{\scriptsize EPat}#3}}
+
+%% Common definitions
+\def\N{\ensuremath{\mathbb{N}}\xspace}
+\def\Nstar{\ensuremath{\N^*}\xspace}
+\renewcommand{\P}[1]{\ensuremath{\mathcal{P}_{#1}}}
+\def\Val{\textit{Val}\xspace}
+\def\ValBot{\ensuremath{\textit{Val}_\bot}\xspace}
+\def\Time{\ensuremath{\textit{Time}}\xspace}
+\newcommand{\Stream}[1]{\ensuremath{\textit{Stream}(\mathfoot{#1})}}
+\newcommand{\List}[1]{\ensuremath{\textit{List}(\mathfoot{#1})}}
+\newcommand{\Queue}[1]{\ensuremath{\textit{Queue}(\mathfoot{#1})}}
+\newcommand{\TStream}[1]{\ensuremath{\textit{TStream}(\mathfoot{#1})}}
+\newcommand{\PStream}[2]{\ensuremath{\textit{PStream}(\mathfoot{#1, #2})}}
+\def\Bool{\textit{Boolean}\xspace}
+\def\idSet{\textit{Ident}\xspace}
+\def\true{\ttf{true}\xspace}
+\def\false{\ttf{false}\xspace}
+\newcommand{\some}[1]{\ensuremath{\ttf{some}(#1)}}
+\newcommand{\isSome}[1]{\ensuremath{\ttf{is\_some}(#1)}}
+\def\none{\ttf{none}\xspace}
+\newcommand{\mayB}[1]{#1\kwf{?}}
+\newcommand{\denot}[4]{\ensuremath{#2 #1 #3 \Downarrow #4}}
+
+%% GRFRP
+%
+% syntax
+%
+% service
+\newcommand{\service}[2]{\ensuremath{\kwf{service} \, #1 \, \{ #2 \}}}
+% stmt
+\newcommand{\decl}[2]{\ensuremath{\kwf{let} \, #1 = #2}}
+\newcommand{\import}[1]{\ensuremath{\kwf{import} \, #1}}
+\newcommand{\export}[1]{\ensuremath{\kwf{export} \, #1}}
+\def\skp{\ensuremath{\cdot}\xspace}
+% GReact
+\newcommand{\binop}[3]{\ensuremath{\kwf{#1}(#2, \, #3)}}
+\newcommand{\unop}[2]{\ensuremath{\kwf{#1}(#2)}}
+\newcommand{\timeop}{\ensuremath{\kwf{time}()}\xspace}
+\newcommand{\sample}[2]{\binop{sample}{#1}{#2}}
+\newcommand{\scan}[2]{\binop{scan}{#1}{#2}}
+\newcommand{\timeout}[2]{\binop{timeout}{#1}{#2}}
+\newcommand{\throttle}[2]{\binop{throttle}{#1}{#2}}
+\newcommand{\mergeop}[2]{\binop{merge}{#1}{#2}}
+\newcommand{\onchange}[1]{\unop{on\_change}{#1}}
+\newcommand{\persist}[1]{\unop{persist}{#1}}
+%
+% semantics
+%
+\def\vdashFrp{\ensuremath{\vdash_{\textnormal{\tiny\textsc{frp}}}}\xspace}
+% operational semantics
+\def\ctxconcat{\uplus\xspace}
+\def\bigCtxconcat{\biguplus\xspace}
+\def\lstconcat{\oplus\xspace}
+\def\bigLstconcat{\bigoplus\xspace}
+\def\mess{\kwf{Message}\xspace}
+\newcommand{\inputMess}[2]{\ensuremath{\kwf{Input}(#1, \, #2)}}
+\newcommand{\timerMess}[1]{\ensuremath{\kwf{Timer}(#1)}}
+\newcommand{\queue}[1]{\ensuremath{\langle #1 \rangle}}
+\def\emptytimer{\ensuremath{\queue{\cdot}}}
+\newcommand{\stateTy}[1]{\ensuremath{\textit{S}_{\G}\left(#1\right)}}
+\newcommand{\initstate}[1]{\ensuremath{\left\llbracket #1 \right\rrbracket_G^\text{initS}}}
+\newcommand{\timerTy}[1]{\ensuremath{\textit{T}\left(#1\right)}}
+\newcommand{\inittimer}[1]{\ensuremath{\left\llbracket #1 \right\rrbracket_G^\text{initT}}}
+\newcommand{\serviceOpSem}[8]{\ensuremath{\tyCtx, \G \vdashFrp (#1, #2) \xRightarrow[\mathtiny{#3}]{#4, \, #5} (#6, #7): [#8]}}
+\newcommand{\stmtOpSem}[8]{\ensuremath{\tyCtx, \G \vdashFrp (#1, #2) \xrightarrow[\mathtiny{#3}]{#4} (#5, #6): ([#7], [#8])}}
+\newcommand{\sigmaOpSem}[7]{\ensuremath{\tyCtx, \G, #1 \vdashFrp #2 \xrightarrow[\mathtiny{#3}]{#4} #5: ([#6], [#7])}}
+%\renewcommand{\diamond}{\lozenge}
+\newcommand{\reset}[2]{\ensuremath{\smf{reset}(#1, \, #2)}}
+\newcommand{\resetAux}[3]{\ensuremath{\smf{aux}(#1, \, #2, \, #3)}}
+\newcommand{\intoVal}[3]{\ensuremath{\smf{into\_val_{#1}}(#2, \, #3)}}
+\newcommand{\intoBot}[3]{\ensuremath{\smf{into\_bot_{#1}}(#2, \, #3)}}
+\def\explast{{\textit{\tiny last}}\xspace}
+\newcommand{\on}[2]{\ensuremath{#1 \, \kwf{on} \, #2}}
+\newcommand{\inclock}[2]{\ensuremath{#1 \, \kwf{in} \, #2}}
+% denotational semantics
+\def\next{\ensuremath{\cdot}\xspace}
+\def\ts{\ensuremath{ts}\xspace}
+\def\tck{\ensuremath{tck}\xspace}
+\newcommand{\InputCtx}[1]{\ensuremath{\textit{InCtx}(\mathsmall{#1})}}
+\newcommand{\OutputCtx}[1]{\ensuremath{\textit{OutCtx}(\mathsmall{#1})}}
+\newcommand{\LocalCtx}[1]{\ensuremath{\textit{LocCtx}(\mathsmall{#1})}}
+\newcommand{\serviceDenot}[4]{\ensuremath{\denot{\vdashFrp}{\tyCtx, \G, #1}{#3[#2]}{[#4]}}}
+\newcommand{\stmtDenot}[5]{\ensuremath{\tyCtx, \G, #1, #2, #3, #5 \vdashFrp {#4}}}
+\newcommand{\sigmaDenot}[4]{\ensuremath{\denot{\vdashFrp}{\tyCtx, \G, #1, #2}{#3}{[#4]}}}
+\newcommand{\clock}[1]{\ensuremath{\smf{clock^\#}(#1)}}
+\newcommand{\clocked}[4]{\ensuremath{\smf{clocked^\#_{#1}}(#2, #3, #4)}}
+% auxiliary function for GReact
+\newcommand{\persistAux}[2]{\ensuremath{\smf{persist^\#}(#1, #2)}}
+\newcommand{\scanAux}[5]{\ensuremath{\smf{scan^\#_{#2}}(#1, #3, #4, #5)}}
+\newcommand{\sampleAux}[4]{\ensuremath{\smf{sample^\#_{#2}}(#1, #3, #4)}}
+\newcommand{\timeoutAux}[3]{\ensuremath{\smf{timeout^\#_{#2}}(#1, #3)}}
+\newcommand{\mergeAux}[2]{\ensuremath{\smf{merge^\#}(#1, #2)}}
+\newcommand{\throttleAux}[3]{\ensuremath{\smf{throttle^\#_{#2}}(#1, #3)}}
+\newcommand{\timeAux}[1]{\ensuremath{\smf{time^\#}(#1)}}
+
+%% GRSync
+%
+% syntax
+%
+\newcommand{\init}[1]{\ensuremath{\kwf{init}\{#1\}}}
+\newcommand{\component}[5]{\ensuremath{\kwf{component} \, #1 \, (#2) \rightarrow (#3) \, \init{#5} \, \{#4\}}}
+\newcommand{\componentTab}[5][]{%
+    \ifthenelse{ \equal{#1}{} }
+    {\ensuremath{
+            \begin{array}{l}
+                \kwf{component} \, #2 \, (#3) \rightarrow (#4) \, \{ \\
+                \qquad #5                                            \\
+                \}
+            \end{array}
+        }}
+    {\ensuremath{
+            \begin{array}{l}
+                \kwf{component} \, #2 \, (#3) \rightarrow (#4) \\
+                \init{#1}                                      \\
+                \{                                             \\
+                \qquad #5                                      \\
+                \}
+            \end{array}
+        }}
+}
+\newcommand{\match}[3]{\ensuremath{\kwf{match} \, #1 \, \left\{ \kwf{vars}\{#2\} \, #3 \right\}}}
+\newcommand{\matchTab}[3]{\ensuremath{\begin{array}{l}
+            \kwf{match} \, #1 \, \{    \\
+            \qquad \kwf{vars}\{#2\} \, \\
+            \qquad #3                  \\
+            \}
+        \end{array}}}
+\newcommand{\when}[3]{\ensuremath{\kwf{when} \, \left\{ \kwf{vars}\{#1\} \, \init{#2} \, #3 \right\}}}
+\newcommand{\whenTab}[3]{\ensuremath{\begin{array}{l}
+            \kwf{when} \, \{           \\
+            \qquad \kwf{vars}\{#1\} \, \\
+            \qquad \init{#2} \,        \\
+            \qquad #3                  \\
+            \}
+        \end{array}}}
+\newcommand{\guarded}[2]{\ensuremath{#1 \, \kwf{if} \, #2}}
+\newcommand{\branch}[3]{\ensuremath{\guarded{#1}{#2} \Rightarrow \{ #3 \}}}
+\newcommand{\last}[1]{\ensuremath{\kwf{last} \, #1}}
+\newcommand{\emit}[1]{\ensuremath{\kwf{emit} \, #1}}
+\newcommand{\detect}[2]{\ensuremath{#1 = #2\kwf{?}}}
+%
+% semantics
+%
+\def\vdashSync{\ensuremath{\vdash_{\textnormal{\tiny\textsc{sync}}}}\xspace}
+% operational semantics
+\newcommand{\opsem}[4][]{%
+    \ifthenelse{ \equal{#1}{} }
+    {\ensuremath{#2 \xrightarrow[\mathtiny{#3}]{\text{step}} #4}}
+    {\ensuremath{#1 \vdashSync #2 \xrightarrow[\mathtiny{#3}]{\text{step}} #4}}
+}
+\newcommand{\fixsem}[6]{\ensuremath{\tyCtx, \G \vdashSync (#3, #2) \xrightarrow[\mathtiny{#4}]{\text{fix} \, #1} (#5, #6)}}
+\newcommand{\initsync}[1]{\ensuremath{\left\llbracket #1 \right\rrbracket_G^\text{init}}}
+\newcommand{\compOpsem}[5]{\ensuremath{\opsem[\tyCtx, \G]{(#1, [#2])}{#3}{(#4, [#5])}}}
+\newcommand{\eqOpsem}[5]{\ensuremath{\opsem[\tyCtx, \G]{(#2, #1)}{#3}{(#4, #5)}}}
+\newcommand{\exprOpsem}[5]{\ensuremath{\opsem[\tyCtx, \G, #1]{#2}{#3}{#4}: [#5]}}
+\newcommand{\epatOpsem}[6]{\ensuremath{\opsem[\tyCtx, \G]{(#2, #1)}{#3}{(#4, #6)}: #5}}
+\newcommand{\patOpsem}[4]{\ensuremath{\epatOpsem{#1}{()}{#2}{()}{#3}{#4}}}
+% denotational semantics
+\def\step{\ensuremath{\cdot}\xspace}
+\newcommand{\compDenot}[4]{\ensuremath{\denot{\vdashSync}{\tyCtx, \G, #1}{#2[#3]}{[#4]}}}
+\newcommand{\eqDenot}[3]{\ensuremath{\tyCtx, \G, #2, #1 \vdashSync #3}}
+\newcommand{\exprDenot}[4]{\ensuremath{\denot{\vdashSync}{\tyCtx, \G, #2, #1}{#3}{[#4]}}}
+\newcommand{\patDenot}[4]{\ensuremath{\denot{\vdashSync}{\tyCtx, \G, #2, #1}{#3}{#4}}}
+\newcommand{\epatDenot}[4]{\ensuremath{\patDenot{#1}{#2}{#3}{#4}}}
+\def\T{{\ensuremath{\mathtiny{\true}}}}
+\def\F{{\ensuremath{\mathtiny{\false}}}}
+\newcommand{\whenB}[2]{\ensuremath{\smf{when^b}(#1, #2)}}
+\newcommand{\whenT}[2]{\ensuremath{\smf{when^\T}(#1, #2)}}
+\newcommand{\whenF}[2]{\ensuremath{\smf{when^\F}(#1, #2)}}
+\newcommand{\const}[2]{\ensuremath{\smf{repeat^\#}(#1, #2)}}
+\newcommand{\buffer}[2]{\ensuremath{\smf{buffer^\#}(#1, #2)}}
+
+%% GReusot
+%
+% syntax
+%
+\def\Spec{\texttt{Spec}\xspace}
+\def\Clause{\texttt{Clause}\xspace}
+\def\Term{\texttt{Term}\xspace}
+\newcommand{\reqClause}[1]{\ensuremath{\kft{requires} \: \block{#1}}}
+\newcommand{\ensClause}[1]{\ensuremath{\kft{ensures} \: \block{#1}}}
+\newcommand{\forallTerm}[3]{\ensuremath{\kft{forall} \: #1 \: \kft{:} \: #2 \kft{,} \: #3}}
+\newcommand{\implTerm}[2]{\normBr{#1}{#2}}
+\newcommand{\whenTerm}[2]{\ensuremath{\kft{when} \: \normBr{#1}{#2}}}
+\def\resTerm{\kft{result}\xspace}
+
+%% Empty stuff:
+\def\emptyrho{\ensuremath{[\,]}}
+\newcommand{\botrho}[1]{\ensuremath{\bot_{#1}}}
+\def\emptygamma{\ensuremath{[\,]}}
+\def\emptylist{\ensuremath{[\,]}}
+
+%% Reactive type system
+% reactive kinds/types
+\def\rType{\smf{T\mathtiny{\smf{C/D}}}\xspace}
+\def\cType{\smf{C}\xspace}
+\def\dType{\smf{D}\xspace}
+% grfrp
+\newcommand{\servTypedReact}[1]{\ensuremath{\G \vdash_R #1}}
+\newcommand{\stmtTypedReact}[2]{\ensuremath{\G, #1 \vdash_R #2}}
+\newcommand{\opTypedReact}[3]{\ensuremath{\G, #1 \vdash_R #2: [#3]}}
+% grsync
+\newcommand{\compTypedReact}[3]{\ensuremath{\G \vdash_R #1[#2]: [#3]}}
+\newcommand{\eqTypedReact}[2]{\ensuremath{\G, #1 \vdash_R #2}}
+\newcommand{\exprTypedReact}[3]{\ensuremath{\G, #1 \vdash_R #2: [#3]}}
+\newcommand{\patTypedReact}[3]{\ensuremath{\G, #1 \vdash_R #2: [#3]}}
+\newcommand{\epatTypedReact}[2]{\ensuremath{\G, #1 \vdash_R #2}}
+
+%% -------------Theorems
+\newtheorem{theorem}{Theorem}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{remark}[theorem]{Remark}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}

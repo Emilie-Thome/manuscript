@@ -1,0 +1,93 @@
+\section{Formalization of \GRFRP}
+\label{sec:semantics:grfrp}
+
+This section details \GRFRP, the language used to model the system's asynchronous top-level. It acts
+as the composition layer for the synchronous components defined in \GRSync. In \GRFRP, developers
+define \emph{services} that manage data flows between the system's external interface and the
+internal \GRSync components.
+\GRFRP includes a library of built-in data flow operations, called \GReact,
+which provides essential functionality for manipulating flows. A key contribution of this section
+is the provision of a clear and well-defined semantics for these reactive operators, ensuring their
+precise behavior is formally specified.
+%
+Drawing inspiration from the Functional Reactive Programming (\frp) paradigm, \GRFRP adopts a
+\emph{push-based strategy}~\cite{DBLP:conf/haskell/Elliott09}, where only data changes are
+propagated through the service. This event-driven approach is efficient for modern automotive
+architectures as it reduces communication load on the system bus by avoiding unnecessary data
+transmission and encryption.
+
+This section provides a formal definition of \GRFRP, structured as follows.
+%
+We begin in \Cref{sec:semantics:grfrp:syntax} by introducing the formal syntax of \GRFRP, which
+provides the foundation for defining the behavior of the language.
+%
+Building upon this syntax, we define two complementary semantic models to provide a precise
+understanding of how \GRFRP programs execute: an operational semantics describing step-by-step
+execution (\Cref{sec:semantics:grfrp:opsem}), and a denotational semantics defining behavior over
+time (\Cref{sec:semantics:grfrp:denot}).
+%
+To ensure the consistency and reliability of these semantics, particularly in the presence of
+oversampling, we present in \Cref{sec:semantics:grfrp:react_typing} a type system that guarantees
+the soundness of the semantics with regard to oversampling.
+%
+Finally, we present and prove in \Cref{sec:semantics:grfrp:theorems} the key theorems of \GRFRP,
+which formally establish its fundamental properties: productivity of the operational semantics
+(\Cref{thm:semantics:grfrp:theorems:productivity}), determinism of the denotational semantics
+(\Cref{thm:semantics:grfrp:theorems:determinism}), equivalence between the two semantics
+(\Cref{thm:semantics:grfrp:theorems:equivalence}), and soundness with regard to oversampling
+(\Cref{thm:semantics:grfrp:theorems:oversampling}). These theorems provide a formal foundation for
+reasoning about \GRFRP programs.
+
+\input{./chapters/4_semantics/3_grfrp/1_syntax.tex}
+
+\input{./chapters/4_semantics/3_grfrp/2_operational.tex}
+
+\input{./chapters/4_semantics/3_grfrp/3_denotational.tex}
+
+\input{./chapters/4_semantics/3_grfrp/4_react_type_system.tex}
+
+\input{./chapters/4_semantics/3_grfrp/5_theorems.tex}
+
+\subsection{Discussion}
+\label{sec:grfrp:discussion}
+
+The formalization of \GRFRP completes the semantic definition of \GRust by addressing the challenges
+of integrating synchronous components into a top-level, event-driven service.
+
+\paragraph{Asynchronous Dataflow Model}
+The \GRFRP kernel adopts an asynchronous, push-based dataflow model. This design directly reflects
+the operational reality of a Software-Defined Vehicle, where data arrives sporadically. In an
+asynchronous model lacking a shared base clock, ensuring temporal consistency is a primary
+challenge. \GRFRP addresses this through timestamped streams, which provide an unambiguous
+ordering for all data and guarantee consistency. This event-driven approach contrasts with
+traditional periodic models, offering a foundation for more efficient and responsive systems.
+
+\paragraph{The GALS Architecture}
+This asynchronous model serves as the foundation for a concrete realization of the \emph{Globally
+    Asynchronous, Locally Synchronous} (GALS) architecture~\cite{DBLP:phd/us/Chapiro85}. \GRFRP
+services act as the asynchronous executor, orchestrating dataflows between the locally synchronous
+\GRSync components. This separation isolates deterministic logic from the temporal unpredictability
+of the external world. The soundness of this integration is formally guaranteed by the Oversampling
+\Cref{thm:semantics:grsync:theorems:oversampling}, which was proven for the synchronous kernel. This
+theorem confirms that the push-based activation of a reactive component by a \GRFRP service is
+semantically equivalent to a conventional pull-based execution, providing the crucial justification
+for the entire architecture.
+
+\paragraph{Formal Guarantees for Services}
+Beyond the soundness of the integration, the \GRFRP layer itself is designed to be predictable and
+safe. This is established through a complementary set of theorems specific to the service level.
+The Productivity and Determinism
+\Cref{thm:semantics:grfrp:theorems:productivity,thm:semantics:grfrp:theorems:determinism}
+guarantee that a service always reacts to new inputs and that its output history is uniquely
+determined. Furthermore, the Equivalence \Cref{thm:semantics:grfrp:theorems:equivalence}
+provides a critical link between the two semantic models, proving that the step-by-step operational
+semantics corresponds precisely to the high-level denotational model.
+
+\paragraph{Summary}
+In summary, this section has formalized the \GRFRP language, defining how it manages asynchronous
+dataflows and composes synchronous components. The soundness of this asynchronous layer is
+established by its own theorems of Productivity, Determinism, and Equivalence. Crucially, the GALS
+architecture of \GRust is formally validated by the Oversampling Theorem from the \GRSync kernel,
+which guarantees that the integration of the two layers is semantically sound. With the formal
+foundations of the complete language now established, the following chapters will build upon them to
+discuss implementation and practical application.

@@ -1,0 +1,97 @@
+This chapter formalizes the semantics of the two core languages of \GRust: the service-modeling
+kernel \GRFRP and the component-modeling kernel \GRSync. For each language, we provide a formal
+syntax, an \emph{operational semantics}, a \emph{denotational semantics}, and key theorems that
+establish their soundness.
+
+The \emph{operational semantics} models the \emph{execution} of programs. In this chapter, we define
+a small-step operational semantics for both \GRFRP and \GRSync. This approach focuses on how
+\emph{individual values} are computed as the program executes, making it particularly suited for
+modeling dataflow languages, where computations are performed continuously on a flow of inputs.
+%
+In \GRSync, components are represented as state machines that compute outputs based on inputs and a
+state capturing the information needed for future computations (including \last{x} memories and the
+state of called components).
+%
+In \GRFRP, in order to minimize the number of exported messages, services compute by propagating
+signal updates and event occurrences to maintain flows up-to-date. The operational
+semantics captures this process.
+%
+% Operational semantics can also be defined in other ways. A \emph{big-step} semantics directly
+% describes the computation of the final result of the program, abstracting away intermediate steps.
+% In the context of dataflow languages, a big-step semantics can describe how an \emph{entire flow}
+% is processed \cite{DBLP:journals/pacmpl/BourkeBP20}. Additionally, the smallest units of computation
+% can be captured by a \emph{micro-step} semantics, which models the elementary operations performed
+% within a single computation step~\cite{DBLP:books/daglib/0023221}.
+
+The \emph{denotational semantics} provides a mathematical representation of the elements of the
+language. It offers an abstract, high-level view of program behavior, focusing on the \emph{what}
+(the result) rather than the \emph{how} (the execution). This complements the operational semantics,
+which models the step-by-step execution of programs.
+%
+In dataflow languages like \GRust, each expression is associated with an \emph{infinite} sequence
+of values it carries during execution, referred to as a
+\emph{stream}~\cite{DBLP:conf/ifip/Kahn74,DBLP:journals/tecs/BourkePP23,DBLP:journals/tcad/LeeS98}.
+These streams represent the entire simulation of the expression over time. To maintain a consistent
+notion of time while employing the propagation strategy captured by the operational semantics, the
+values in the streams of \GRFRP flows are \emph{timestamped}. \Cref{sec:semantics:streams} will give
+further explanations on this mathematical model and how it is used in the semantics of \GRSync and
+\GRFRP.
+
+The chapter is structured as follows.
+\begin{description}
+      \item[\Cref{sec:semantics:example}]
+            presents an Automatic Emergency Braking (\aeb) system as a running example to provide an
+            intuitive understanding of the \GRust semantics formalized in this chapter.
+
+      \item[\Cref{sec:semantics:streams}]
+            explains the mathematical model of \emph{streams}---infinite, timestamped dataflows that
+            capture the history of values over an entire execution. This model forms the basis for
+            the denotational semantics of both \GRSync and \GRFRP.
+
+      \item[\Cref{sec:semantics:grsync}]
+            presents the formal semantics of the \GRSync kernel. This section defines its abstract
+            syntax, an operational semantics based on state machines, and a denotational semantics
+            based on streams. It concludes by establishing the soundness theorems for \GRSync.
+
+      \item[\Cref{sec:semantics:grfrp}]
+            presents the formal semantics of the \GRFRP kernel. Following a parallel structure to
+            the formalization of \GRSync, it defines the abstract syntax, an operational semantics
+            that captures asynchronous dataflow propagation, and a denotational semantics based on
+            timestamped streams, concluding with the corresponding soundness theorems.
+\end{description}
+
+For both kernels, we establish the following soundness theorems.
+\begin{description}
+      \item[Productivity] Well-typed services and well-typed, causal components are guaranteed to
+            produce a valid output for any given input. This property, referred to as
+            \emph{productivity}, is formally stated for the operational semantics in
+            \Cref{thm:semantics:grsync:theorems:productivity,%
+                  thm:semantics:grfrp:theorems:productivity}.
+
+      \item[Determinism] The output of a construct is uniquely determined by its input history. This
+            property, referred to as \emph{determinism}, is formally stated for the denotational
+            semantics in
+            \Cref{thm:semantics:grsync:theorems:determinism,%
+                  thm:semantics:grfrp:theorems:determinism}.
+
+      \item[Equivalence] The operational and denotational semantics are proven to be consistent. The
+            execution of a construct, as defined by the operational semantics, yields a result that
+            matches its denotational meaning. This \emph{equivalence} is formally stated in
+            \Cref{thm:semantics:grsync:theorems:equivalence,%
+                  thm:semantics:grfrp:theorems:equivalence}.
+
+      \item[Oversampling] The operational semantics models a propagation-based execution. We prove
+            that additional computations, a process referred to as \emph{oversampling}, do not
+            alter the output values of flows. This property, stated in
+            \Cref{thm:semantics:grsync:theorems:oversampling,%
+                  thm:semantics:grfrp:theorems:oversampling}, justifies the safe transition from a
+            periodic to an event-driven execution model.
+\end{description}
+
+\input{./chapters/4_semantics/1_example.tex}
+
+\input{./chapters/4_semantics/1b_stream.tex}
+
+\input{./chapters/4_semantics/2_grsync.tex}
+
+\input{./chapters/4_semantics/3_grfrp.tex}

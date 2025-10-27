@@ -1,0 +1,181 @@
+%% -------------Packages
+% margin
+\usepackage[margin=0.9in]{geometry}
+
+% spelling
+\usepackage[english]{babel}
+
+% headers and footers
+\usepackage[twoside]{fancyhdr}
+
+% sectioning
+\usepackage{titlesec}
+
+% table of content
+\usepackage{titletoc}
+
+% line spacing
+\usepackage{setspace}
+
+% font settings for captions
+\usepackage[font=small,textfont=sl]{caption}
+
+% bibliography
+\usepackage[square,numbers]{natbib}
+\bibliographystyle{plain}
+
+% For spaces after my commands
+\usepackage{xspace}
+
+% make references clickable 
+\usepackage[]{hyperref}
+\def\manuscriptTitle{Reactive Programming Language Applied to Automotive Functional Specification and Model-Based Design\xspace}
+\hypersetup{
+  pdftitle={\manuscriptTitle},
+  % pdfpagemode=FullScreen,
+}
+
+% for maths symbols
+\usepackage{stmaryrd, amssymb, amsthm}
+
+% for figures
+\usepackage{graphicx}
+\graphicspath{ {../images/} }
+
+% for the `H' option (hear)
+\usepackage{float}
+
+% for BNF grammar syntax 
+\usepackage{simplebnf}
+
+% for bold math symbols
+\usepackage{bm}
+
+% logical terms
+\usepackage{mathpartir}
+\makeatletter
+\let\originferrule\inferrule
+\DeclareDocumentCommand \inferrule { s O {} m m o }{%
+  \IfBooleanTF{#1}%
+  {%
+    \mpr@inferstar[#2]{#3}{#4}%
+  }{%
+    \mpr@inferrule[#2]{#3}{#4}%
+  }%
+  \IfValueT{#2}%
+  {%
+    \my@name@inferrule{#2}%
+  }%
+}
+\NewDocumentCommand \my@name@inferrule { m }{%
+  \def\@currentlabelname{\ensuremath{#1}}%
+}
+\makeatother
+
+% boxes
+\usepackage{tcolorbox}
+% New boxes
+\newtcolorbox[auto counter]{syntaxbox}[2][]{%
+  top=0mm,
+  bottom=0mm,
+  left=0mm,
+  colback=blue!10,
+  colframe=blue!50!black,
+  title=Syntax.~\thetcbcounter: #2,
+  #1
+}
+\newtcolorbox[auto counter]{semanticsbox}[2][]{%
+  top=0mm,
+  bottom=0mm,
+  left=0mm,
+  colback=red!10,
+  colframe=red!50!black,
+  title=Semantics.~\thetcbcounter: #2,
+  #1
+}
+\newtcolorbox[auto counter]{examplebox}[2][]{%
+  top=0mm,
+  bottom=0mm,
+  left=0mm,
+  colback=green!10,
+  colframe=green!50!black,
+  title=#2,
+  #1
+}
+
+% latin modern fonts
+\usepackage{lmodern}
+
+% multiple columns
+\usepackage{multicol}
+
+% automatic line breaks in tables + long tables
+\usepackage{tabularx, longtable, booktabs}
+
+% combining cells in tabular
+\usepackage{multirow}
+
+% listings
+\usepackage{listings, listings-extended}
+\lstset{
+inputpath=../codes,
+literate=
+  {à}{{\`a}}1
+{é}{{\'e}}1
+{è}{{\`e}}1
+{ê}{{\^e}}1
+{î}{{\^i}}1
+{ô}{{\^o}}1
+{û}{{\^u}}1
+{ç}{{\c{c}}}1
+}
+
+% For colors
+\usepackage[dvipsnames]{xcolor}
+
+% For conditional macros with optional arguments
+\usepackage{ifthen}
+
+% For wrapping figures
+\usepackage{wrapfig,caption,subcaption}
+\setlength\intextsep{5pt}
+
+% For graphics and drawings
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,shapes,arrows,calc,positioning,fit}
+% Define block styles
+\tikzstyle{block} = [
+rectangle,
+rounded corners,
+draw,
+text width=2cm,
+text centered,
+minimum height=1cm
+]
+\tikzstyle{arrow}=[-{Latex[length=2mm, width=2mm]}]
+\tikzstyle{crate_border}=[
+dotted,
+thick,
+rounded corners=5mm,
+inner sep=5mm,
+minimum height=2.5cm,
+minimum width=3.5cm
+]
+\tikzstyle{process_block}=[block, fill=blue!10]
+\tikzstyle{data_block}=[block, fill=green!10]
+\tikzstyle{label_block}=[
+block,
+rounded corners=5mm,
+draw = white,
+nearly opaque,
+fill=red!10,
+text width=9cm,
+]
+\tikzstyle{line} = [draw, -latex']
+
+% For numbering lines
+\usepackage{lineno}
+\linenumbers
+
+% for reference
+\usepackage{cleveref}

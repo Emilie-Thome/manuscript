@@ -1,0 +1,756 @@
+\section{Type System}
+\label{sec:grust:typing}
+
+This section details the static type system of \GRust, which enforces the correct composition
+of its synchronous and asynchronous constructs. A key design choice in \GRust is to implement a
+dedicated type-checking pass rather than relying on the \Rust compiler. This approach is motivated
+by several factors.
+
+First, \GRust introduces domain-specific abstractions, such as \emph{signals} and \emph{events},
+that have no equivalent in the \Rust type system. A custom type checker is essential to enforce
+rules governing their use---for example, ensuring that an operator like \kft{timeout} receives an
+event, not a signal.
+%
+Second, it enables the compiler to report clear, high-level errors that refer directly to the source
+\GRust model. This shields the developer from cryptic error messages related to the underlying
+generated code, which would otherwise report a \emph{mismatched types} error on unfamiliar code.
+%
+Finally, \GRust mandates explicit type annotations, deliberately omitting type inference. This
+design promotes code clarity and predictability, which are paramount in safety-critical domains.
+While this choice prevents the direct use of externally defined \Rust types, the benefits of
+domain-specific validation and improved diagnostics are a worthwhile trade-off.
+
+\begin{table}[!ht]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}\hline
+        $\ID_s, \: \ID_f, \: \ID_c, \: \ID$     & Service, function, component,
+        and variable identifiers respectively.                                           \\\hline
+        $\IDs ::= \{\ID^*\}$                    & A set of identifiers.                  \\\hline
+        $\G[\ID_f]$                             & A context mapping function
+        identifiers to their definitions.                                                \\\hline
+        $\G[\ID_c]$                             & A context mapping component
+        identifiers to their definitions.                                                \\\hline
+        $\TY   ::= \boolTY \: \vert \: \intTY
+            \: \vert \: \floatTY \: \vert \:
+        \unitTY$                                & Basic types for values.                \\\hline
+        $\kind{\TY} ::= \signal{\TY} \: \vert
+        \: \event{\TY}$                         & Flow types, representing a
+        flow of values of type \TY.                                                      \\\hline
+        $\STY ::= \TY \: \vert \: \opt{\TY}$    & Sampling types for flows:
+        signals always have values, while events might be absent, making their
+        values optional (with the `\opt{}').                                             \\\hline
+        $\tyCtx[\ID]$                           & A typing context \tyCtx
+        mapping identifiers to their types. It can be a \kind{\TY} for \GRFRP
+        identifiers and \STY for \GRSync identifiers.                                    \\\hline
+        \typing{elem}{\texttt{Elem}}            & Asserts that the \GRust
+        construct \texttt{Elem} is well-typed with respect to \tyCtx.                    \\\hline
+        $\typing{elem}{\texttt{Elem}}: [\STY^* \:
+        \vert \: (\kind{\TY})^*]$               & Asserts that the \GRust
+        construct \texttt{Elem} has the type $[\STY^*]$ or $[(\kind{\TY})^*]$ in \tyCtx. \\\hline
+        $\CST : \TY$                            & The constant \CST has the
+        type \TY.                                                                        \\\hline
+        $\OP : [\TY_i^*] \rightarrow [\TY_o^*]$ & An operator \OP that takes
+        inputs of types $[\TY_i^*]$ and returns outputs of types $[\TY_o^*]$.            \\\hline
+        \defines{\Eq}{\IDs}                     & The set of identifiers \IDs
+        is defined by the equation \Eq.                                                  \\\hline
+    \end{tabularx}
+    \caption[Notations for the type system of \GRust.]%
+    {Notations for the logic of the type system of \GRust.}
+    \label{tab:grust:typing:notations}
+\end{table}
+
+To formalize the type system, we introduce several notations, summarized in
+\Cref{tab:grust:typing:notations}. At the core of the type system is the \emph{typing context},
+denoted by \tyCtx, which acts as a symbol table that maps each identifier to its type. Because
+\GRust integrates two distinct semantic models, the type system must handle two corresponding kinds
+of types: \emph{flow types} for the asynchronous \GRFRP world and \emph{sampling types} for the
+synchronous \GRSync world.
+
+In \GRFRP services, identifiers correspond to dataflows that evolve over time. Their types, called
+\emph{flow types} and denoted by \kind{\TY}, describe the temporal nature of the flow. A
+\emph{signal} (\signal{\TY}) represents a value that is continuously available, while an
+\emph{event} (\event{\TY}) represents a discrete occurrence. The underlying type of the values
+carried by the flow is a \emph{basic type} (\TY), such as \boolTY, \intTY, or \floatTY.
+
+In contrast, \GRSync components operate at discrete logical instants. When a component executes, it
+computes on a \emph{sample} of its input flows. The types of these instantaneous values are called
+\emph{sampling types}, denoted by \STY.
+%
+When a signal is sampled, it always yields a value, so its sampling type is its underlying basic
+type \TY.
+%
+When an event is sampled, a value is present only if the event occurs at that specific instant. This
+`presence or absence' is captured by an \emph{optional type}, \opt{\TY}. Thus, the sampling type of
+an event is \opt{\TY}.
+
+Finally, the formal rules use the judgment \typing{elem}{\text{Elem}} to assert that a \GRust
+construct \texttt{Elem} is well-typed within a given context. The helper notation
+\defines{\Eq}{\IDs} is used to retrieve the set of identifiers \IDs that are newly defined by an
+equation \Eq.
+
+\subsection{\GRust Programs}
+\label{sec:grust:typing:prog}
+
+A \GRust program is well-typed if all its constituent items are well-typed, as defined by the
+judgment \progTyped{\Prog} in rule \nameref{rule:grust:typing:prog:program}.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Program
+            \inferTY
+            { \left(\itemTyped{\Item}\right)^* }
+            { \progTyped{\Item^*} }
+            {Prog}
+            \label{rule:grust:typing:prog:program}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+An item is well-typed if it satisfies the judgment \itemTyped{\Item}. Imports and exports are
+well-typed if the identifiers they define are mapped to flow types (\kind{\TY}) in the context
+\tyCtx, as stated by rules \nameref{rule:grust:typing:prog:interface:import} and
+\nameref{rule:grust:typing:prog:interface:export}.
+%
+Services, functions, and components are well-typed if their bodies are well-typed, as shown in rules
+\nameref{rule:grust:typing:prog:service}, \nameref{rule:grust:typing:prog:fun}, and
+\nameref{rule:grust:typing:prog:comp}. Additionally, the input and output types for functions and
+components must be correctly recorded in the typing context. Functions are restricted to basic types
+to forbid direct handling of events, which may require state.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Interface
+            % Import
+            \inferTY
+            { \tyCtx[\ID] = \kind{\TY} }
+            { \itemTyped{\importX{\typed{\FlowKind}{\ID}{\TY}}} }
+            {Import}
+            \label{rule:grust:typing:prog:interface:import}
+
+            % Export
+            \inferTY
+            { \tyCtx[\ID] = \kind{\TY} }
+            { \itemTyped{\exportX{\typed{\FlowKind}{\ID}{\TY}}} }
+            {Export}
+            \label{rule:grust:typing:prog:interface:export}
+
+            %% Service
+            \inferTY
+            { \left(\stmtTyped{\FlowStmt}\right)^* }
+            { \itemTyped{\servItem{\ID_s}{\interval{\INT}{\INT}}{\many{\FlowStmt}}} }
+            {Serv}
+            \label{rule:grust:typing:prog:service}
+
+            %% Component
+            \inferTY
+            {
+                \left(\tyCtx[\ID_i] = \STY_i\right)^* \\
+                \eqTyped{\setEq} \\
+                \left(\tyCtx[\ID_o] = \STY_o\right)^*
+            }
+            { \itemTyped{\compItem{\ID_c}{\many{(\ID_i \, \kft{:} \, \STY_i)}}{\many{(\ID_o \, \kft{:} \, \STY_o)}}{\many{\Eq}}} }
+            {Comp}
+            \label{rule:grust:typing:prog:comp}
+
+            %% Function
+            \inferTY
+            {
+                \left(\tyCtx[\ID_i] = \TY_i\right)^* \\
+                \left(\stmtTyped{\Decl}\right)^* \\
+                \exprTyped{\Expr}{\TY_o}
+            }
+            { \itemTyped{\funItem{\ID_f}{\many{(\ID_i \: \kft{:} \: \TY_i)}}{\TY_o}{\many{\Decl}}} }
+            {Fun}
+            \label{rule:grust:typing:prog:fun}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subsection{Bodies of \GRFRP Services}
+\label{sec:grust:typing:grfrp}
+
+This section presents the typing rules for services and other \GRFRP constructs.
+
+\subsubsection{Flow Statements}
+\label{sec:grust:typing:grfrp:flow_stmt}
+
+A flow statement is well-typed if it satisfies the judgment \stmtTyped{\FlowStmt}.
+%
+A \kft{let} statement, following rule \nameref{rule:grust:typing:grfrp:flow_stmt:let}, is well-typed
+if its flow operation (\FlowOp) produces types that match both the declared types ($[\kind{\TY}^*]$)
+and the types stored in the context ($[(\tyCtx[\ID])^*]$).
+%
+Similarly, rule \nameref{rule:grust:typing:grfrp:flow_stmt:def} states that a definition statement
+is well-typed if the types from its flow operation match those in the context.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Flow Statement
+            % Let
+            \inferTYFlowStmt
+            {
+                \flowTyped{\FlowOp}{(\tyCtx[\ID])^*} \\
+                \left(\tyCtx[\ID] = \kind{\TY}\right)^*
+            }
+            { \stmtTyped{\letStmt{\many{(\typed{\FlowKind}{\ID}{\TY})}}{\FlowOp}} }
+            {Let}
+            \label{rule:grust:typing:grfrp:flow_stmt:let}
+
+            % Definition
+            \inferTYFlowStmt
+            { \flowTyped{\FlowOp}{(\tyCtx[\ID])^*} }
+            { \stmtTyped{\defStmt{\many{\ID}}{\FlowOp}} }
+            {Def}
+            \label{rule:grust:typing:grfrp:flow_stmt:def}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subsubsection{Flow Operations}
+\label{sec:grust:typing:grfrp:flow_op}
+
+A flow operation \FlowOp has the flow type \kind{\TY} if it satisfies the judgment
+\flowTyped{\FlowOp}{\kind{\TY}}.
+%
+An identifier referring to a flow has the type stored in the context \tyCtx, as defined by the rule
+\nameref{rule:grust:typing:grfrp:flow_op:ident}.
+%
+Function and component applications are well-typed if their input operations are compatible with the
+signatures of the callees, as shown in rules \nameref{rule:grust:typing:grfrp:flow_op:funapp} and
+\nameref{rule:grust:typing:grfrp:flow_op:compapp}.
+%
+Type compatibility is defined by rules \nameref{rule:grust:typing:grfrp:flow_op:sty:signal} and
+\nameref{rule:grust:typing:grfrp:flow_op:sty:event}: a signal \signal{\TY} is compatible with its
+inner type \TY, while an event \event{\TY} is compatible with an option of its inner type \opt{\TY}.
+
+\begin{center}
+    \begin{minipage}{0.99\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Flow Operation
+            % Identifier
+            \inferTYFlow
+            { \tyCtx[\ID] = \kind{\TY} }
+            { \flowTyped{\ID}{\kind{\TY}} }
+            {ID}
+            \label{rule:grust:typing:grfrp:flow_op:ident}
+
+            % Function
+            \inferTYFlow
+            {
+                \left(\flowTyped{\FlowOp}{\kind[i]{\TY_i}}\right)^* \\
+                \G[\ID_f] = \funItem{\ID_f}{\many{(\ID_i \: \kft{:} \: \TY_i)}}{\TY_o}{\many{\Decl}} \\
+                \left(\kind[i]{\TY_i} \doteq \TY_i\right)^* \\
+                \kind[o]{\TY_o} \doteq \TY_o
+            }
+            { \flowTyped{\compApp{\ID_f}{\many{\FlowOp}}}{\kind[o]{\TY_o}} }
+            {AppF}
+            \label{rule:grust:typing:grfrp:flow_op:funapp}
+
+            %% Application
+            % Component
+            \inferTYFlow
+            {
+                \left(\flowTyped{\FlowOp}{\kind[i]{\TY_i}}\right)^* \\
+                \G[\ID_c] = \compItem{\ID_c}{\many{(\ID_i \, \kft{:} \, \STY_i)}}{\many{(\ID_o \, \kft{:} \, \STY_o)}}{\many{\Eq}} \\
+                \left(\kind[i]{\TY_i} \doteq \STY_i\right)^* \\
+                \left(\kind[o]{\TY_o} \doteq \STY_o\right)^*
+            }
+            { \flowTyped{\compApp{\ID_c}{\many{\FlowOp}}}{(\kind[o]{\TY_o})^*} }
+            {AppC}
+            \label{rule:grust:typing:grfrp:flow_op:compapp}
+        \end{mathpar}
+    \end{minipage}
+
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Type correspondence
+            % Signal
+            \inferTY
+            { }
+            {\signal{\TY} \doteq \TY}
+            {Signal}
+            \label{rule:grust:typing:grfrp:flow_op:sty:signal}
+
+            % Event
+            \inferTY
+            { }
+            {\event{\TY} \doteq \opt{\TY}}
+            {Event}
+            \label{rule:grust:typing:grfrp:flow_op:sty:event}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The typing rules for the built-in \GReact operators enforce their correct usage with specific flow
+types, as their semantics depends on the kind of flows. Each rule specifies the expected input and
+output flow types, ensuring that operations like converting signals to events or
+filtering data are performed safely.
+
+The \kft{on\_change} and \kft{persist} operators bridge the gap
+between signals and events. As shown in rule \nameref{rule:grust:typing:grfrp:flow_op:onchange},
+\kft{on\_change} takes a \signal{\TY} and produces an \event{\TY} that fires only when the signal
+value changes. Conversely, rule \nameref{rule:grust:typing:grfrp:flow_op:persist} shows that
+\kft{persist} takes an \event{\TY} and creates a \signal{\TY} that holds the value of the last event
+occurrence.
+%
+The \kft{scan} operator enables periodic observations over a signal.
+Rule \nameref{rule:grust:typing:grfrp:flow_op:scan} states that it takes a \signal{\TY} and an
+integer (the scanning period), producing a new \signal{\TY}. Its counterpart for events,
+\kft{sample}, observes occurrences of an event periodically, for instance, to downsample a
+high-frequency event source.
+%
+The \kft{timeout} operator, defined in rule
+\nameref{rule:grust:typing:grfrp:flow_op:timeout}, expects an \event{\TY} and an integer duration;
+if the event does not occur within that duration, it emits an occurrence of its output
+\event{\unitTY}. The \kft{time} operator, following rule
+\nameref{rule:grust:typing:grfrp:flow_op:time}, provides the current time as a \signal{\floatTY}.
+%
+The \kft{merge} operator, governed by rule
+\nameref{rule:grust:typing:grfrp:flow_op:merge}, combines two event flows of the same type into a
+single flow that fires when either input fires. The \kft{throttle} operator, following rule
+\nameref{rule:grust:typing:grfrp:flow_op:throttle}, filters the input signal, emitting a new value
+only when the change exceeds a specified threshold \DELTA (which is useful for ignoring sensor
+noise).
+
+\begin{center}
+    \begin{minipage}{0.99\textwidth}
+        \centering
+        \begin{mathpar}
+            %% GReact
+            % OnChange
+            \inferTYFlow
+            { \flowTyped{\FlowOp}{\signal{\TY}} }
+            { \flowTyped{\onchangeExpr{\FlowOp}}{\event{\TY}} }
+            {OChg}
+            \label{rule:grust:typing:grfrp:flow_op:onchange}
+
+            % Persist
+            \inferTYFlow
+            { \flowTyped{\FlowOp}{\event{\TY}} }
+            { \flowTyped{\persistExpr{\FlowOp}}{\signal{\TY}} }
+            {Prst}
+            \label{rule:grust:typing:grfrp:flow_op:persist}
+
+            % Scan
+            \inferTYFlow
+            {
+                \flowTyped{\FlowOp}{\signal{\TY}} \\
+                \exprTyped{\INT}{\intTY}
+            }
+            { \flowTyped{\scanExpr{\FlowOp}{\INT}}{\signal{\TY}} }
+            {Scan}
+            \label{rule:grust:typing:grfrp:flow_op:scan}
+
+            % Sample
+            \inferTYFlow
+            {
+                \flowTyped{\FlowOp}{\event{\TY}} \\
+                \exprTyped{\INT}{\intTY}
+            }
+            { \flowTyped{\scanExpr{\FlowOp}{\INT}}{\event{\TY}} }
+            {Samp}
+            \label{rule:grust:typing:grfrp:flow_op:sample}
+
+        \end{mathpar}
+    \end{minipage}
+
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            % Timeout
+            \inferTYFlow
+            {
+                \flowTyped{\FlowOp}{\event{\TY}} \\
+                \exprTyped{\INT}{\intTY}
+            }
+            { \flowTyped{\timeoutExpr{\FlowOp}{\INT}}{\event{\unitTY}} }
+            {TOut}
+            \label{rule:grust:typing:grfrp:flow_op:timeout}
+
+        \end{mathpar}
+    \end{minipage}
+
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            % Merge
+            \inferTYFlow
+            {
+                \flowTyped{\FlowOp_1}{\event{\TY}} \\
+                \flowTyped{\FlowOp_2}{\event{\TY}}
+            }
+            { \flowTyped{\mergeExpr{\FlowOp_1}{\FlowOp_2}}{\event{\TY}} }
+            {Mrg}
+            \label{rule:grust:typing:grfrp:flow_op:merge}
+        \end{mathpar}
+    \end{minipage}
+
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            % Throttle
+            \inferTYFlow
+            {
+                \flowTyped{\FlowOp}{\signal{\TY}} \\
+                \exprTyped{\DELTA}{\TY}
+            }
+            { \flowTyped{\throttleExpr{\FlowOp}{\DELTA}}{\signal{\TY}} }
+            {Thrt}
+            \label{rule:grust:typing:grfrp:flow_op:throttle}
+
+            % Time
+            \inferTYFlow
+            { }
+            { \flowTyped{\timeExpr}{\signal{\floatTY}} }
+            {Time}
+            \label{rule:grust:typing:grfrp:flow_op:time}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subsection{Bodies of \GRSync Functions and Components}
+\label{sec:grust:typing:grsync}
+
+This section describes the typing rules for the bodies of functions and components, and other
+\GRSync constructs.
+
+\subsubsection{Declarations and Equations}
+\label{sec:grust:typing:grsync:eq}
+
+An equation is well-typed if it satisfies the judgment \eqTyped{\Eq}. A set of equations is
+well-typed if each individual equation is well-typed, as stated by rule
+\nameref{rule:grust:typing:grsync:eqs}.
+%
+Declarations and definitions, following rules \nameref{rule:grust:typing:grsync:eq:decl} and
+\nameref{rule:grust:typing:grsync:eq:def}, are well-typed if the type of the expression matches the
+type of the identifier in the context.
+%
+An initialization is well-typed if the constant type matches the types of both the identifier and
+its corresponding memory, as defined by rule \nameref{rule:grust:typing:grsync:eq:init}.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Set of equations
+            \inferTYEq
+            { \left(\eqTyped{\Eq}\right)^* }
+            { \eqTyped{\setEq} }
+            {Blck}
+            \label{rule:grust:typing:grsync:eqs}
+
+            %% Declarations
+            \inferTYEq
+            {
+                \exprTyped{\Expr}{(\tyCtx[\ID])^*} \\
+                \left(\tyCtx[\ID] = \STY\right)^*
+            }
+            { \eqTyped{\declEq{\many{(\ID \: \kft{:} \: \STY)}}{\Expr}} }
+            {Decl}
+            \label{rule:grust:typing:grsync:eq:decl}
+
+            %% Definition
+            \inferTYEq
+            { \exprTyped{\Expr}{(\tyCtx[\ID])^*} }
+            { \eqTyped{\defEq{\many{\ID}}{\Expr}} }
+            {Def}
+            \label{rule:grust:typing:grsync:eq:def}
+
+            %% Initialization
+            \inferTYEq
+            {
+                \exprTyped{\CST}{\tyCtx[\lastExpr{\ID}]} \\
+                \tyCtx[\ID] = \tyCtx[\lastExpr{\ID}]
+            }
+            { \eqTyped{\initEq{\ID}{\CST}} }
+            {Init}
+            \label{rule:grust:typing:grsync:eq:init}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The typing of a \kft{match} equation followes rule \nameref{rule:grust:typing:grsync:eq:match}. It
+requires that for each branch, the pattern types match the expression types, the guard is boolean,
+and the branch equations are well-typed.
+
+\begin{center}
+    \begin{minipage}{0.99\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Match
+            \inferTYEq
+            {
+                \exprTyped{\Expr}{\STY^*} \\
+                \left(\patTyped{\Pat_k}{\STY^*}\right)^* \\\\
+                \left(\exprTyped{\Expr_k}{\boolTY}\right)^* \\
+                \left(\eqTyped{\setEq[k]}\right)^*
+            }
+            { \eqTyped{\matchX{\Expr}{\many{(\normBr{\gPat{\Pat_k}{\Expr_k}}{\setEq[k]})}}} }
+            {Mtch}
+            \label{rule:grust:typing:grsync:eq:match}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+Similarly, a \kft{when} equation, following rule \nameref{rule:grust:typing:grsync:eq:when}, is
+well-typed if its initialization constants match the signal types, and in each branch, the event
+pattern is well-typed, the guard is boolean, and the equations are well-typed. Furthermore, any
+event defined within the \kft{when} block must have an optional type.
+
+\begin{center}
+    \begin{minipage}{0.99\textwidth}
+        \centering
+        \begin{mathpar}
+            %% When
+            \inferTYEq
+            {
+                \left(\exprTyped{\CST}{\tyCtx[\lastExpr{\ID}]}\right)^* \\
+                \left(\tyCtx[\ID] = \tyCtx[\lastExpr{\ID}]\right)^* \\\\
+                \left(\epatTyped{\EPat_k}\right)^* \\
+                \left(\exprTyped{\Expr_k}{\boolTY}\right)^* \\
+                \eqTyped{\setEq[k]} \\\\
+                \defines{\kft{when} \: \block{\dots}}{\IDs} \\
+                \forall \ID_e \in \IDs \backslash \{\ID^*\}, \: \tyCtx[\ID_e] = \opt{\TY}
+            }
+            { \eqTyped{\whenEq{\initBr{\many{(\ID \: \kfm{=} \: \CST\kft{;})}}}{\many{(\normBr{\gPat{\EPat_k}{\Expr_k}}{\setEq[k]})}}} }
+            {When}
+            \label{rule:grust:typing:grsync:eq:when}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subsubsection{Expressions}
+\label{sec:grust:typing:grsync:expr}
+
+An expression \Expr has a sampling type $[\STY^*]$ if it satisfies the judgment
+\exprTyped{\Expr}{\STY^*}.
+%
+Constants, identifiers, and \kft{last} memory accesses have the types assigned in the context, as
+defined by rules \nameref{rule:grust:typing:grsync:expr:const},
+\nameref{rule:grust:typing:grsync:expr:id}, and \nameref{rule:grust:typing:grsync:expr:last}.
+%
+An event emission \kft{emit}, following rule \nameref{rule:grust:typing:grsync:expr:emit}, wraps a
+basic type \TY into an optional type \opt{\TY}.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Constant
+            \inferTYE
+            { \CST : \TY }
+            { \exprTyped{\CST}{\TY} }
+            {Cst}
+            \label{rule:grust:typing:grsync:expr:const}
+
+            %% Identifier
+            \inferTYE
+            { \tyCtx[\ID] = \STY }
+            { \exprTyped{\ID}{\STY} }
+            {ID}
+            \label{rule:grust:typing:grsync:expr:id}
+
+            %% Last
+            \inferTYE
+            { \tyCtx[\lastExpr{\ID}] = \STY }
+            { \exprTyped{\lastExpr{\ID}}{\STY} }
+            {Last}
+            \label{rule:grust:typing:grsync:expr:last}
+
+            %% Emit
+            \inferTYE
+            { \exprTyped{\Expr}{\TY} }
+            { \exprTyped{\emitExpr{\Expr}}{\opt{\TY}} }
+            {Emit}
+            \label{rule:grust:typing:grsync:expr:emit}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+A \kft{match} expression followes rule \nameref{rule:grust:typing:grsync:expr:match}. It is
+well-typed if the matched expression and patterns are type-compatible, guards are boolean, and all
+branches yield expressions of the same type.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Match
+            \inferTYE
+            {
+                \exprTyped{\Expr}{\STY_e^*} \\
+                \left(\patTyped{\Pat_k}{\STY_e^*}\right)^* \\
+                \left(\exprTyped{\Expr_k^g}{\boolTY}\right)^* \\
+                \left(\exprTyped{\Expr_k}{\STY}\right)^*
+            }
+            { \exprTyped{\matchX{\Expr}{\many{(\normBr{\gPat{\Pat_k}{\Expr_k^g}}{\Expr_k})}}}{\STY} }
+            {Mtch}
+            \label{rule:grust:typing:grsync:expr:match}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+Applications of operators, functions, or components are well-typed if the input expression types and
+output types align with the signatures of the callees, as stated by rules
+\nameref{rule:grust:typing:grsync:expr:op}, \nameref{rule:grust:typing:grsync:expr:compapp}, and
+\nameref{rule:grust:typing:grsync:expr:funapp}.
+
+\begin{center}
+    \begin{minipage}{0.99\textwidth}
+        \centering
+        \begin{mathpar}
+            %% $n$-ary operation
+            \inferTYE
+            {
+            \left(\exprTyped{\Expr}{\TY_i}\right)^* \\
+            \OP : [\TY_i^*] \rightarrow [\TY_o^*]
+            }
+            { \exprTyped{\opExpr{\many{\Expr}}}{\TY_o^*} }
+            {Op}
+            \label{rule:grust:typing:grsync:expr:op}
+
+            %% Application
+            % Component
+            \inferTYE
+            {
+                \left(\exprTyped{\Expr}{\STY_i}\right)^* \\
+                \G[\ID_c] = \compItem{\ID_c}{\many{(\ID_i \, \kft{:} \, \STY_i)}}{\many{(\ID_o \, \kft{:} \, \STY_o)}}{\many{\Eq}}
+            }
+            { \exprTyped{\appExpr{\ID_c}{\many{\Expr}}}{(\STY_o)^*} }
+            {AppC}
+            \label{rule:grust:typing:grsync:expr:compapp}
+
+            % Function
+            \inferTYE
+            {
+                \left(\exprTyped{\Expr}{\TY_i}\right)^* \\
+                \G[\ID_f] = \funItem{\ID_f}{\many{(\ID_i \: \kft{:} \: \TY_i)}}{\TY_o}{\many{\Decl}}
+            }
+            { \exprTyped{\appExpr{\ID_f}{\many{\Expr}}}{\TY_o} }
+            {AppF}
+            \label{rule:grust:typing:grsync:expr:funapp}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subsubsection{Patterns}
+\label{sec:grust:typing:grsync:pat}
+
+A pattern \Pat matches the types $[\STY^*]$ if it satisfies the judgment
+\patTyped{\Pat}{\STY^*}. Constant and identifier patterns match the types of their corresponding
+constants and identifiers, as defined by rules \nameref{rule:grust:typing:grsync:pat:const} and
+\nameref{rule:grust:typing:grsync:pat:id}.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Constant
+            \inferTYPat
+            { \tyCtx[\CST] = \TY }
+            { \patTyped{\CST}{\TY} }
+            {Cst}
+            \label{rule:grust:typing:grsync:pat:const}
+
+            %% Identifier
+            \inferTYPat
+            { \tyCtx[\ID] = \STY }
+            { \patTyped{\ID}{\STY} }
+            {ID}
+            \label{rule:grust:typing:grsync:pat:id}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+A wildcard pattern matches any type, and a tuple pattern is well-typed if each of its sub-patterns
+is well-typed against the corresponding type in the tuple, following rules
+\nameref{rule:grust:typing:grsync:pat:wild} and \nameref{rule:grust:typing:grsync:pat:tuple}.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Wildcard
+            \inferTYPat
+            { }
+            { \patTyped{\_}{\STY} }
+            {Wild}
+            \label{rule:grust:typing:grsync:pat:wild}
+
+            %% Tuple
+            \inferTYPat
+            { \left(\patTyped{\Pat}{\STY}\right)^* }
+            { \patTyped{\tuple{\Pat}}{\STY^*} }
+            {Tupl}
+            \label{rule:grust:typing:grsync:pat:tuple}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subsubsection{Event Patterns}
+\label{sec:grust:typing:grsync:epat}
+
+An event pattern \EPat is well-typed if it satisfies the judgment \epatTyped{\EPat}.
+%
+The rule \nameref{rule:grust:typing:grsync:epat:event} ensures that in an event detection, the identifier
+capturing the event value has a type matching the inner type of the optional event sample.
+%
+A rising edge pattern follows rule \nameref{rule:grust:typing:grsync:epat:edge} and requires a
+boolean expression. A tuple of event patterns is well-typed if each sub-pattern is well-typed, as
+defined by rule \nameref{rule:grust:typing:grsync:epat:tuple}.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Event detection
+            \inferTYEPat
+            {
+                \tyCtx[\ID_e] = \opt{\TY} \\
+                \tyCtx[\ID] = \TY
+            }
+            { \epatTyped{\ID \: \kfm{=} \: \opt{\ID_e}} }
+            {Dtct}
+            \label{rule:grust:typing:grsync:epat:event}
+
+            %% Rising edge
+            \inferTYEPat
+            { \exprTyped{\Expr}{\boolTY} }
+            { \epatTyped{\Expr} }
+            {Edge}
+            \label{rule:grust:typing:grsync:epat:edge}
+
+            %% Tuple
+            \inferTYEPat
+            { \left(\epatTyped{\EPat}\right)^* }
+            { \epatTyped{\tuple{\EPat}} }
+            {Tupl}
+            \label{rule:grust:typing:grsync:epat:tuple}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subsection{Summary}
+This section has defined the formal type system of \GRust, which provides the static guarantees for
+bridging the asynchronous \GRFRP kernel with the synchronous \GRSync kernel. The system enforces a
+crucial distinction between the \emph{flow types} of services (\eg \signal{\TY} and \event{\TY})
+and the \emph{sampling types} used within components (\eg \TY and \opt{\TY}). This discipline is
+fundamental to writing correct and reliable reactive programs, preserving the distinct semantics
+of signals (continuously available values) and events (discrete occurrences).
+
+A key principle of the type system is the requirement for explicit type annotations. Unlike the
+standard \Rust compiler, \GRust does not perform type inference. This design choice ensures that
+type errors are reported at the level of the \GRust model, providing clear, high-level feedback that
+is essential in a safety-critical context.
+
+As future work, a formal proof of soundness would be valuable. Such a proof would demonstrate that
+any well-typed \GRust program generates \Rust code that is guaranteed to be accepted by the \Rust
+type checker, thus formally connecting the high-level model to the generated implementation.

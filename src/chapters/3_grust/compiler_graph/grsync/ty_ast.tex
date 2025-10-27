@@ -1,0 +1,40 @@
+\documentclass{standalone}
+\usepackage{tikz}
+
+\begin{document}
+\begin{tikzpicture}[
+                level distance=0.8cm, sibling distance=3cm,
+                treenode/.style = {rectangle, rounded corners, draw, fill=blue!10, align=center}
+        ]
+        \node[treenode] {Component}
+        child [sibling distance=8.9cm] { node[treenode] {Signature}
+                        child [sibling distance=1.8cm] { node[treenode, fill=magenta!10] {Id: 0} }
+                        child [sibling distance=1.8cm] { node[treenode, fill=yellow!10] {Inputs}
+                                        child { node[treenode, fill=magenta!10] {Id: 1} }
+                                }
+                        child [sibling distance=1.8cm] { node[treenode, fill=yellow!10] {Outputs}
+                                        child { node[treenode, fill=magenta!10] {Id: 2} }
+                                }
+                }
+        child [sibling distance=8.9cm] { node[treenode] {Body}
+                        child { node[treenode] {When}
+                                        child [sibling distance=4cm] { node[treenode] {Init}
+                                                        child [sibling distance=1.8cm] { node[treenode, fill=magenta!10] {Id: 2} }
+                                                        child [sibling distance=1.8cm] { node[treenode] {Literal:\\\texttt{false}} }
+                                                }
+                                        child [sibling distance=4cm] { node[treenode] {Branch}
+                                                        child [sibling distance=3cm] { node[treenode] {Event} child { node[treenode, fill=magenta!10] {Id: 1} } }
+                                                        child [sibling distance=3cm] { node[treenode, fill=magenta!10] {Equation}
+                                                                        child [sibling distance=2cm] { node[treenode, fill=magenta!10] {Id: 2} }
+                                                                        child [sibling distance=2cm] { node[treenode] {Expression}
+                                                                                        child { node[treenode] {Unop}
+                                                                                                        child { node[treenode] {Op: \texttt{!}} }
+                                                                                                        child { node[treenode, fill=magenta!10] {Last: 2} }
+                                                                                                }
+                                                                                }
+                                                                }
+                                                }
+                                }
+                };
+\end{tikzpicture}
+\end{document}
