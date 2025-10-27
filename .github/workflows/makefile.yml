@@ -1,4 +1,4 @@
-name: LaTeX Compilation
+name: LaTeX Compilation and Deployment
 
 # This workflow runs on pushes to the main branch, on any tag push,
 # and on pull requests targeting the main branch.
@@ -8,6 +8,12 @@ on:
     tags: [ '*' ]
   pull_request:
     branches: [ "main" ]
+
+# Add permissions for the workflow to write to GitHub Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
   build_latex:
@@ -33,9 +39,29 @@ jobs:
       - name: Clean up
         run: make clean
 
-      # Step 4: Upload the artifacts from the 'public' directory.
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+      # Use a special action to upload the artifact for Pages.
+      - name: Upload artifact for Pages
+        uses: actions/upload-pages-artifact@v3
         with:
-          name: compiled-document
           path: public/
+
+  # A separate job to handle the deployment.
+  deploy_pages:
+    # This job needs the 'build_latex' job to be successful first.
+    needs: build_latex
+    
+    # Grant permissions to the deployment job.
+    permissions:
+      pages: write
+      id-token: write
+      
+    # Define the deployment environment.
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+      
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
