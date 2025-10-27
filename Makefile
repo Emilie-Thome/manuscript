@@ -10,6 +10,7 @@ $(PUBLIC)./main.pdf: $(OUTDIR)./main.pdf
 	echo "copy PDF in $(PUBLIC)..."
 	mkdir -p $(PUBLIC)
 	cp $(OUTDIR)./main.pdf $(PUBLIC)./main.pdf
+	cp codes/index.html $(PUBLIC)./index.html
 	echo "done!"
 
 $(OUTDIR)./main.pdf: ./src/main.tex
