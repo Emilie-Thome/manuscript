@@ -1,0 +1,68 @@
+name: LaTeX Compilation and Deployment
+
+# This workflow runs on pushes to the main branch, on any tag push,
+# and on pull requests targeting the main branch.
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ '*' ]
+  pull_request:
+    branches: [ "main" ]
+
+# Add permissions for the workflow to write to GitHub Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build_latex:
+    # Run the job on a standard GitHub runner
+    runs-on: ubuntu-latest
+    
+    # Specify a container to run the job's steps in.
+    # This is the direct equivalent of GitLab's 'image:' keyword.
+    container:
+      image: texlive/texlive:latest
+
+    steps:
+      # Step 1: Check out your repository's code into the container.
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Step 2: Run the 'make' command.
+      # This will now execute inside the texlive container, where 'latexmk' exists.
+      - name: Compile LaTeX
+        run: make
+
+      # Step 3: Run the 'make clean' command.
+      - name: Clean up
+        run: make clean
+
+      # Use a special action to upload the artifact for Pages.
+      - name: Upload artifact for Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public/
+
+  # A separate job to handle the deployment.
+  deploy_pages:
+    # This job needs the 'build_latex' job to be successful first.
+    needs: build_latex
+    if: github.ref == 'refs/heads/main' # Only run on pushes to main
+    
+    # Grant permissions to the deployment job.
+    permissions:
+      pages: write
+      id-token: write
+      
+    # Define the deployment environment.
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+      
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
