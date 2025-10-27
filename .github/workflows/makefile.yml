@@ -1,0 +1,21 @@
+name: Makefile CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: texlive/texlive:latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build
+      run: make
+    - name: Clean
+      run: make clean
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: ./public
