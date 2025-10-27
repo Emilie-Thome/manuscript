@@ -18,26 +18,21 @@ jobs:
         uses: actions/checkout@v4
 
       # Step 2: Set up the TeX Live environment.
-      # This action is equivalent to the 'image: texlive/texlive:latest' in your GitLab CI.
-      # You can change the 'scheme' to 'basic', 'medium', or 'full' depending on the LaTeX packages you need.
       - name: Set up TeX Live
         uses: xu-cheng/texlive-action@v2
         with:
           scheme: full
+          packages: latexmk
 
       # Step 3: Run the 'make' command to compile your document.
-      # This corresponds to the 'make' command in your 'script' section.
       - name: Compile LaTeX
         run: make
 
       # Step 4: Run the 'make clean' command.
-      # This corresponds to the 'make clean' command in your 'script' section.
       - name: Clean up
         run: make clean
 
       # Step 5: Upload the artifacts.
-      # This is equivalent to the 'artifacts' section in your GitLab CI.
-      # It will take the contents of the 'public' directory and save them as a workflow artifact.
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
