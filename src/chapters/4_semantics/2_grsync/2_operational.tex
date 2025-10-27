@@ -1,0 +1,906 @@
+\subsection{Operational Semantics of \GRSync}
+\label{sec:semantics:grsync:opsem}
+
+This section describes the operational semantics of the elements of \GRSync.
+%
+A state machine representation is common practice in \Lustre-like languages
+\cite{DBLP:journals/tecs/ColacoMPP23}.
+%
+Similar to state machines, components compute output values based on current and past input values,
+with states representing values needed for future computations: this includes values of the
+identifiers $x$ referenced with \last{x} and states of invoked components.
+%
+The state has a bounded finite size, statically determined by the number of identifiers $x$ using
+\last{x} and the number of called components.
+
+\begin{table}[!ht]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}\hline
+        $v, \, \some{v}, \, \none \in \Val$                             & A value of any type; \ttf{some} and \none represent optional values.                                                                                                                             \\\hline
+        $v_\bot \in \ValBot ::= v \, \vert \, \bot$                     & A value that may be present ($v$) or absent ($\bot$).                                                                                                                                            \\\hline
+        $[v^+]$                                                         & An implicitly finite list of values $v^+$.                                                                                                                                                       \\\hline
+        $sty ::= ty \, \vert \, \mayB{ty}$                              & A type, where \kwf{?} indicates an event type.                                                                                                                                                   \\\hline
+        $\tyCtx[x] = sty$                                               & A typing context \tyCtx mapping flow identifiers to their types.                                                                                                                                 \\\hline
+        $\G[f]$                                                         & A program context \G mapping component and service names to their definitions.                                                                                                                   \\\hline
+        $s$                                                             & The internal state of a component, an equation, or an expression.                                                                                                                                \\\hline
+        \mkcell{$\rho[x] \, \vert \, \rho[\last{x}] = v_\bot$                                                                                                                                                                                                              \\
+        $\rho ::= [(v_\bot/x)^+] \, \vert \, \rho_1 \ctxconcat \rho_2$} & A evaluation context $\rho$ mapping identifiers to their computed value.                                                                                                                         \\\hline
+        \stateTy{\epsilon}                                              & The type of the compatible states of the \GRSync construct $\epsilon$.                                                                                                                           \\\hline
+        $\initsync{\epsilon} \in \stateTy{\epsilon}$                    & The initial state of the \GRSync construct $\epsilon$.                                                                                                                                           \\\hline
+        \compOpsem{s}{v^+_i}{f}{s'}{v^+_o}                              & Transition of the component $f$ with inputs $v_i^+$, updating its state and producing outputs $v_o^+$.                                                                                           \\\hline
+        \eqOpsem{\rho}{s}{eq}{s'}{\rho'}                                & Transition of the equation $eq$ with a context $\rho$, updating its state and producing a new context $\rho'$.                                                                                   \\\hline
+        \exprOpsem{\rho}{s}{e}{s'}{v^+_\bot}                            & Transition of the expression $e$ with a context $\rho$, updating its state and producing outputs $v^+_\bot$.                                                                                     \\\hline
+        \patOpsem{\rho}{\guarded{pat^+ = v^+}{e_g}}{b_\bot}{\rho'}      & Transition from the context $\rho$ of the pattern $pat^+$ matching the values $v^+$, guarded by an optional expression $e_g$, and producing a bottom boolean $b_\bot$ and a new context $\rho'$. \\\hline
+        \epatOpsem{\rho}{s}{\guarded{epat^+}{e_g}}{s'}{b_\bot}{\rho'}   & Transition from the context $\rho$ of the event pattern $epat^+$ guarded by an optional expression $e_g$, updating its state, and producing a bottom boolean $b_\bot$ and a new context $\rho'$. \\\hline
+    \end{tabularx}
+    \caption[Notations for the operational semantics of \GRSync.]%
+    {Notations for the operational semantics of \GRSync.}
+    \label{tab:semantics:grsync:opsem:notations}
+\end{table}
+
+We first introduce the notations used throughout this semantics, summarized in
+\Cref{tab:semantics:grsync:opsem:notations}.
+%
+The set of all possible values is denoted by \Val, a value is denoted by $v$, and may be wrapped as
+an optional using \some{v} or \none.
+%
+A bottom value $v_\bot$ can be either a defined value $v$ or the undefined marker $\bot$, used to
+represent the presence or absence of a value. The set of all bottom values is then the addition of
+\Val with the singleton $\{\bot\}$, denoted by \ValBot.
+%
+Across the entire semantics, we use the notation $X^+$ to denote a finite sequence of $X$, this
+sequence can be empty.
+%
+Lists of elements $v^+$ are denoted by $[v^+]$.
+%
+The sampling types $sty$ of flows (\ie the type of the value visible in a flow at any given time)
+are recorded in a typing context \tyCtx. A signal type is denoted by $ty$, while an event type is
+denoted by \mayB{ty}, indicating that an event may have no value. The sampling type of a flow
+identified by $x$ is accessed as $\tyCtx[x] = sty$. These types serve as syntactic labels, but their
+correct usage is governed by a type system, detailed in \Cref{sec:grust:typing}. In the semantics,
+they are used to distinguish the behavior of signals from that of events.
+%
+A program is represented as a mapping \G from component and service names to their definitions.
+The definition of a component $f$ is accessed by $\G[F]$, and the one of a service $F$ by $\G[F]$.
+%
+States for components, equations, expressions are written $s$.
+%
+The evaluation context $\rho$ stores the computation state of the identifiers. For an identifier
+$x$, $\rho[x] = \bot$ indicates that $x$ is not determined yet, and any operation involving this
+bottom value also yields $\bot$. Otherwise, $\rho[x] = v$ gives the computed value for $x$.
+%
+The concatenation of two evaluation contexts $\rho_1$ and $\rho_2$, is defined as their disjoint
+union, $\rho_1 \ctxconcat \rho_2$. An evaluation context mapping bottom values $v_\bot^+$ to
+distinct identifiers $x^+$ is denoted by $[(v_\bot/x)^+]$.
+%
+The execution of \GRSync constructs is modeled as a state machine.
+For all \GRSync construct $\epsilon$, the set of all states corresponding to $\epsilon$ is denoted
+by \stateTy{\epsilon}, and $\initsync{\epsilon} \in \stateTy{\epsilon}$ denotes its initial state.
+The following paragraphs explain in details the computation steps of the different constructs.
+
+\paragraph{Components}
+
+The transition function of a component $f$, defined in a program \G with a typing context \tyCtx,
+is denoted by the judgement
+\begin{equation*}
+    \compOpsem{s}{v_i^+}{f}{s'}{v_o^+}.
+\end{equation*}
+%
+From a state $s$ and with input values $v^+_i$, it produces the next state $s'$ with output values
+$v^+_o$.
+
+The initial state of a component $f$ defined in a program \G is denoted by $\initsync{f} \in \stateTy{f}$ and
+defined in \Cref{eq:semantics:grsync:opsem:init:comp}. It corresponds to the initialization of the
+state of its internal equations and memories.
+\begin{align}
+    \stateTy{f}  & = \Pi_{x_m} \Val \times \stateTy{eq^+} \label{eq:semantics:grsync:opsem:stateTy:comp} \\
+    \initsync{f} & = (c^+, \initsync{eq^+}) \label{eq:semantics:grsync:opsem:init:comp}                  \\
+                 & \text{with} \, G[f] = \component{f}{x_i^+}{x_o^+}{eq^+}{x_m^+ = c^+} \nonumber
+\end{align}
+
+As defined by rule \nameref{rule:semantics:grsync:opsem:step:comp}, the transition function of a
+component performs the transition of its internal equations ($eq^+$) in a context initialized with
+the input values ($(v_i/x_i)^+$) and the memory values ($(v_m/\last{x_m})^+$) retrieved from its
+internal state ($(v_m^+, s)$).
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Component
+            \inferOPSEM
+            {
+            G[f] = \component{f}{x_i^+}{x_o^+}{eq^+}{x_m^+ = c^+} \\\\
+            \eqOpsem{[(v_i/x_i)^+, (v_m/\last{x_m})^+]}{s}{eq^+}{s'}{\rho} \\
+            \left(v_m' = \rho[x_m]\right)^+ \\
+            \left(v_o = \rho[x_o]\right)^+
+            }
+            { \compOpsem{(v_m^+, s)}{v_i^+}{f}{(v_m^{\prime+}, s')}{v_o^+} }
+            {Comp}
+            \label{rule:semantics:grsync:opsem:step:comp}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+For instance, in the \aeb example~\Cref{fig:semantics:example:aeb}, the initial state and transition function
+of the component \idf{braking\_strat} are $\initsync{\idf{braking\_strat}} = \No$ and
+\opsem{S, I}{\idf{braking\_strat}}{S', O}.
+Starting from the state $S = \No$ and inputs $I = \{\idf{s} = 32., \idf{p} = \some{20.},
+    \idf{t\_p}=\none\}$
+it produces a new state $S' = \Soft$ and outputs $O = \{\idf{b}=\Soft\}$.
+
+\paragraph{Equations}
+
+While equations don't have direct input values, they rely on the evaluation context $\rho$ to access
+the values of the already evaluated identifiers.
+%
+Their initial state is denoted by  $\initsync{eq} \in \stateTy{eq}$, and their transition in an
+evaluation context $\rho$ by
+\begin{equation*}
+    \eqOpsem{\rho}{s}{eq}{s'}{\rho'}.
+\end{equation*}
+Starting from state a $s$, it produces a new state $s'$ and a new context $\rho'$, which includes
+the identifiers defined by the equations.
+
+\subparagraph{Blocks of equations}
+
+The equations in a block ($eq^+$) are simultaneous, all must be computed in the same transition.
+But an equation may depend on identifiers defined by other equations, so a causality check
+(formalized in \Cref{def:semantics:grsync:causality:causal:prop}) verifies there exists an order in
+which equations can be computed without any deadlock caused by circular dependencies
+(this scheduling property is stated in \Cref{prop:semantics:grsync:causality:scheduling}).
+
+The initial state of a block of equations $eq^+$ in a program \G is denoted by \initsync{eq^+}
+and defined in \Cref{eq:semantics:grsync:opsem:init:eqs}. It corresponds to the initialization of
+all individual equations.
+\begin{align}
+    \stateTy{eq^+}  & = \Pi_{eq} \stateTy{eq} \label{eq:semantics:grsync:opsem:stateTy:eqs} \\
+    \initsync{eq^+} & = (\initsync{eq})^+ \label{eq:semantics:grsync:opsem:init:eqs}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Block of equations
+            \inferOPSEMEq
+            { \fixsem{n+1}{\rho}{(s_1, \dots, s_n)}{eq_1, \dots, eq_n}{(s'_1, \dots, s'_n)}{\rho'} }
+            { \eqOpsem{\rho}{(s_1, \dots, s_n)}{eq_1, \dots, eq_n}{(s'_1, \dots, s'_n)}{\rho'} }
+            {Blck}
+            \label{rule:semantics:grsync:opsem:step:eqs}
+
+            %%%%% Fix-point
+            \inferOPSEMEq
+            { }
+            { \fixsem{0}{\rho}{s^+}{eq^+}{s^+}{\botrho{\defs{eq^+}}} }
+            {Fix{\scriptsize 0}}
+            \label{rule:semantics:grsync:opsem:step:fix0}
+
+            \inferOPSEMEq
+            {
+            \fixsem{k}{\rho}{s_i^+}{eq_i^+}{s_i^{\prime\prime +}}{\rho'} \\\\
+            \forall i, \, \eqOpsem{\rho \ctxconcat \rho'}{s_i}{eq_i}{s'_i}{\rho'_i}
+            }
+            { \fixsem{k+1}{\rho}{s_i^+}{eq_i^+}{s_i^{\prime +}}{\bigCtxconcat_i \rho'_i} }
+            {Fix{\scriptsize k+1}}
+            \label{rule:semantics:grsync:opsem:step:fixkp1}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The transition of $eq^+$, described by rule \nameref{rule:semantics:grsync:opsem:step:eqs},
+uses the fix-point transition, defined by the rules \nameref{rule:semantics:grsync:opsem:step:fix0}
+and \nameref{rule:semantics:grsync:opsem:step:fixkp1}. The latter loops on the transition of all
+individual equations $eq$, computing iteratively the undetermined identifiers using the values of
+the already determined ones.
+%
+During a transition, if the value of an identifier is not determined yet, then attempting to
+retrieve it from the context $\rho$ returns $\bot$, and \emph{any expression involving this bottom
+    value also yields $\bot$} (as shown in the paragraph on expressions).
+%
+The fix-point transition starts with the empty context \botrho{\defs{eq^+}} that associates
+$\bot$ to all the identifiers defined by the equations
+(\defs{eq^+} is defined in \Cref{sec:semantics:grsync:causality:defs}).
+
+The maximum number of iterations is equal to the number of simultaneous equations. Intuitively, each
+iteration resolves at least one previously unresolved equation; if no new equations are resolved
+during an iteration, the context $\rho$ remains unchanged, indicating that a fix-point has been
+reached. This point will be formally proved in \Cref{thm:semantics:grsync:theorems:productivity}.
+
+\begin{remark}
+    \label{rmk:semantics:grsync:opsem:step:eqs}
+    We adopt a least fix-point semantics instead of relying on a static scheduling of the
+    equations based on their dependency graph, as performed by the compiler.
+    This choice reflects our goal to describe the operational semantics of the program itself,
+    rather than an intermediate compilation stage. Moreover, non-static scheduling enables
+    concurrent evaluation of independent equations, opening the door to parallel execution
+    strategies.
+\end{remark}
+
+\subparagraph{Declarations}
+
+The transition of a declaration $x^+ = e$ is defined by the rule
+\nameref{rule:semantics:grsync:opsem:step:eq:decl} that handles the transition of the expression $e$
+and defines the context $[(v_\bot / x)^+]$, where the identifiers $x^+$ are mapped to the
+bottom values~$v_\bot^+$ obtained from the transition of the expression $e$.
+
+The initial state of declarations corresponds to the initial state of their expressions, as stated
+by \Cref{eq:semantics:grsync:opsem:init:eq:decl}.
+
+\begin{align}
+    \stateTy{x^+ = e} & = \stateTy{e} & \initsync{x^+ = e} & = \initsync{e} \label{eq:semantics:grsync:opsem:init:eq:decl}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.45\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Declarations
+            \inferOPSEMEq
+            { \exprOpsem{\rho}{s}{e}{s'}{v_\bot^+} }
+            { \eqOpsem{\rho}{s}{x^+ = e}{s'}{[(v_\bot / x)^+]} }
+            {Decl}
+            \label{rule:semantics:grsync:opsem:step:eq:decl}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subparagraph{Match}
+
+The transition of \kwf{match} equations is described by the rules
+\nameref{rule:semantics:grsync:opsem:step:eq:match:value} and
+\nameref{rule:semantics:grsync:opsem:step:eq:match:bot}.
+
+It performs the transition of the matched expression and, if it returns values, following
+\nameref{rule:semantics:grsync:opsem:step:eq:match:value}, uses those values to test the guarded
+patterns of all branches. Each of those patterns returns a boolean telling whether the guarded
+pattern matches or not the value, and a context that contains identifiers locally introduced by the
+pattern. Then it evaluates the equations of the first pattern $pat_k^+$ to match the values of $e$
+with a guard $e_k$ that holds. Exhaustive patterns ensure that this transition is always possible.
+
+If the matched expression returns one bottom value, following the rule
+\nameref{rule:semantics:grsync:opsem:step:eq:match:bot}, then the pattern matching cannot continue
+further, returning the context \botrho{\{x^+\}} that maps every defined identifiers to $\bot$.
+
+The initial state of \kwf{match} equations corresponds to the initial state of the matched
+expression $e$ and the initial states of branches equations, as stated by
+\Cref{eq:semantics:grsync:opsem:init:eq:match}. The guards are memory free, no states are required
+for them.
+
+\begin{align}
+    \stateTy{\mathfoot{\matchTab{e}{x^+}{(\branch{pat^+}{e_g}{eq^+})^+}}}  & = \stateTy{e} \times \Pi_{eq^+} \stateTy{eq^+}
+    \label{eq:semantics:grsync:opsem:stateTy:eq:match}                                                                      \\
+    \initsync{\mathfoot{\matchTab{e}{x^+}{(\branch{pat^+}{e_g}{eq^+})^+}}} & = (\initsync{e}, (\initsync{eq^+})^+)
+    \label{eq:semantics:grsync:opsem:init:eq:match}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.99\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Match equation
+            \inferOPSEMEq
+            {
+            \exprOpsem{\rho}{s_e}{e}{s'_e}{v_e^+} \\
+            \forall i, \, \patOpsem{\rho}{\guarded{pat_i^+ = v_e^+}{e_i}}{b_i}{\rho_i} \\\\
+            \exists k, \, b_k = \true \\
+            \forall i < k, \, b_i = \false \\\\
+            \eqOpsem{\rho \ctxconcat \rho_k}{s_k}{eq_k^+}{s'_k}{\rho'} \\
+            \forall i \neq k, \, s'_i = s_i
+            }
+            { \eqOpsem{\rho}{(s_e, s_i^+)}{\match{e}{x^+}{(\branch{pat_i^+}{e_i}{eq_i^+})^+}
+            }{(s'_e, s_i^{\prime+})}{\rho'} }
+            {Mtch{\scriptsize val}}
+            \label{rule:semantics:grsync:opsem:step:eq:match:value}
+
+            \inferOPSEMEq
+            {
+                \exprOpsem{\rho}{s_e}{e}{s'_e}{v_{\bot e}^+} \\
+                \exists v_\bot \in \{v_{\bot e}^+\}, \: v_\bot = \bot
+            }
+            { \eqOpsem{\rho}{(s_e, s_i^+)}{\match{e}{x^+}{(\branch{pat_i^+}{e_i}{eq_i^+})^+}
+                }{(s_e, s_i^+)}{\botrho{\{x^+\}}} }
+            {Mtch{\scriptsize bot}}
+            \label{rule:semantics:grsync:opsem:step:eq:match:bot}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subparagraph{When}
+
+The semantics of \kwf{when} equations is similar to \kwf{match} equations. It performs the
+transition of the guarded event patterns of each branches, which returns a boolean telling whether
+the guarded event pattern is triggered or not, and a context that contains identifiers locally
+introduced by the event pattern.
+
+If all pattern returns a boolean (not bottom) and if there is a branch whose event pattern returns
+\true, the transition follows the rule \nameref{rule:semantics:grsync:opsem:step:eq:when:branch}. It
+performs the updates defined by the equations $eq_k^+$ of the first event pattern $epat_k^+$ that is
+triggered with a guard $e_k$ that holds.
+%
+Identifiers not in $eq^+_k$ are added to the context evaluation context of $eq_k^+$ with default
+values in $\rho_k'$: previous value for signals (identifiers that are initialized in
+\init{x_m^+ = c^+}), \none for events.
+
+If all pattern returns a boolean but no event pattern is triggered, the rule
+\nameref{rule:semantics:grsync:opsem:step:eq:when:default} applies and all identifiers are set to
+default.
+
+If there is a pattern that returns $\bot$, following
+\nameref{rule:semantics:grsync:opsem:step:eq:when:bot} the \kwf{when} equation cannot continue
+further, returning the context \botrho{\{x^+\}} that maps every defined identifiers to $\bot$.
+
+Initial states for \kwf{when} equations contain the initial values of the signals it defines, the
+initial states of event patterns and branches equations, as stated by
+\Cref{eq:semantics:grsync:opsem:init:eq:when}. The guards are also memory free.
+
+\begin{align}
+    \stateTy{\mathfoot{\whenTab{x^+}{x_m^+ = c}{(\branch{epat^+}{e_g}{eq^+})^+}}}  & =
+    \begin{array}{l}
+        \Pi_{x_m} \Val \times \Pi_{epat^+} \stateTy{epat^+} \\
+        \times \Pi_{eq^+} \stateTy{eq^+}
+    \end{array}
+    \label{eq:semantics:grsync:opsem:stateTy:eq:when}                                  \\
+    \initsync{\mathfoot{\whenTab{x^+}{x_m^+ = c}{(\branch{epat^+}{e_g}{eq^+})^+}}} & =
+    (c^+, (\initsync{epat^+})^+ (\initsync{eq^+})^+)
+    \label{eq:semantics:grsync:opsem:init:eq:when}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.99\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% When equation
+            \inferOPSEMEq
+            {
+            \forall i, \, \epatOpsem{\rho}{s^p_i}{\guarded{epat_i^+}{e_i}}{s^{p\prime}_i}{b_i}{\rho_i} \\
+            \exists k, \, b_k = \true \\
+            \forall i < k, \, b_i = \false \\\\
+            %
+            E_k = (\{x^+\} \backslash \{x_m^+\}) \backslash \defs{eq^+_k} \\
+            S_k = \{x_m^+\} \backslash \defs{eq^+_k} \\
+            %
+            \rho_m = [(v_m / \last{x_m})^+] \\
+            \rho_k' = [\none / x_e \in E_k] \ctxconcat [\rho_m[\last{x_s}] / x_s \in S_k] \\
+            %
+            \eqOpsem{\rho \ctxconcat \rho_k \ctxconcat \rho_m \ctxconcat \rho_k'}{s_k}{eq_k^+}{s'_k}{\rho'} \\
+            %
+            \left(v_m' = (\rho'_k \ctxconcat \rho')[x_m]\right)^+ \\
+            \forall i \neq k, \, s'_i = s_i
+            }
+            { \eqOpsem{\rho}{(v_m^+, s_i^{p+}, s_i^+)}{
+            \whenTab{x^+}{x_m^+ = c^+}{(\branch{epat_i^+}{e_i}{eq_i^+})^+}
+            }{(v_m^{\prime+}, s_i^{p\prime+}, s_i^{\prime+})}{\rho_m \ctxconcat \rho'_k \ctxconcat \rho'} }
+            {When{\scriptsize trig}}
+            \label{rule:semantics:grsync:opsem:step:eq:when:branch}
+
+            \inferOPSEMEq
+            {
+            \forall i, \, \epatOpsem{\rho}{s^p_i}{\guarded{epat_i^+}{e_i}}{s^{p\prime}_i}{\false}{\rho_i} \\\\
+            \rho_m = [(v_m / \last{x_m})^+] \\
+            \rho' = \rho_m \ctxconcat [\none / x_e \in \{x^+\} \backslash \{x_m^+\}] \ctxconcat [(v_m / x_m)^+]
+            }
+            { \eqOpsem{\rho}{(v_m^+, s_i^{p+}, s_i^+)}{
+            \whenTab{x^+}{x_m^+ = c^+}{(\branch{epat_i^+}{e_i}{eq_i^+})^+}
+            }{(v_m^+, s_i^{p\prime+}, s_i^+)}{\rho'} }
+            {When{\scriptsize none}}
+            \label{rule:semantics:grsync:opsem:step:eq:when:default}
+
+            \inferOPSEMEq
+            { \exists i, \, \epatOpsem{\rho}{s^p_i}{\guarded{epat_i^+}{e_i}}{s^{p\prime}_i}{\bot}{\rho_i} }
+            { \eqOpsem{\rho}{(v_m^+, s_i^{p+}, s_i^+)}{
+            \whenTab{x^+}{x_m^+ = c^+}{(\branch{epat_i^+}{e_i}{eq_i^+})^+}
+            }{(v_m^+, s_i^{p+}, s_i^+)}{\botrho{\{x^+\}}} }
+            {When{\scriptsize bot}}
+            \label{rule:semantics:grsync:opsem:step:eq:when:bot}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+For instance, in the \aeb example~\Cref{fig:semantics:example:aeb}, the initial state of the \kwf{when}
+equation at \Crefrange{ex:line:whenStart}{ex:line:whenEnd} is explicitly defined in
+\Cref{eq:semantics:grsync:opsem:init:eq:when:ex}. As a matter of fact, the state of the component
+\idf{compute\_braking} is empty, so we can simplify the state of the \kwf{when} equation to the
+memory of \idf{b} that is initialized to \No.
+\begin{equation}
+    \initsync{\mathtiny{\whenTab{\idf{b}}{\idf{b} = \No}{
+                \begin{array}{l}
+                    \detect{\idf{x}}{\idf{p}} \Rightarrow { \idf{b} = \idf{compute\_braking}(\idf{x}, \idf{s}); } \\
+                    \detect{\idf{x}}{\idf{t\_p}} \Rightarrow { \idf{b} = \No;  }                                  \\
+                \end{array}
+            }}}
+    \begin{array}{l}
+        = (\No, (), (\initsync{\idf{compute\_braking}}, ())) \\
+        = (\No, (), ((), ()))                                \\
+        \sim \No
+    \end{array}
+    \label{eq:semantics:grsync:opsem:init:eq:when:ex}
+\end{equation}
+
+Based on the chronogram from \Cref{fig:semantics:example:aeb:chronogram}, we can model the execution
+of the \kwf{when} equation into the sequence of transitions from
+\Crefrange{eq:semantics:grsync:opsem:step:eq:when:ex:1}{eq:semantics:grsync:opsem:step:eq:when:ex:5}.
+In \Cref{%
+    eq:semantics:grsync:opsem:step:eq:when:ex:1,%
+    eq:semantics:grsync:opsem:step:eq:when:ex:3,%
+    eq:semantics:grsync:opsem:step:eq:when:ex:4%
+}, all the events are absent and set to \none in the input evaluation context, so the rule
+\nameref{rule:semantics:grsync:opsem:step:eq:when:default} is applied and the value of \idf{b}
+remains the same. The event \idf{p} is present in
+\Cref{eq:semantics:grsync:opsem:step:eq:when:ex:2}, so the rule
+\nameref{rule:semantics:grsync:opsem:step:eq:when:branch} is applied with the first branch being
+triggered, such that the value of \idf{b} and the state of the \kwf{when} equation are updated to
+\Soft. The timeout event \idf{t\_p} is present in
+\Cref{eq:semantics:grsync:opsem:step:eq:when:ex:5}, so the rule
+\nameref{rule:semantics:grsync:opsem:step:eq:when:branch} is applied with the second branch being
+triggered, such that the value of \idf{b} and the state of the \kwf{when} equation are reset to \No.
+\begin{align}
+    \eqOpsem
+    {[32. / \idf{s}, \none / \idf{p}, \none / \idf{t\_p}]}
+    {\No   & }
+    {\kwf{when} \{ \dots \}}
+    {\No}
+    {[\No / \idf{b}, \No / \last{\idf{b}}]}
+    \label{eq:semantics:grsync:opsem:step:eq:when:ex:1} \\
+    %
+    \eqOpsem
+    {[32. / \idf{s}, \some{20.} / \idf{p}, \none / \idf{t\_p}]}
+    {\No   & }
+    {\kwf{when} \{ \dots \}}
+    {\Soft}
+    {[\Soft / \idf{b}, \No / \last{\idf{b}}]}
+    \label{eq:semantics:grsync:opsem:step:eq:when:ex:2} \\
+    %
+    \eqOpsem
+    {[30. / \idf{s}, \none / \idf{p}, \none / \idf{t\_p}]}
+    {\Soft & }
+    {\kwf{when} \{ \dots \}}
+    {\Soft}
+    {[\Soft / \idf{b}, \Soft / \last{\idf{b}}]}
+    \label{eq:semantics:grsync:opsem:step:eq:when:ex:3} \\
+    %
+    \eqOpsem
+    {[25. / \idf{s}, \none / \idf{p}, \none / \idf{t\_p}]}
+    {\Soft & }
+    {\kwf{when} \{ \dots \}}
+    {\Soft}
+    {[\Soft / \idf{b}, \Soft / \last{\idf{b}}]}
+    \label{eq:semantics:grsync:opsem:step:eq:when:ex:4} \\
+    %
+    \eqOpsem
+    {[25. / \idf{s}, \none / \idf{p}, \some{()} / \idf{t\_p}]}
+    {\Soft & }
+    {\kwf{when} \{ \dots \}}
+    {\No}
+    {[\No / \idf{b}, \Soft / \last{\idf{b}}]}
+    \label{eq:semantics:grsync:opsem:step:eq:when:ex:5}
+\end{align}
+
+\paragraph{Expressions}
+
+Similarly to equations, \GRSync expressions don't have input values but an input evaluation context
+$\rho$ that contains the computed identifiers.
+%
+Their initial state is denoted by  $\initsync{e} \in \stateTy{e}$, and their transition with an evaluation context
+$\rho$ by
+\begin{equation*}
+    \exprOpsem{\rho}{s}{e}{s'}{v_\bot^+}.
+\end{equation*}
+Starting from state a $s$, it produces a new state $s'$ and output bottom values $v_\bot^+$.
+
+The rules for constant \nameref{rule:semantics:grsync:opsem:step:e:const} and identifier
+\nameref{rule:semantics:grsync:opsem:step:e:ident} expressions use an empty state
+(\Cref{eq:semantics:grsync:opsem:init:e:ident,eq:semantics:grsync:opsem:init:e:const}).
+They produce respectively the constant value and the value stored in the context $\rho$.
+
+\begin{multicols}{2}[]
+    \begin{align}
+        \stateTy{c} & = \{()\} & \initsync{c} & = () \label{eq:semantics:grsync:opsem:init:e:const}
+    \end{align}
+
+    \newcolumn
+
+    \begin{minipage}{0.45\textwidth}
+        \begin{mathpar}
+            \inferOPSEME
+            { }
+            { \exprOpsem{\rho}{()}{c}{()}{c} }
+            {Cst}
+            \label{rule:semantics:grsync:opsem:step:e:const}
+        \end{mathpar}
+    \end{minipage}
+\end{multicols}
+\begin{multicols}{2}[]
+    \begin{align}
+        \stateTy{x} & = \{()\} & \initsync{x} & = () \label{eq:semantics:grsync:opsem:init:e:ident}
+    \end{align}
+
+    \newcolumn
+
+    \begin{minipage}{0.45\textwidth}
+        \begin{mathpar}
+            \inferOPSEME
+            { }
+            { \exprOpsem{\rho}{()}{x}{()}{\rho[x]} }
+            {ID}
+            \label{rule:semantics:grsync:opsem:step:e:ident}
+        \end{mathpar}
+    \end{minipage}
+\end{multicols}
+
+The state of a memory expression (\last{x}) is also empty
+(\Cref{eq:semantics:grsync:opsem:init:e:last}), because the last value of $x$ is stored in the
+context $\rho$, managed by initializations (\init{x_m^+ = c^+}).
+The transition of (\last{x}) only retrieves this memory, as depicted by rule
+\nameref{rule:semantics:grsync:opsem:step:e:last}.
+
+\begin{multicols}{2}[]
+    \begin{align}
+        \stateTy{\last{x}} & = \{()\} & \initsync{\last{x}} & = () \label{eq:semantics:grsync:opsem:init:e:last}
+    \end{align}
+
+    \newcolumn
+
+    \begin{minipage}{0.45\textwidth}
+        \begin{mathpar}
+            \inferOPSEME
+            { }
+            { \exprOpsem{\rho}{()}{\last{x}}{()}{\rho[\last{x}]} }
+            {Last}
+            \label{rule:semantics:grsync:opsem:step:e:last}
+        \end{mathpar}
+    \end{minipage}
+\end{multicols}
+
+The initial state of an event emission (\emit{e}) only contains the initial state of the expression
+emitted ($e$), as stated by \Cref{eq:semantics:grsync:opsem:init:e:emit}. Its transition, as defined
+by rule \nameref{rule:semantics:grsync:opsem:step:e:emit:value}, wraps the value returned by the
+transition of $e$ in a \ttf{some} option to indicate the event is present. If the transition of $e$
+returns a bottom value, then \emit{e} follows rule
+\nameref{rule:semantics:grsync:opsem:step:e:emit:bot} and returns $\bot$ as well, indicating that
+the computation cannot yet be performed.
+
+\begin{align}
+    \stateTy{\emit{e}} & = \stateTy{e} & \initsync{\emit{e}} & = \initsync{e} \label{eq:semantics:grsync:opsem:init:e:emit}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferOPSEME
+            { \exprOpsem{\rho}{s}{e}{s'}{v} }
+            { \exprOpsem{\rho}{s}{\emit{e}}{s'}{\some{v}} }
+            {Emit{\scriptsize val}}
+            \label{rule:semantics:grsync:opsem:step:e:emit:value}
+
+            \inferOPSEME
+            { \exprOpsem{\rho}{s}{e}{s'}{\bot} }
+            { \exprOpsem{\rho}{s}{\emit{e}}{s}{\bot} }
+            {Emit{\scriptsize bot}}
+            \label{rule:semantics:grsync:opsem:step:e:emit:bot}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The initial states of $n$-ary operations ($op(e^+)$), defined by
+\Cref{eq:semantics:grsync:opsem:init:e:op}, contain the initial states of the input expressions
+($e^+$). Their transition function, defined in rule
+\nameref{rule:semantics:grsync:opsem:step:e:op:value}, evaluates the transitions of the input
+expressions $e^+$ and performs the operation on their returned values. If the transition of one
+input expression returns a bottom value, then $op(e^+)$ follows rule
+\nameref{rule:semantics:grsync:opsem:step:e:op:bot} and returns $\bot$ as well, indicating that
+the computation cannot yet be performed.
+
+\begin{align}
+    \stateTy{op(e^+)}  & = \Pi_e \stateTy{e}                                            &
+    \initsync{op(e^+)} & = (\initsync{e})^+ \label{eq:semantics:grsync:opsem:init:e:op}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \begin{mathpar}
+            \inferOPSEME
+            { \left(\exprOpsem{\rho}{s}{e}{s'}{v}\right)^+ }
+            { \exprOpsem{\rho}{s^+}{op(e^+)}{s^{\prime+}}{op(v^+)} }
+            {Op{\scriptsize val}}
+            \label{rule:semantics:grsync:opsem:step:e:op:value}
+
+            \inferOPSEME
+            {
+                \left(\exprOpsem{\rho}{s}{e}{s'}{v_{\bot i}}\right)^+ \\\\
+                \exists v_\bot \in \{v_{\bot i}^+\}, \; v_\bot = \bot
+            }
+            { \exprOpsem{\rho}{s^+}{op(e^+)}{s^+}{\bot} }
+            {Op{\scriptsize bot}}
+            \label{rule:semantics:grsync:opsem:step:e:op:bot}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The initial states of component applications ($f(e^+)$), as stated by
+\Cref{eq:semantics:grsync:opsem:init:e:app}, contain the initial states of the input expressions
+($e^+$) plus the initial state of the component ($f$). Thus, only the states of called components
+are stored in expressions memory. For component applications, rule
+\nameref{rule:semantics:grsync:opsem:step:e:app:value} applies: it evaluates the transitions of the
+input expressions $e^+$, and uses their values as inputs in the transition the component $f$. If the
+transition of one input expression returns a bottom value, then $f(e^+)$ follows rule
+\nameref{rule:semantics:grsync:opsem:step:e:app:bot} and returns $\bot$ as well, indicating that
+the computation cannot yet be performed.
+
+\begin{align}
+    \stateTy{f(e^+)}  & = \stateTy{f} \times \Pi_e \stateTy{e}                                          &
+    \initsync{f(e^+)} & = (\initsync{f}, (\initsync{e})^+) \label{eq:semantics:grsync:opsem:init:e:app}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \begin{mathpar}
+            \inferOPSEME
+            {
+                \left(\exprOpsem{\rho}{s}{e}{s'}{v_i}\right)^+ \\
+                \compOpsem{s_f}{v_i^+}{f}{s'_f}{v_o^+}
+            }
+            { \exprOpsem{\rho}{(s_f, s^+)}{f(e^+)}{(s'_f, s^{\prime+})}{v_o^+} }
+            {App{\scriptsize val}}
+            \label{rule:semantics:grsync:opsem:step:e:app:value}
+
+            \inferOPSEME
+            {
+                \left(\exprOpsem{\rho}{s}{e}{s'}{v_{\bot i}}\right)^+ \\
+                \exists v_\bot \in \{v_{\bot i}^+\}, \; v_\bot = \bot
+            }
+            { \exprOpsem{\rho}{(s_f, s^+)}{f(e^+)}{(s_f, s^+)}{\bot} }
+            {App{\scriptsize bot}}
+            \label{rule:semantics:grsync:opsem:step:e:app:bot}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Patterns}
+
+The execution of \GRSync patterns indicates if the pattern holds or not, and defines some local
+identifiers.
+%
+Their states are always empty because their guards must memory free, as stated by
+\Cref{eq:semantics:grsync:opsem:stateTy:pats,eq:semantics:grsync:opsem:init:pats}.
+\begin{align}
+    \stateTy{\guarded{pat^+}{e_g}}  & = \{()\} & \text{\iff } & \stateTy{e_g} = \{()\} \label{eq:semantics:grsync:opsem:stateTy:pats} \\
+    \initsync{\guarded{pat^+}{e_g}} & = ()     & \text{\iff } & \initsync{e_g} = () \label{eq:semantics:grsync:opsem:init:pats}
+\end{align}
+The transition of a guarded pattern \guarded{pat^+}{e_g}, matching the values $v^+$ with an
+evaluation context $\rho$, produces an output bottom boolean $b_\bot$ that tells if the pattern
+matches the values and the guard holds ($\bot$ means that matching cannot yet be determined), and
+produces a new evaluation context $\rho'$ that contains the identifiers locally defined by the
+pattern. This transition is denoted by:
+\begin{equation*}
+    \patOpsem{\rho}{\guarded{pat^+ = v^+}{e_g}}{b_\bot}{\rho'}.
+\end{equation*}
+
+The transition for guarded multiple patterns matching some values (\guarded{pat^+ = v^+}{e_g}),
+ruled by \nameref{rule:semantics:grsync:opsem:step:pats:bool}, executes the transitions of all
+individual patterns matching the corresponding value ($pat = v$) and the transition of the guard
+$e_g$. The pattern holds only if all individual patterns and the guard hold. The locally defined
+identifiers are combined in a one evaluation context. If the guard returns $\bot$, then the rule
+\nameref{rule:semantics:grsync:opsem:step:pats:bot} applies and the pattern returns $\bot$ as well.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferOPSEMPat
+            {
+                \left(\patOpsem{\rho}{pat = v}{b'}{\rho'}\right)^+  \\\\
+                \exprOpsem{\rho \ctxconcat \bigCtxconcat \rho^{\prime+}}{()}{e_g}{()}{b_g} \\
+                b = b_g \kwf{\&\&} (\kwf{\&\&} b')^+
+            }
+            { \patOpsem{\rho}{\guarded{pat^+ = v^+}{e_g}}{b}{\bigCtxconcat \rho^{\prime +}} }
+            {Tple{\scriptsize bool}}
+            \label{rule:semantics:grsync:opsem:step:pats:bool}
+
+            \inferOPSEMPat
+            {
+                \left(\patOpsem{\rho}{pat = v}{b'}{\rho'}\right)^+  \\\\
+                \exprOpsem{\rho \ctxconcat \bigCtxconcat \rho^{\prime+}}{()}{e_g}{()}{\bot}
+            }
+            { \patOpsem{\rho}{\guarded{pat^+ = v^+}{e_g}}{\bot}{\bigCtxconcat \rho^{\prime +}} }
+            {Tple{\scriptsize bot}}
+            \label{rule:semantics:grsync:opsem:step:pats:bot}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The transition of wildcards ($\_ = v$) and identifier patterns ($x = v$) always hold, as the rules
+\nameref{rule:semantics:grsync:opsem:step:pat:wild} and
+\nameref{rule:semantics:grsync:opsem:step:pat:ident} state. There is no locally defined identifier
+for wildcards, but the identifier pattern $x = v$ defines the identifier $x$ to be associated with the
+matching value $v$.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferOPSEMPat
+            { }
+            { \patOpsem{\rho}{\_ = v}{\true}{\emptyrho} }
+            {Wild}
+            \label{rule:semantics:grsync:opsem:step:pat:wild}
+
+            \inferOPSEMPat
+            { }
+            { \patOpsem{\rho}{x = v}{\true}{[v / x]} }
+            {ID}
+            \label{rule:semantics:grsync:opsem:step:pat:ident}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The transition of a constant pattern matching $c = v$ is defined by the rule
+\nameref{rule:semantics:grsync:opsem:step:pat:const}: it states that the pattern holds if and only
+if the constant $c$ and the value $v$ are equal. No identifiers are locally defined by this pattern.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferOPSEMPat
+            { }
+            { \patOpsem{\rho}{c = v}{c \kwf{==} v}{\emptyrho} }
+            {Cst}
+            \label{rule:semantics:grsync:opsem:step:pat:const}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Event patterns}
+
+The execution of \GRSync event patterns indicates if that event pattern is triggered or not, and
+makes accessible the values of present events.
+%
+The initial states of a guarded event pattern \guarded{epat^+}{e_g} are denoted by
+\initsync{epat^+}, and their transition with an evaluation context $\rho$ is denoted by
+\begin{equation*}
+    \epatOpsem{\rho}{s}{\guarded{epat^+}{e_g}}{s'}{b}{\rho'}.
+\end{equation*}
+The guard is optional and is only used in the rule for multiple event patterns. The transition
+updates the internal state, produces an output bottom boolean $b_\bot$ indicating whether the event
+is present and the guard holds ($\bot$ means it cannot yet be determined), and produces a new
+evaluation context $\rho'$ that includes the values of identifiers corresponding to the present
+events.
+%
+The initial state of guarded multiple event patterns (\guarded{epat^+}{e_g}) contains the initial
+states of all event patterns ($epat$), as defined by \Cref{eq:semantics:grsync:opsem:init:epats}.
+Its transition, ruled by \nameref{rule:semantics:grsync:opsem:step:epats:bool}, executes the
+transitions of all individual event patterns ($epat$) and the transition of the guard $e_g$. The
+event pattern holds only if all individual event patterns and the guard hold. The locally defined
+identifiers are combined in a one evaluation context. If one event pattern returns $\bot$, then the
+rule \nameref{rule:semantics:grsync:opsem:step:epats:bot1} applies and the tuple event pattern
+returns $\bot$. If the guard returns $\bot$, then the rule
+\nameref{rule:semantics:grsync:opsem:step:epats:bot2} applies and returns $\bot$ as well.
+
+\begin{align}
+    \stateTy{\guarded{epat^+}{e_g}}  & = \Pi_{epat} \stateTy{epat} & \text{\iff } & \stateTy{e_g} = \{()\} \label{eq:semantics:grsync:opsem:stateTy:epats} \\
+    \initsync{\guarded{epat^+}{e_g}} & = (\initsync{epat})^+       & \text{\iff } & \initsync{e_g} = () \label{eq:semantics:grsync:opsem:init:epats}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferOPSEMEPat
+            {
+                \left(\epatOpsem{\rho}{s}{epat}{s'}{b'}{\rho'}\right)^+ \\
+                \exprOpsem{\rho \ctxconcat \rho'}{()}{e_g}{()}{b_g} \\
+                b = b_g \kwf{\&\&} (\kwf{\&\&} b')^+
+            }
+            { \epatOpsem{\rho}{s^+}{\guarded{epat^+}{e_g}}{s^{\prime+}}{b}{\bigCtxconcat \rho^{\prime +}} }
+            {Tple{\scriptsize bool}}
+            \label{rule:semantics:grsync:opsem:step:epats:bool}
+
+            \inferOPSEMEPat
+            {
+                \left(\epatOpsem{\rho}{s}{epat}{s'}{b'_\bot}{\rho'}\right)^+ \\
+                \exists b_\bot \in \{b_\bot^{\prime+}\}, \: b_\bot = \bot
+            }
+            { \epatOpsem{\rho}{s^+}{\guarded{epat^+}{e_g}}{s^+}{\bot}{\bigCtxconcat \rho^{\prime +}} }
+            {Tple{\scriptsize bot1}}
+            \label{rule:semantics:grsync:opsem:step:epats:bot1}
+
+            \inferOPSEMEPat
+            {
+                \left(\epatOpsem{\rho}{s}{epat}{s'}{b'}{\rho'}\right)^+ \\
+                \exprOpsem{\rho \ctxconcat \rho'}{()}{e_g}{()}{\bot}
+            }
+            { \epatOpsem{\rho}{s^+}{\guarded{epat^+}{e_g}}{s^+}{\bot}{\bigCtxconcat \rho^{\prime +}} }
+            {Tple{\scriptsize bot2}}
+            \label{rule:semantics:grsync:opsem:step:epats:bot2}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The event detection pattern (\detect{x}{y}) has an empty state, as
+\Cref{eq:semantics:grsync:opsem:init:epat:event} states.
+%
+Its transition is determined by rules
+\nameref{rule:semantics:grsync:opsem:step:epat:event:some},
+\nameref{rule:semantics:grsync:opsem:step:epat:event:none}, and
+\nameref{rule:semantics:grsync:opsem:step:epat:event:bot}, which check if the event $y$ is present
+by looking at its associated value in the context $\rho$.
+%
+If $\rho[y] = \some{v}$, rule \nameref{rule:semantics:grsync:opsem:step:epat:event:some} applies:
+the event $y$ is present, the pattern \detect{x}{y} holds, and its transition returns a context
+containing the unwrapped value of the event ($[v/x]$).
+%
+Conversely, if the identifier $y$ is associated with a \none value, rule
+\nameref{rule:semantics:grsync:opsem:step:epat:event:none} applies: the pattern \detect{x}{y} does not
+hold, and its transition returns an empty context.
+%
+If the identifier $y$ is not determined (\ie associated with $\bot$), rule
+\nameref{rule:semantics:grsync:opsem:step:epat:event:bot} applies: the pattern \detect{x}{y} cannot
+yet be determined, it returns $\bot$ and an empty context.
+
+\begin{align}
+    \stateTy{\detect{x}{y}} & = \{()\} & \initsync{\detect{x}{y}} & = () \label{eq:semantics:grsync:opsem:init:epat:event}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \begin{mathpar}
+            \inferOPSEMEPat
+            { \none = \rho[y] }
+            { \epatOpsem{\rho}{()}{\detect{x}{y}}{()}{\false}{\botrho{\{x\}}} }
+            {Dtct{\scriptsize none}}
+            \label{rule:semantics:grsync:opsem:step:epat:event:none}
+
+            \inferOPSEMEPat
+            { \some{v} = \rho[y] }
+            { \epatOpsem{\rho}{()}{\detect{x}{y}}{()}{\true}{[v / x]} }
+            {Dtct{\scriptsize some}}
+            \label{rule:semantics:grsync:opsem:step:epat:event:some}
+
+            \inferOPSEMEPat
+            { \bot = \rho[y] }
+            { \epatOpsem{\rho}{()}{\detect{x}{y}}{()}{\bot}{\botrho{\{x\}}} }
+            {Dtct{\scriptsize bot}}
+            \label{rule:semantics:grsync:opsem:step:epat:event:bot}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The state of a rising edge $e$ contains the memory of the last evaluation of $e$, initialized to
+\false by \Cref{eq:semantics:grsync:opsem:init:epat:edge}.
+%
+Its transition is described by the rule \nameref{rule:semantics:grsync:opsem:step:epat:edge:bool}:
+it stores the previous boolean value of $e$ in its state and returns \true when it detects a
+transition from \false to \true. If the transition of $e$ returns $\bot$, then the rising edge
+cannot yet be determined and returns $\bot$.
+
+\begin{align}
+    \stateTy{e}  & = \Bool \times \stateTy{e}                                                        &
+    \initsync{e} & = (\texttt{false}, \initsync{e}) \label{eq:semantics:grsync:opsem:init:epat:edge}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferOPSEMEPat
+            {
+                \exprOpsem{\rho}{s}{e}{s'}{b'} \\
+                b = \kwf{!}v_m \kwf{\&\&} b'
+            }
+            { \epatOpsem{\rho}{(v_m, s)}{e}{(b', s')}{b}{\emptyrho} }
+            {Edge{\scriptsize bool}}
+            \label{rule:semantics:grsync:opsem:step:epat:edge:bool}
+
+            \inferOPSEMEPat
+            { \exprOpsem{\rho}{s}{e}{s'}{\bot} }
+            { \epatOpsem{\rho}{(v_m, s)}{e}{(v_m, s)}{\bot}{\emptyrho} }
+            {Edge{\scriptsize bot}}
+            \label{rule:semantics:grsync:opsem:step:epat:edge:bot}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Summary}
+This section presented the operational semantics of \GRSync using a small-step, state-machine-based 
+formalism. We introduced a set of transition rules that describe the execution of each language
+construct, from high-level components to individual expressions and patterns. The state, which is
+finite and statically determined, encapsulates memories and the states of nested components. A key 
+aspect of this semantics is the use of a fix-point iteration to evaluate simultaneous equations. 
+This approach resolves data dependencies without imposing a fixed execution order. The propagation 
+of a bottom value ($\bot$) ensures that computations proceed only when their inputs are determined.

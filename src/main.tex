@@ -1,0 +1,95 @@
+%% -------------Preamble
+\documentclass[12pt]{report}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+
+\input{./packages.tex}
+
+\title{\manuscriptTitle}
+\author{Émilie THOMÉ}
+\date{2025}
+
+%% -------------Document
+\begin{document}
+
+\input{./commands.tex}
+
+\input{titlepage.tex}
+
+\chapter*{Remerciements}
+
+\todo{To mum and dad.}
+
+\chapter*{Abstract}
+
+The rapid growth of software-driven features, such as autonomous driving and advanced connectivity,
+is pushing traditional, distributed vehicle architectures to their limits. In response, the industry
+is moving to the \emph{Software-Defined Vehicle} (\sdv), a centralized architecture that reduces
+physical complexity and enables continuous software updates.
+%
+This transition, however, introduces new software challenges. As observed at \ampere, the software
+division of the Renault Group, legacy toolchains based on periodic execution are ill-suited for the
+dynamic, data-intensive nature of \sdv systems.
+
+To meet these new performance demands while mitigating the safety risks of large \Ci codebases,
+\ampere is implementing new software in asynchronous \Rust, leveraging its strong compile-time
+guarantees. However, this strategic shift to a low-level, asynchronous paradigm creates a critical
+abstraction gap for control engineers accustomed to model-based design.
+
+This thesis, the result of a CIFRE PhD in partnership with \ampere, addresses this challenge by
+introducing \GRust, a \emph{Domain-Specific Language} (\dsl) for modeling automotive systems. \GRust
+synthesizes two powerful programming paradigms, combining the deterministic, step-based structure of
+\emph{synchronous languages} with the expressive capabilities of \emph{Functional Reactive
+    Programming} (FRP). This allows engineers to design systems that are both predictable and
+responsive, making temporal and data dependencies explicit within the model.
+
+We present the design of the \GRust language and a compiler that generates safe and efficient
+asynchronous \Rust code from these high-level models. Benchmarks demonstrate that this compilation
+strategy significantly reduces unnecessary computation and bus saturation compared to conventional
+periodic approaches. To satisfy stringent safety demands, we also introduce \GReusot, a toolchain
+that enables the formal verification of \GRust models, aligning with the requirements of the \iso
+standard.
+
+The language design is underpinned by a rigorous formal foundation. We define both operational and
+denotational semantics and establish key theorems of productivity, determinism, and their
+equivalence. This formalization guarantees the soundness of the language and the correct
+interoperability of its synchronous and asynchronous parts.
+
+By integrating high-level modeling, performance-oriented compilation, and formal verification,
+\GRust provides a comprehensive solution for developing the next generation of automotive software.
+This work offers a pathway for the industry to harness the full potential of \sdv architectures
+while maintaining the safety and reliability expected of critical systems.
+
+\tableofcontents
+
+\let\origaddvspace\addvspace
+\renewcommand{\addvspace}[1]{}
+\listoffigures
+\listoftables
+\renewcommand{\lstlistlistingname}{List of Listings}
+\lstlistoflistings
+\renewcommand{\addvspace}[1]{\origaddvspace{#1}}
+
+\begin{chapterWithToc}{Résumé en Français}{\label{cha:resume}}
+    \input{./chapters/0_resume.tex}
+\end{chapterWithToc}
+
+\begin{chapterWithToc}{Introduction}{\label{cha:intro}}
+    \input{./chapters/1_intro.tex}
+\end{chapterWithToc}
+
+\begin{chapterWithToc}{\GRust: Technical Description}{\label{cha:grust}}
+    \input{./chapters/3_grust.tex}
+\end{chapterWithToc}
+
+\begin{chapterWithToc}{\GRust: Formal Semantics}{\label{cha:semantics}}
+    \input{./chapters/4_semantics.tex}
+\end{chapterWithToc}
+
+\begin{chapterWithToc}{Conclusion}{\label{cha:conclusion}}
+    \input{./chapters/7_conclusion.tex}
+\end{chapterWithToc}
+
+\bibliography{references}
+
+\end{document}

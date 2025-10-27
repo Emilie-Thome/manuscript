@@ -1,0 +1,35 @@
+\subsection{Theorems for \GRSync}
+\label{sec:semantics:grsync:theorems}
+
+This section establishes the key semantic properties of \GRSync, which together guarantee that
+components are well-behaved and execute predictably. These properties hinge on a central requirement
+of synchronous dataflow languages: \emph{causality}.
+
+In \GRSync, components describe the computation of outputs through a system of mutually recursive
+equations. For these equations to have a unique and computable solution at each instant, they must
+be causal. A component is causal if its outputs at any given instant depend only on current inputs
+and past values, never on other outputs from the same instant. This property is statically verified
+by the compiler, and formally defined in \Cref{sec:semantics:grsync:causality}.
+
+Causality forms the foundation for the theorems that follow. We prove that every causal component is
+well-defined and that our semantic models are consistent. Specifically, we establish the following
+properties:
+\begin{enumerate}
+      \item \emph{Productivity}: Every component produces a valid set of outputs for any given set
+            of inputs, in the absence of runtime errors
+            (\Cref{thm:semantics:grsync:theorems:productivity}).
+      \item \emph{Determinism}: The computed outputs for a component are unique
+            (\Cref{thm:semantics:grsync:theorems:determinism}).
+      \item \emph{Equivalence}: The operational and denotational semantics are consistent
+            with each other (\Cref{thm:semantics:grsync:theorems:equivalence}).
+      \item \emph{Soundness}: The execution model is sound with respect to oversampling
+            (\Cref{thm:semantics:grsync:theorems:oversampling}).
+\end{enumerate}
+
+\input{./chapters/4_semantics/2_grsync/5_theorems/1_productivity.tex}
+
+\input{./chapters/4_semantics/2_grsync/5_theorems/2_determinism.tex}
+
+\input{./chapters/4_semantics/2_grsync/5_theorems/3_equivalence.tex}
+
+\input{./chapters/4_semantics/2_grsync/5_theorems/4_oversampling.tex}

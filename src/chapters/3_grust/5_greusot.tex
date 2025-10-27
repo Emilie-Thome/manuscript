@@ -1,0 +1,321 @@
+\section{Verification with \GReusot}
+\label{sec:grust:greusot}
+
+This section presents \GReusot, a \GRust wrapper around the \Creusot deductive verifier. It begins
+with an overview of safety considerations in the automotive industry, then introduces \GReusot's
+syntax, and finally illustrates its usage and limitations through an example.
+
+\subsection{Safety Properties in Automotive}
+\label{sec:grust:greusot:auto}
+
+The \iso standard defines the functional safety requirements for automotive electrical/electronic
+systems. It introduces Automotive Safety Integrity Levels (\Asil), ranging from \Asil~A (least
+critical, \eg blinking indicators) to \Asil~D (most critical, \eg power steering). Hazards without
+direct safety impact are classified as Quality Management (QM). Although QM systems require no
+formal safety measures, they strongly influence the user experience.
+
+Critical systems must avoid common faults such as uninitialized memory access, invalid pointer
+dereferences, arithmetic overflow, division by zero, and memory leaks. Because runtime checks are
+often costly or impractical in embedded environments, static verification is particularly important
+for \Asil~D systems.
+
+\GRust compiles to \Rust, a language that combines strong memory safety with low-level efficiency.
+\Rust enforces compile-time restrictions on shared mutation, thereby preventing undefined behavior.
+However, some patterns---such as mutexes---require shared mutability and cannot be expressed
+entirely in \emph{safe} \Rust. To support them, \Rust provides encapsulated \emph{unsafe} code
+through restricted APIs. The \RustBelt project~\cite{DBLP:journals/pacmpl/0002JKD18}
+establishes a framework to prove the absence of undefined behavior for such APIs, including a
+verified mutex library.
+
+\GRust offers two kernels: a synchronous one (\GRSync) and an event-driven one (\GRFRP). The former
+is fully compatible with safe \Rust, while the latter abstracts bus operations \via the
+\texttt{futures} library~\cite{futures}, which currently lacks verification in \RustBelt.
+
+The deductive verifier \Creusot~\cite{DBLP:conf/icfem/DenisJM22} builds on \Rust's memory safety to
+prove functional properties with relatively few annotations (compared to those required for \Ci
+code). It translates annotated safe \Rust programs into
+\textsc{Why3}~\cite{DBLP:conf/esop/FilliatreP13}, which in turn invokes automated solvers such as
+Z3~\cite{DBLP:conf/tacas/MouraB08}, CVC4~\cite{DBLP:conf/cav/BarrettCDHJKRT11}, or
+Alt-Ergo~\cite{conchon2018alt}. By default, \Creusot checks for the absence of runtime panics,
+including arithmetic overflows, across the program. Developers can also specify custom properties.
+To integrate these capabilities, \GRust provides \GReusot, a wrapper of \Creusot's specification
+language, for verifying \GRSync components and functions.
+
+\subsection{Syntax}
+\label{sec:grust:greusot:syntax}
+
+\Cref{fig:syntax:greusot} shows the EBNF grammar of \GReusot, which extends \GRSync declarations
+with formal specifications embedded in their signatures.
+
+\begin{figure}[!ht]
+  \centering
+  \begin{bnf}(comment = {:is:})
+    \FunItem ::= \funItem{\ID}{\many{(\ID \: \kft{:} \: \TY)}}{\TY}{\many{\Decl}} ;;
+    \CompItem ::= \compItem{\ID}{\many{(\ID \: \kft{:} \: \STY)}}{\many{(\ID \: \kft{:} \: \STY)}}{\many{\Eq}} ;;
+    \Spec ::= \many{\Clause} ;;
+    \Clause ::= \reqClause{\Term} // \ensClause{\Term} ;;
+    \Term ::= \CST // \ID // \lastExpr{\ID} // \opExpr{\many{\Term}} // \tuple{\Term} // \appExpr{\ID}{\many{\Term}}
+    | \implTerm{\Term}{\Term} // \forallTerm{\ID}{\TY}{\Term}
+    | \whenTerm{\EPat}{\Term} // \resTerm ;;
+  \end{bnf}
+  \caption[EBNF grammar of \GReusot specifications.]
+  {EBNF grammar of \GReusot specifications in component and function declarations.
+    Terminal symbols are in purple.
+    Repetitions of X are denoted \many{\text{X}}.
+    \ID are identifiers composed of ASCII characters.
+    \CST are constants.
+    \OP represents $n$-ary operators (\eg conjunction or conditional).}
+  \label{fig:syntax:greusot}
+\end{figure}
+
+A specification (\Spec) consists of clauses (\many{\Clause}) defining preconditions
+(\kft{requires}) and postconditions (\kft{ensures}). A \kft{requires} clause states the assumptions
+under which the \kft{ensures} clause must always hold. Clause properties are expressed as terms,
+which may be constants (\CST), identifiers (\ID), memories of past executions (\lastExpr{\ID}),
+$n$-ary operations (\opExpr{\many{\Term}}), tuples (\tuple{\Term}), function calls
+(\appExpr{\ID}{\many{\Term}}), implications (\implTerm{\Term}{\Term}), universal quantifiers
+(\forallTerm{\ID}{\TY}{\Term}), event-based implications (\whenTerm{\EPat}{\Term}), or the return
+value of the specified function (\resTerm).
+
+\subsection{Compiling \GReusot Specifications}
+\label{sec:grust:greusot:compil}
+
+Compilation of \GRust transforms \kft{function} and \kft{component} declarations into \Rust
+functions, encoding their respective functions or state machines. Logical variants of functions are
+also generated for use in specifications. \GReusot contracts are transformed into equivalent
+\Creusot clauses in the output \Rust code, expressed through \Creusot's \texttt{\#[requires(...)]}
+and \texttt{\#[ensures(...)]} macros.
+
+Verification is then performed by running \texttt{cargo creusot prove} on the generated code. Since
+the \GRust compiler is implemented as a \Rust procedural macro, \Creusot can be applied directly to
+the compiled crate of a \GRust program. Verification conditions are discharged by \Creusot through
+several SMT solvers.
+
+\subsection{Specifying the ACC in \GReusot}
+\label{sec:grust:greusot:example}
+
+The \verb|safety_distance| function and the \verb|acc| component from the ACC example
+(\Cref{sec:grust:example}) are extended with \GReusot specifications in
+\Cref{lst:grust:greusot:fun:spec,lst:grust:greusot:comp:spec}. Since \Creusot does not support
+floating-point numbers, values are expressed as integers.
+
+The function \verb|safety_distance| is intended for subject vehicle speeds between 0 and 50 meters
+per second (Line 2). The front vehicle must be slower, with a maximum speed difference of 10 meters
+per second (Line 3). Under these assumptions, Line 4 guarantees that the computed safety distance is
+always positive, does not exceed 150 meters (the radar detection range), and cannot overflow.
+
+\begin{lstlisting}[
+      label=lst:grust:greusot:fun:spec,
+      language=GRust, 
+      caption={\GReusot specification of the \texttt{safety\_distance} function from 
+      \Cref{fig:code_acc}.}, captionpos=b
+]
+function safety_distance(sv_v: int, fv_v: int) -> int
+  requires { 0 < sv_v && sv_v <= 50 }
+  requires { 0 < fv_v && fv_v < sv_v && sv_v - fv_v <= 10 }
+  ensures  { 0 < result && result < 150 }
+{
+  let (rho: int, b_max: int) = (1, 6);
+  let sv_d_stop: int = sv_v*rho + sv_v^2/(2*b_max);
+  let fv_d_stop: int = fv_v^2/(2*b_max);
+  return sv_d_stop - fv_d_stop;
+}
+\end{lstlisting}
+
+The generated code corresponding to this specification appears in
+\Cref{lst:grust:greusot:fun:codegen}. Because \GRSync functions are nearly identical to their
+\Rust counterparts (\Cref{sec:grust:implem:choices:sync}), their specifications also translate
+directly. The key point is that inside \Creusot's \texttt{requires} and \texttt{ensures} macros, we
+refer to the \emph{logical representation} of types (\eg \texttt{Int} for integers instead of the
+computational type \texttt{i64}, as in Line 5). In \GRust, all integers are written simply as
+\texttt{int}, but after compilation the inputs and outputs must be explicitly converted to their
+logical form with the \texttt{@} operator (\eg Line 1 converts \texttt{sv\_v: i64} into
+\texttt{sv\_v@: Int}).
+
+To remain compositional, \Creusot abstracts specified functions by their contracts: when a specified
+function is called in another specification, only its specification (not its body) is used. To make
+such calls provable, \GReusot generates a \emph{logical module} containing logical counterparts of
+function bodies. These use logical types such as \texttt{Int} and are annotated with the
+\texttt{\#[open]} and \texttt{\#[logic]} macros. The correspondence between a computational function
+and its logical version is enforced by an \texttt{ensures} clause (Line 4).
+
+\begin{lstlisting}[
+      label=lst:grust:greusot:fun:codegen,
+      language=Rust, 
+      caption={Generated code for the \GReusot specification of the \texttt{safety\_distance}
+      function from \Cref{lst:grust:greusot:fun:spec}.}, captionpos=b
+]
+#[requires(0 < sv_v@ && sv_v@ <= 50)]
+#[requires(0 < fv_v@ && fv_v@ < sv_v@ && sv_v@ - fv_v@ <= 10)]
+#[ensures(0 < result@ && result@ < 150)]
+#[ensures(result@ == logical::safety_distance(sv_v@, fv_v@))]
+pub fn safety_distance(sv_v: i64, fv_v: i64) -> i64 {
+  let (rho, b_max) = (1i64, 6i64);
+  let sv_d_stop = sv_v*rho + ((sv_v*sv_v) / (2*b_max));
+  let fv_d_stop = (fv_v*fv_v) / (2*b_max);
+  sv_d_stop - fv_d_stop
+}
+mod logical {
+  #[open] #[logic]
+  pub fn safety_distance(sv_v: Int, fv_v: Int) -> Int {
+    let (rho, b_max) = (1, 6);
+    let sv_d_stop = sv_v*rho + ((sv_v*sv_v) / (2*b_max));
+    let fv_d_stop = (fv_v*fv_v) / (2*b_max);
+    sv_d_stop - fv_d_stop
+  }
+}
+\end{lstlisting}
+
+The specification of the \verb|acc| component
+(\Cref{lst:grust:greusot:comp:spec}) assumes at Lines 5-7 that, whenever the activation condition
+\verb|c| holds:
+\begin{itemize}
+  \item the subject vehicle's speed lies in the valid range of \verb|safety_distance|,
+  \item the derivative of the inter-vehicle distance is negative (vehicles are approaching) and
+        remains within the bounds of \verb|safety_distance|,
+  \item the distance between the vehicles is above the minimum threshold for maximum braking.
+\end{itemize}
+Additionally, it assumes that the radar distance \verb|d| does not exceed 150 meters (Line 3). The
+postconditions guarantee absence of division by zero and overflow, and that the braking rate always
+remains within bounds (Line 9). Proving the specification of \verb|acc| requires an auxiliary
+function \verb|compute_braking| to guide the solvers (Lines 24-33).
+
+\begin{lstlisting}[
+  label=lst:grust:greusot:comp:spec,
+  language=GRust, 
+  caption={\GReusot specification of the \texttt{acc} component from \Cref{fig:code_acc}.},
+  captionpos=b
+]
+component acc(c: bool, d: int, v: int, s: int) -> (b: int)
+  // radar detection limitation
+  requires { d < 150 }
+  // ACC scope of usage
+  requires { c => (0 < s && s <= 50) && (0 < s+v && v < 0 && -v <= 10) }
+  // there is enough distance to brake at maximum rate
+  requires { c => d - safety_distance(s, s+v) > (v^2)/12 }
+  // braking rate is in correct interval
+  ensures  { 0 <= b && b <= 6 }
+{
+  match c {
+    true => {
+      b = compute_braking(d - d_safe, v);
+      let d_safe: int = safety_distance(s, fv_v);
+      let fv_v: int = s + v;
+    }
+    false => {
+      b = 0;
+      let (fv_v: int, d_safe: int) = (0, 0);
+    }
+  }
+}
+// Intermediate braking function to pass the proof
+function compute_braking(d_grace: int, v: int) -> int
+  // scope
+  requires { (0 < d_grace &&  d_grace < 150) && (v < 0 && -v <= 10) }
+  // there is enough distance to brake at maximum rate
+  requires { d_grace > (v^2)/12 }
+  // braking rate is in correct interval
+  ensures  { 0 <= result && result <= 6 }
+{
+  return (v^2) / (2*d_grace);
+}
+\end{lstlisting}
+
+The generated code is shown in \Cref{lst:grust:greusot:comp:codegen}. As explained in
+\Cref{sec:grust:implem:choices:sync}, the prototype \GRust compiler produces for each component an
+implementation of the \texttt{Component} trait from the \GRust core library, including
+\texttt{init} and \texttt{step} functions. The \texttt{init} function builds the initial state,
+while the \texttt{step} function takes the current inputs and a mutable reference to the state,
+computes outputs, and updates the state. An access to a memory \lastExpr{x} is compiled into a field
+access on \texttt{state}, referring to its value \emph{before} the computations.
+
+The call to \verb|safety_distance| in the \verb|acc| specification is compiled to a call to its
+logical counterpart \verb|logical::safety_distance| (Line 4), which preserves the relationship
+between inputs (\verb|input.s@| and \verb|input.s@ + input.v@|) and the result. Similarly, the
+intermediate function \verb|compute_braking| generates a logical version in the \verb|logical|
+module (Lines 30--35).
+
+\begin{lstlisting}[
+  label=lst:grust:greusot:comp:codegen,
+  language=Rust, 
+  caption={Generated code for the \GReusot specification of the \texttt{acc} component from
+  \Cref{lst:grust:greusot:comp:spec}.}, captionpos=b
+]
+#[requires(input.d@ < 150)]
+#[requires(input.c ==> (0 < input.s@ && input.s@ <= 50) && 
+                        (0 < input.s@ + input.v@ && input.v@ < 0 && - input.v@ <= 10))]
+#[requires(input.c ==> input.d@ - logical::safety_distance(input.s@, input.s@ + input.v@)
+                        > (input.v@*input.v@) / 12)]
+#[ensures(0 <= result@ && result@ <= 6)]
+fn step(state: &mut AccState, input: AccInput) -> i64 {
+  let (d_safe, b, fv_v) = match input.c {
+    true => {
+      let fv_v = input.s + input.v;
+      let d_safe = safety_distance(input.s, fv_v);
+      let b = compute_braking(input.d - d_safe, input.v);
+      (d_safe, b, fv_v)
+    }
+    false => {
+      let b = 0i64;
+      let (fv_v, d_safe) = (0i64, 0i64);
+      (d_safe, b, fv_v)
+    }
+  };
+  b
+}
+#[requires((0 < d_grace@ && d_grace@ < 150) && (v@ < 0 && - v@ <= 10))]
+#[requires(d_grace@ > (v@*v@) / 12)]
+#[ensures(0 <= result@ && result@ <= 6)]
+#[ensures(result@ == logical::compute_braking(d_grace@, v@))]
+pub fn compute_braking(d_grace: i64, v: i64) -> i64 {
+  (v*v) / (2i64*d_grace)
+}
+mod logical {
+  #[open] #[logic]
+  pub fn compute_braking(d_grace: Int, v: Int) -> Int {
+    (v*v) / (2*d_grace)
+  }
+}
+\end{lstlisting}
+
+\subsection{Future Work on \GReusot}
+\label{sec:grust:greusot:future}
+
+Formal verification is mandatory for certain \Asil levels. We developed \GReusot as a proof of
+concept to demonstrate the feasibility of formal verification in \GRust, thereby strengthening its
+relevance in the automotive domain. However, since the development of such a tool was not our
+initial objective, several improvements remain for future work. This section outlines a
+non-exhaustive list of enhancements that would significantly improve the usability of \GReusot.
+
+Deductive verification often requires the programmer to guide the solvers, as illustrated in our
+example with the auxiliary function \verb|compute_braking| (\Cref{lst:grust:greusot:comp:spec}).
+Programmers could be better supported by enabling them to insert assertions on local variables. In
+functions, such assertions could be placed directly before the declaration of the variable. In
+components, since equations are unordered, assertions could be added at the beginning of the set of
+equations. This avoids polluting the signature with irrelevant details, as assertions concern only
+local variables. In the generated \texttt{step} function, these assertions could then be compiled
+into \Creusot assertions inserted after the creation of the relevant identifiers.
+
+Another limitation concerns the use of memories (\lastExpr{\ID}) in component specifications, which
+are currently not compositional. To verify a component that calls another, the called component must
+be provided with a specification. If this specification refers to internal memory in a
+\kft{requires} clause, the caller must establish the condition. However, the caller cannot access
+the internal memory of another component. This usability issue could be addressed by restricting
+properties on memories to \kft{invariant} clauses. These invariants would be checked as
+\kft{ensures} clauses in the \texttt{init} function, as \kft{requires} clauses referring on the
+\texttt{state} value \emph{before} the computations, and as \kft{ensures} clauses referring on the
+\texttt{state} value \emph{after} the computations (using \verb|^state| instead of \texttt{state}).
+To make invariants usable in practice, we would also need to permit the use of inputs in the
+\texttt{init} function.
+
+A further limitation is the treatment of component calls within specifications. Each component call
+has its own state, and these states do not interfere with one another. If a specification involves a
+component call, two options arise: either we create a ghost state for the component, without any
+\apriori knowledge of its contents; or we reuse an existing state and call a logical version of its
+\texttt{step} function (analogous to function calls), which does not modify the state. In the latter
+case, care must be taken to select the component state that corresponds to a call with the same
+inputs as in the specification. The model checker Kind 2~\cite{DBLP:conf/cav/ChampionMST16} supports
+specifications for Lustre nodes using the k-induction
+technique~\cite{DBLP:conf/fmcad/SheeranSS00}, a well-established method for verifying transition
+systems such as stateful nodes (or components). Integrating a similar k-induction approach into
+\Creusot has not yet been investigated.

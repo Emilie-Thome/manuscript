@@ -1,0 +1,869 @@
+\section{Introduction}
+
+Le fonctionnement d'un véhicule moderne repose sur une électronique complexe qui coordonne de
+multiples calculateurs embarqués, ou \emph{Electronic Control Units} (\ecus). Ces calculateurs
+forment ce que l'on nomme des \emph{systèmes réactifs}~: ils interagissent en permanence avec le
+monde physique et doivent réagir instantanément et correctement à des événements externes, comme une
+pression sur la pédale de frein ou un signal radar. Lorsque la défaillance d'un tel système peut
+avoir des conséquences graves, il est qualifié de \emph{critique}. Cette thèse CIFRE, réalisée au
+sein d'\ampere, la division logicielle du Groupe Renault, aborde la conception des logiciels pour
+ces systèmes réactifs critiques embarqués.
+
+\subsection{Transition d'Architecture Logicielle}
+
+L'architecture électronique traditionnelle des véhicules repose sur un réseau distribué d'\ecus
+spécialisés. Chaque fonctionnalité, ou presque, possède son propre calculateur~: l'un pour la
+gestion moteur, l'autre pour les airbags. Cependant, l'intégration de fonctionnalités avancées,
+telles que l'assistance à la conduite (ADAS) ou l'intelligence artificielle, rend ce modèle
+décentralisé inadapté, difficile à faire évoluer et à maintenir.
+
+Face à cette complexité croissante, l'industrie automobile opère une transition majeure vers une
+architecture centralisée~: le \emph{Software-Defined Vehicle} (\sdv). Ce paradigme remplace de
+nombreux \ecus par un nombre restreint de calculateurs haute performance. Cette centralisation
+simplifie l'architecture matérielle, réduit le câblage et facilite les mises à jour logicielles à
+distance. Cette évolution, bien que nécessaire, introduit deux défis majeurs pour l'ingénierie
+logicielle.
+
+\subsection{Les Défis de l'Architecture \sdv}
+
+\paragraph{Défi n°1~: Changement du mode de communication}
+Le premier défi concerne l'inefficacité du mode de communication hérité des architectures
+distribuées. Dans ce modèle, les composants communiquent de manière \emph{périodique}, en diffusant
+leur état à intervalle régulier, même en l'absence de nouvelle information. Si cette approche est
+adaptée aux bus traditionnels de communication, elle se révèle problématique pour les architectures
+\sdv qui exploitent des réseaux à haut débit comme Ethernet.
+%
+Le bus CAN, historiquement utilisé, est conçu pour être efficace avec de petits volumes de données~:
+son protocole est léger et sa surcharge minimale. À l'inverse, Ethernet repose sur des protocoles
+réseaux standards (TCP/IP) qui encapsulent les données à transmettre dans plusieurs couches. Chaque
+couche ajoute ses propres en-têtes, créant une surcharge protocolaire significative~: transmettre
+quelques octets utiles peut nécessiter l'envoi d'un paquet de plusieurs dizaines d'octets.
+
+Une expérience menée chez \ampere a mis en lumière cette problématique. La configuration du système,
+basée sur une transmission périodique de tous les signaux à 10~ms, a provoqué une saturation
+complète du bus de communication. L'analyse a révélé que pour certains calculateurs, 97\% des
+messages transmis n'étaient pas utilisés (soit superflus, soit perdus). Ce trafic inutile a non
+seulement gaspillé la bande passante et les ressources de calcul, mais a également engendré des
+pertes de données.
+%
+Cet exemple démontre qu'un changement d'approche est indispensable. Un modèle de communication
+\emph{événementiel}, où les données ne sont transmises que lorsqu'une information pertinente est
+produite, serait plus approprié. Cette approche exige cependant une refonte des modèles de
+programmation traditionnels.
+
+\paragraph{Défi n°2~: Fossé d'abstraction des outils de programmation}
+Le second défi réside dans l'adoption du langage de programmation \Rust. Bien que plébiscité par
+l'industrie pour ses garanties de sûreté mémoire et sa performance, \Rust reste un langage de
+\emph{bas niveau} qui impose aux développeurs une gestion manuelle de nombreux détails
+d'implémentation.
+
+Or, l'histoire de l'ingénierie a montré que la programmation bas niveau des systèmes critiques est
+une source de risques notoire. Le cas tristement célèbre de l'appareil de radiothérapie Therac-25
+en est une illustration dramatique~: des erreurs logicielles subtiles (conditions de concurrence,
+dépassements mémoire) dans un système programmé en assembleur ont conduit à des surdoses mortelles
+de radiations pour plusieurs patients~\cite{journals/computer/LevesonT93}.
+
+À cette complexité s'ajoute le choix d'\ampere d'utiliser la programmation \emph{asynchrone} en
+\Rust pour répondre au défi des communications événementielles. Ce modèle, bien qu'efficace, est
+réputé pour sa difficulté et sa propension à introduire des erreurs d'un nouveau genre, comme les
+interblocages. Cette double complexité---bas niveau et asynchrone---crée un \emph{fossé
+      d'abstraction} entre les outils de modélisation de haut niveau (tels que
+\Simulink~\cite{simulink}), familiers aux ingénieurs système, et les exigences de l'implémentation.
+Demander aux experts du contrôle-commande de maîtriser ces détails est une source d'erreurs et un
+frein à la productivité.
+
+\subsection{Contribution}
+
+Pour répondre à ces défis, cette thèse introduit \GRust, un langage de programmation dédié
+(\textit{Domain Specific Language}, ou \dsl) qui vise à combler ce fossé d'abstraction. \GRust
+permet aux ingénieurs de spécifier le comportement des systèmes réactifs à un haut niveau
+d'abstraction, et de générer le code \Rust asynchrone, sûr et performant, adapté aux architectures
+\sdv.
+
+Pour ce faire, \GRust s'appuie sur le principe \emph{Globalement Asynchrone, Localement Synchrone}
+(GALS)~\cite{DBLP:phd/us/Chapiro85} et combine deux paradigmes~:
+\begin{itemize}
+      \item Un modèle \emph{synchrone}, inspiré des langages comme \Lustre~\cite{%
+                  DBLP:conf/ifip/Kahn74,%
+                  DBLP:conf/popl/CaspiPHP87,%
+                  DBLP:conf/tase/ColacoPP17%
+            }. Ce paradigme repose sur l'hypothèse où les calculs sont considérés comme instantanés.
+            Le système progresse par une succession d'instants logiques discrets, garantissant un
+            comportement déterministe. Cette logique de calcul est décrite dans \GRust \via le
+            sous-langage \GRSync, offrant un cadre familier, conceptuellement similaire aux blocs de
+            \Simulink.
+
+      \item Un modèle \emph{asynchrone} et événementiel, inspiré de la Programmation Fonctionnelle
+            Réactive (\frp)~\cite{%
+                  DBLP:conf/icfp/ElliottH97,%
+                  DBLP:conf/haskell/Elliott09,%
+                  DBLP:conf/padl/WanTH02%
+            }. Ce modèle, implémenté dans le sous-langage \GRFRP, orchestre les flux de données
+            entre les blocs de calcul, assurant que les interactions ne se produisent que lorsque
+            cela est nécessaire.
+\end{itemize}
+
+De plus, \GRust permet de spécifier des contraintes temporelles pour garantir la sûreté. Par
+exemple, une fréquence minimale d'émission assure la \emph{vivacité} des composants (prouvant qu'ils
+sont toujours actifs), tandis qu'une fréquence maximale prévient la surcharge du système.
+
+Au-delà de la conception du langage, notre contribution inclut un \emph{compilateur} qui traduit les
+spécifications \GRust en code \Rust asynchrone, masquant la complexité inhérente à ce paradigme.
+Elle inclut également une formalisation sémantique du langage. Cette formalisation, à travers deux
+sémantiques---opérationnelle et dénotationnelle---dont l'équivalence est prouvée, garantit des
+propriétés essentielles comme la productivité (un programme ne se bloque jamais) et le déterminisme.
+Nous introduisons aussi un théorème de sur-échantillonnage, qui valide la correction de
+l'interaction entre les mondes synchrone et asynchrone.
+%
+Enfin, pour les systèmes les plus critiques, la vérification formelle est impérative. À cette fin,
+nous avons développé \GReusot, un outil qui fait le lien avec le vérificateur de programmes \Rust
+\Creusot~\cite{DBLP:conf/icfem/DenisJM22}. \GReusot permet d'annoter les modèles \GRust avec des
+propriétés, rendant la vérification formelle accessible au niveau du modèle, sans nécessiter une
+expertise du code généré.
+
+\medskip
+
+En conclusion, cette thèse propose une solution qui permet à l'industrie automobile de tirer parti
+des architectures \sdv et du langage \Rust. \GRust comble le fossé d'abstraction en offrant un
+modèle de conception de haut niveau, tout en générant un code sûr, efficace et formellement
+vérifiable, sans compromettre les méthodologies de développement établies.
+
+\section{Description Technique de \GRust}
+
+\GRust est un langage conçu pour combler le fossé entre la modélisation de haut niveau, familière
+aux ingénieurs système, et la programmation bas niveau en \Rust asynchrone, requise par les
+architectures \sdv.
+
+\subsection{Description Syntaxique}
+
+Cette section décrit les éléments syntaxiques et les concepts fondamentaux du langage \GRust. Nous y
+présentons, à l'aide de courts exemples, les quatre composantes qui structurent le langage~: le
+noyau asynchrone \GRFRP pour la définition de \emph{service}, la bibliothèque d'opérateurs \GReact,
+le noyau synchrone \GRSync pour la logique de calcul, et l'extension \GReusot pour la vérification
+formelle.
+
+\subsubsection{\GRFRP~: Le Noyau Asynchrone pour les Services}
+
+\GRFRP est le langage de haut niveau qui permet de définir l'architecture globale du système sous
+la forme de \emph{services}. Un service orchestre les flux de données asynchrones entre les
+interfaces du système (capteurs, actuateurs) et la logique de calcul interne.
+
+Les flux de données sont de deux types. Les \emph{signaux} (\fkf{signal}) représentent des
+valeurs continues dans le temps, comme la vitesse du véhicule. Les \emph{événements}
+(\fkf{event}) représentent des occurrences discrètes et ponctuelles, comme un clic de bouton.
+
+L'interface d'un \kft{service} est déclarée \via les mots-clés \kft{import} et \kft{export}. La
+logique interne est ensuite définie de manière déclarative dans le corps du \kft{service}.
+Les contraintes temporelles sont spécifiées par l'annotation \kft{@}\interval{10}{3000}, indiquant
+que le service \texttt{adaptive\_cruise\_control} ne calcule pas plus souvent que toutes les 10~ms
+et au moins toutes les 3~s.
+
+\begin{lstlisting}[language=GRust]
+// Interface du service
+import signal speed_km_h: float;
+export signal brakes_m_s: float;
+
+// Définition du service avec contraintes temporelles (min 10ms, max 3s)
+service adaptive_cruise_control @[10, 3000] {
+    // Déclaration d'un flux local
+    let signal speed_m_s: float = convert(speed_km_h);
+    // Définition d'un flux exporté
+    brakes_m_s = acc(speed_m_s, ...);
+}
+\end{lstlisting}
+
+\subsubsection{\GReact~: La Bibliothèque Réactive Intégrée}
+
+Pour manipuler ces flux asynchrones, \GRFRP est accompagné de \GReact, une `boîte à outils'
+d'opérateurs intégrée, inspirée de \textsc{ReactiveX}~\cite{reactivex}. Elle fournit des fonctions
+de flux prêtes à l'emploi pour les scénarios réactifs courants. En voici quelques éléments:
+
+\begin{description}
+      \item[Changement de type] L'opérateur \texttt{on\_change} permet de créer un évènement à
+            partir d'un signal, ne contenant que ses changement de valeur.
+            \begin{lstlisting}[language=GRust, numbers=none]
+let event radar_event: float = on_change(radar_signal);
+\end{lstlisting}
+      \item[Gérer le temps] L'opérateur \texttt{timeout} déclenche un événement si un évènement
+            reste silencieux trop longtemps, utile pour la surveillance.
+            \begin{lstlisting}[language=GRust, numbers=none]
+let event watchdog_event: unit = timeout(radar_event, 1000); // 1s
+\end{lstlisting}
+      \item[Fusionner des évènements] L'opérateur \texttt{merge} combine deux événements en un seul.
+            \begin{lstlisting}[language=GRust, numbers=none]
+let event any_user_action: unit = merge(button_press, screen_touch);
+\end{lstlisting}
+\end{description}
+
+\subsubsection{\GRSync~: Le Noyau Synchrone pour les Composants}
+
+\GRSync est le langage dédié à la création d'opérateurs de flux. Il est synchrone et déclaratif,
+inspiré de \Lustre~\cite{DBLP:conf/popl/CaspiPHP87}. On peut y définir~:
+\begin{itemize}
+      \item Des \emph{fonctions}, qui sont des calculs purs, sans état.
+      \item Des \emph{composants}, qui peuvent maintenir un état interne entre les instants de
+            calcul.
+\end{itemize}
+
+L'état est géré \via l'opérateur \kft{last}, qui accède à la valeur précédente d'un signal. Pour la
+logique événementielle, \GRSync utilise deux constructions principales~:
+
+\begin{itemize}
+      \item \kft{when}~: Permet de mettre a jour des signaux et d'envouer des évènements en réaction
+            à des occurrences discrètes. Un bloc \kft{init} définit la valeur initiale des signaux,
+            puis d'autres branches sont activées par la présence d'un événement ou d'un front
+            montant (un signal booléen qui passe de \kft{false} à \kft{true}). Les signaux non mis à
+            jour conservent leur valeur, créant une mémoire implicite, et les évènements sont
+            absents.
+            \begin{lstlisting}[language=GRust]
+component counter(max: int, count: unit?) -> (c: int, reset: unit?) {
+      when {
+            init    => { c = 0; }
+            count?  => { c = 1 + last c; }
+            c > max => { c = 0; reset = emit (); }
+      }
+}
+\end{lstlisting}
+      \item \kft{match}~: Structure de contrôle classique pour sélectionner un mode de calcul en
+            fonction de la valeur d'un signal, à la manière d'un \kft{switch} en \Lustre.
+            \begin{lstlisting}[language=GRust]
+match mode {
+      Mode::Eco   => { consumption = compute_eco(...); }
+      Mode::Sport => { consumption = compute_sport(...); }
+}
+\end{lstlisting}
+\end{itemize}
+
+\subsubsection{\GReusot~: Vérification Formelle Intégrée}
+
+Pour garantir la sûreté exigée par la norme \iso, \GRust met à disposition l'extension \GReusot qui
+permet d'intégrer des \emph{contrats formels} directement dans le code \GRSync.
+Il est possible de spécifier des \emph{préconditions} (\kft{requires}) et des \emph{postconditions}
+(\kft{ensures}) pour les fonctions et composants, leur donnant une spécification de preuve formelle,
+en plus de la spécification calculatoire.
+
+\begin{lstlisting}[language=GRust]
+function safe_divide(a: int, b: int) -> int
+    // Précondition : le diviseur ne doit pas être nul
+    requires { b != 0 }
+{
+    return a / b;
+}
+\end{lstlisting}
+Le compilateur traduit ces annotations dans le code \Rust pour le vérificateur
+\Creusot~\cite{DBLP:conf/icfem/DenisJM22}, qui peut alors prouver mathématiquement que le programme
+respecte ses contrats (par exemple, qu'une division par zéro n'arrivera jamais). Cette approche rend
+la vérification formelle plus accessible en la maintenant au niveau du modèle.
+
+\subsection{Vérifications Statiques à la Compilation}
+
+Pour garantir la robustesse et la prévisibilité des programmes, le compilateur \GRust réalise une
+série de vérifications statiques avant de générer le code \Rust. Ces analyses permettent de détecter
+de nombreuses erreurs au plus tôt, directement au niveau du modèle.
+
+\paragraph{Gestion des identifiants et de leur portée} Le compilateur vérifie que chaque identifiant
+(variable, composant, \etc) est déclaré avant d'être utilisé et qu'il n'y a pas de redéfinition
+ambiguë. Il applique pour cela deux modèles de portée distincts~:
+\begin{description}
+      \item[Portée lexicale] Dans un service et une fonction, les identifiants sont définis de
+            manière séquentielle. Un identifiant local n'est visible que pour les instructions qui
+            le suivent.
+      \item[Portée récursive] Dans un composant, toutes les équations sont mutuellement récursives.
+            Cela permet de décrire des systèmes de dataflow où les dépendances
+            sont cycliques (par exemple, \texttt{a = 1 + last b; b = a;}), ce qui est courant en
+            contrôle-commande.
+\end{description}
+De plus, des règles strictes s'appliquent aux structures de contrôle. Par exemple, toutes les
+branches d'un \kft{match} doivent définir exactement le même ensemble d'identifiants, assurant
+qu'une sortie est toujours calculée. À l'inverse, un \kft{when} permet des mises à jour
+partielles, ce qui correspond à sa sémantique événementielle.
+
+\paragraph{Système de typage} \GRust implémente son propre vérificateur de types pour fournir des
+messages d'erreur clairs et spécifiques au domaine des flots de données. Ce système est fondamental
+pour faire le pont entre les deux mondes du langage~:
+\begin{itemize}
+      \item Dans \GRFRP, on manipule des \emph{types de flux}~: \signal{\texttt{T}} et
+            \event{\texttt{T}}, qui décrivent le comportement temporel d'une donnée ayant des
+            valeurs de type \texttt{T}.
+      \item Dans \GRSync, on manipule des \emph{types échantillonnés}~: un \signal{\texttt{T}} est
+            échantillonné en une valeur de type \texttt{T} (car toujours présente), tandis qu'un
+            \event{\texttt{T}} est échantillonné en une valeur de type \opt{\texttt{T}}
+            (car possiblement absente).
+\end{itemize}
+Cette distinction permet au compilateur de rejeter des constructions sémantiquement incorrectes,
+comme l'application d'un opérateur temporel tel que \kft{timeout} à un signal, ou l'utilisation
+d'un événement dans une opération arithmétique sans avoir préalablement résolu sa présence.
+L'obligation de noter explicitement tous les types renforce la lisibilité et la prévisibilité du
+code.
+
+\paragraph{Analyse de causalité} Une troisième vérification statique de \GRust, hérité des langages
+synchrones, est la \emph{causalité}. Un programme est dit causal si chacune de ses sorties peut être
+calculée en un nombre fini d'étapes à partir des entrées. Cette propriété garantit qu'un programme
+est productif et ne contient pas de dépendances cycliques instantanées (par exemple,
+\texttt{x = x + 1}), qui créeraient un paradoxe logique insoluble. Le compilateur \GRust intègre une
+passe d'\emph{analyse de causalité} pour vérifier statiquement cette propriété sur les composants.
+
+\subparagraph{Dépendances et Ordre de Calcul} L'analyse de causalité repose sur la construction d'un
+\emph{graphe de dépendances} pour chaque composant. Les nœuds du graphe représentent les
+identifiants (entrées, sorties, variables locales), et les arêtes représentent les dépendances de
+données entre eux. Par exemple, l'équation \texttt{x = y + z} crée des arêtes de \texttt{y} et
+\texttt{z} vers \texttt{x}. Une dépendance \via un opérateur \kft{last} est marquée comme
+`retardée', car elle dépend d'une valeur calculée à l'instant précédent.
+%
+Un composant est causal si et seulement si son graphe de dépendances ne contient aucun cycle de
+dépendances instantanées. Un tel cycle signifierait qu'une valeur dépend d'elle-même au même instant
+de calcul, ce qui est impossible à résoudre.
+
+\subparagraph{Gestion des Dépendances Conditionnelles} La complexité de l'analyse augmente avec les
+constructions de contrôle comme \kft{match}. Une branche peut introduire une dépendance qui
+n'existe pas dans une autre. Par exemple~:
+\begin{lstlisting}[language=GRust, numbers=none]
+match c { true  => { x = y; } false => { y = x; } }
+\end{lstlisting}
+Une analyse naïve conclurait à une dépendance cyclique entre \texttt{x} et \texttt{y}. Pour éviter
+ce problème, le compilateur utilise une technique de \emph{renommage}~\cite{bourke:hal-03936656}~:
+les variables définies dans chaque branche sont traitées comme des entités distinctes (par exemple,
+\texttt{x\_true}, \texttt{y\_false}). Le graphe de dépendances est construit sur ces variables
+renommées, ce qui permet de capturer précisément les flux de données conditionnels sans créer de
+faux cycles.
+
+\subparagraph{Ordonnancement des Équations} Si un composant est causal, cela garantit qu'il existe
+au moins un ordre d'évaluation valide (un ordonnancement) pour ses équations. Le compilateur utilise
+le graphe de dépendances pour effectuer un \emph{tri topologique} des opérations, produisant ainsi
+la séquence d'instructions impératives nécessaire pour traduire un composant en une machine à états.
+
+\subsection{Implémentation du Compilateur}
+
+Le prototype de compilateur \GRust est implémenté en \emph{macro procédurale} \Rust, appelée
+\texttt{grust!}. Plutôt qu'un programme externe, le compilateur s'intègre directement dans la chaîne
+de compilation \Rust standard (\texttt{cargo build}). Il transforme une stream de token
+correspondant au code \GRust en stream de token correspondant au code \Rust asynchrone. Cette
+approche délègue la responsabilité de la génération du code machine final au compilateur \Rust, et
+permet une interopérabilité avec le code \Rust existant.
+
+\paragraph{Compilation de \GRSync} Un composant \GRSync, défini par des équations déclaratives, est
+compilé en une machine à états impérative. La cible est une structure \Rust qui implémente un trait
+\texttt{Component}, exposant deux méthodes~: \texttt{init} pour créer l'état initial, et
+\texttt{step} pour exécuter un pas de calcul. Pour cela, le compilateur effectue plusieurs passes~:
+\begin{description}
+      \item[Analyse grammaticale] Un \emph{Arbre de Syntaxe Abstrait} est créé à partir du code
+            source. Il represente le programme de manière structurée, en accord avec la grammaire de
+            \GRust.
+      \item[Analyses statiques] S'en suit les analyses présentées précédemment.
+      \item[Normalisation] Les constructions de haut niveau comme \kft{when} sont traduites en
+            expressions \kft{match} complexes, unifiant la logique de contrôle.
+      \item[Ordonnancement] En utilisant l'ordre topologique issu de l'analyse de causalité, les
+            équations sont ordonnancées en une séquence d'instructions linéaires.
+      \item[Génération de code] La séquence ordonnancée devient le corps de la méthode
+            \texttt{step}, et les variables d'état (issues des opérateurs \kft{last}) deviennent
+            les champs de la structure de la machine à états.
+\end{description}
+
+\paragraph{Compilation de \GRFRP} Un service \GRFRP est compilé en une \emph{machine de propagation
+      asynchrone}. La cible est une fonction \texttt{run} qui lance une tâche asynchrone gérant le
+cycle de vie du service. Le principe de fonctionnement est le suivant~:
+\begin{enumerate}
+      \item Toutes les sources d'entrée (flux importés, timers internes) sont fusionnées en un
+            unique flux, qui est ensuite trié par ordre de priorité. Pour l'instant l'ordre est
+            chronologique, mais il est possible de définir un ordre plus complexe prenant en compte
+            la criticité des différentes entrées.
+      \item Une boucle principale asynchrone attend le prochain événement de ce flux ordonné.
+      \item Lorsqu'un événement arrive, il est distribué à un gestionnaire (\emph{handler}) dédié,
+            généré spécifiquement pour cette entrée.
+      \item Ce gestionnaire exécute la chaîne de calculs impactée par cette entrée, en appelant les
+            méthodes \texttt{step} des composants concernés. Si une sortie est modifiée, la nouvelle
+            valeur est envoyée de manière asynchrone vers le bus de communication.
+\end{enumerate}
+Ce modèle garantit une exécution efficace (les calculs ne sont effectués que si nécessaire) et
+déterministe (les événements sont traités dans un ordre déterminé statiquement).
+
+\paragraph{Compilation de \GReusot} Le compilateur traduit les contrats \GReusot en annotations
+\Creusot sur le code \Rust généré. Pour une fonction, il génère également une version
+\emph{logique} parallèle, opérant sur des types mathématiques (\eg entiers naturels), et ajoute une
+preuve que le code exécutable se comporte conformément à ce modèle logique. Cela permet une
+vérification compositionnelle où la preuve d'un composant peut s'appuyer sur les spécifications
+des fonctions qu'il appelle.
+
+\subsection{Évaluations et Benchmarks}
+
+L'évaluation de \GRust, menée en partie lors de deux stages (l'un académique, l'un industriel),
+s'articule en trois volets pour valider ses contributions principales~: la performance de son noyau
+synchrone, son expressivité pour la conception de haut niveau, et son applicabilité dans un
+contexte industriel \sdv.
+
+\subsubsection{Évaluation des performances de \GRSync}
+
+Le premier volet évalue les performances de \GRSync, en le comparant aux compilateurs académiques
+\Lustre de référence (\Heptagon~\cite{heptagon}, \LustreC~\cite{lustrec} et \Velus~\cite{velus}).
+Pour ce faire, un frontend, \GLustre, a été développé pour transpiler du \Lustre en \GRSync.
+Plusieurs systèmes réalistes, comme le filtre de Kalman du drone \crazyflie~\cite{crazyflie-fm} et
+un modèle d'avion de ligne (TCM)~\cite{tcmOriginal,tcmCocospec}, ont été utilisés pour les tests.
+%
+Les résultats montrent que la chaîne d'outils de \GRSync est très compétitive par rapport aux outils
+de l'état de l'art académique.
+
+\subsubsection{Évaluation de la conception de haut niveau}
+
+Le deuxième volet est une étude de cas qualitative, centrée sur le même filtre de Kalman du drone
+\crazyflie, pour comparer l'expressivité de \GRust à une implémentation bas niveau. L'implémentation
+originelle en \Ci repose sur des mécanismes de synchronisation manuels et complexes (sémaphores)
+pour gérer la concurrence entre la tâche d'estimation et la boucle de contrôle principale. Le code
+résultant est difficile à analyser et source potentielle d'erreurs.
+
+À l'inverse, le modèle \GRust remplace cette complexité par un modèle déclaratif et événementiel où
+les dépendances de données sont explicites. La communication entre composants se fait \via des flux
+typés, éliminant le besoin de synchronisation manuelle. Le modèle \GRust est ainsi significativement
+plus concis, lisible et, par construction, plus sûr.
+
+\subsubsection{Comparaison avec du code \Rust industriel}
+
+Le troisième volet, mené lors d'un stage industriel chez \ampere, compare le code généré par \GRust
+à des implémentations manuelles en \Rust asynchrone pour trois services automobiles réels. Ces
+services ont été réimplémentés en \GRust et déployés sur le calculateur cible du véhicule pour une
+mesure en conditions réelles. Deux scénarios d'entrées ont été utilisés~: un flux \emph{périodique}
+(données envoyées à intervalles fixes) et un flux \emph{événementiel} (données envoyées uniquement
+en cas de changement).
+%
+Les résultats sont les suivants~:
+\begin{itemize}
+      \item \textbf{Concision~:} Les modèles \GRust sont jusqu'à 71\% plus concis que le code
+            manuel, démontrant un gain de productivité et de maintenabilité significatif.
+
+      \item \textbf{Validation fonctionnelle~:} La comparaison des sorties a montré une équivalence
+            fonctionnelle entre le code généré et le code manuel.
+
+      \item \textbf{Performance~:} Le passage d'une communication périodique à événementielle divise
+            la charge CPU par deux, validant l'approche promue pour les architectures \sdv. Le code
+            généré par \GRust affiche des performances (CPU, mémoire) quasi identiques à celles du
+            code manuel optimisé, avec un surcoût négligeable.
+
+      \item \textbf{Analyse de traces~:} L'analyse des traces d'exécution (\via
+            \perfetto~\cite{perfetto}) confirme que le gain en performance provient de l'élimination
+            des traitements redondants sur les entrées inchangées.
+
+      \item \textbf{Validation du théorème de sur-échantillonnage~:} En comparant les sorties de
+            \GRust entre les scénarios périodique et événementiel, nous avons validé
+            expérimentalement le théorème de sur-échantillonnage.
+\end{itemize}
+
+En conclusion, ces évaluations démontrent que \GRust atteint ses objectifs. Il offre un niveau
+d'abstraction élevé qui améliore la productivité et la sûreté, tout en générant un code dont les
+performances sont comparables à celles d'un développement manuel bas niveau, ce qui en fait une
+solution viable et attractive pour l'industrie automobile.
+
+\subsection{Synthèse}
+
+Cette section a détaillé la conception et l'implémentation de \GRust, de sa syntaxe à son évaluation
+en passant par les mécanismes de son compilateur. Les benchmarks ont montré que le code généré est
+non seulement fonctionnellement correct, mais aussi très performant, rivalisant les compilateurs
+académiques de référence et égalant les performances de code \Rust écrit à la main par des experts.
+
+\section{Sémantique Formelle}
+
+Cette section établit les fondations théoriques de \GRust en définissant une sémantique formelle
+pour ses deux noyaux, \GRSync et \GRFRP. Pour chaque sous-langage, deux modèles sémantiques
+complémentaires sont développés~: une \emph{sémantique opérationnelle} qui décrit l'exécution pas à
+pas, et une \emph{sémantique dénotationnelle} offre une vision sur une exécution complète.
+L'équivalence de ces deux modèles est prouvée, tout comme les propriétés de productivité et de
+déterminisme. Une contribution centrale est la résolution formelle du problème de
+\emph{sur-échantillonnage} \via un système de types réactifs, garantissant la correction sémantique
+de l'interaction entre le monde asynchrone des services et le monde synchrone des composants.
+
+\subsection{Sémantique Opérationnelle~: Modéliser l'Exécution Pas à Pas}
+
+La sémantique opérationnelle décrit comment un programme \GRust évolue en réponse à des entrées.
+Elle modélise le comportement du système tel qu'il serait exécuté.
+
+\subsubsection{Composant \GRSync~: Machine à États}
+
+Le comportement d'un composant \GRSync modélise une \emph{machine à états finis}. La sémantique
+définit une fonction de transition qui, pour un état interne donné et un échantillon des entrées à
+un instant logique, produit un nouvel état et les sorties correspondantes.
+
+\paragraph{État et Transition d'un Composant} L'état d'un composant encapsule sa mémoire~: la
+valeur précédente de chaque signal accédé \via \kft{last}, ainsi que l'état interne de tous les
+sous-composants qu'il instancie. La sémantique d'un composant est donc une fonction de transition
+qui prend l'état courant et les entrées actuelles pour calculer le nouvel état et les sorties.
+
+\paragraph{Évaluation des Équations par Point Fixe} Le corps d'un composant est un ensemble
+d'équations simultanées avec des dépendances mutuelles. Pour modéliser leur évaluation en un seul
+instant logique, la sémantique utilise une \emph{itération par point fixe}.
+\begin{enumerate}
+      \item Au début du calcul, tous les identifiants définis localement sont inconnus et marqués
+            comme indéfinis ($\bot$).
+      \item Le système évalue itérativement l'ensemble des équations. À chaque itération, les
+            équations dont les dépendances sont maintenant connues sont calculées.
+      \item Si une valeur n'est pas encore calculée, toute opération qui en dépend produit $\bot$.
+      \item Le processus continue jusqu'à ce qu'un point fixe soit atteint, c'est-à-dire que toutes
+            les valeurs sont calculées.
+\end{enumerate}
+L'analyse de causalité (décrite à la section précédente) garantit que ce point fixe est toujours
+atteint en un nombre fini d'itérations.
+
+\subsubsection{Service \GRFRP~: Machine de Propagation}
+
+Un service \GRFRP modélise une \emph{machine de propagation asynchrone}. Son rôle est de réagir à
+des messages externes et de propager les changements à travers les dépendances des flux.
+
+\paragraph{État et Messages} L'état d'un service mémorise la dernière valeur connue des signaux et
+des évènements dont ses opérations dépendent. Le service réagit à des messages entrants, qui peuvent
+être~: un changement de valeur sur un flux importé, muni d'un horodatage (\textit{timestamp}) ; ou
+l'expiration d'un minuteur interne, également horodaté.
+
+\paragraph{Propagation des Changements} Lorsqu'un message est reçu, la sémantique décrit comment
+cette information déclenche une cascade de calculs~:
+\begin{enumerate}
+      \item Le message initial met à jour le contexte de propagation pour le flux correspondant.
+      \item Le système parcourt ensuite les dépendances du graphe de flux. Pour chaque opérateur, il
+            évalue si ses entrées dans le contexte ont changé.
+      \item Si une entrée a changé, l'opérateur est ré-évalué, ce qui peut produire de nouvelles
+            valeurs. Ces nouvelles valeurs mettent à leur tour à jour le contexte, continuant la
+            propagation.
+      \item Si un flux exporté est mis à jour, un message de sortie est généré.
+\end{enumerate}
+Ce modèle décrit une exécution où un calcul n'est effectué qu'en réponse à un changement.
+
+\paragraph{Opérateurs \GReact} La sémantique formalise le comportement de chaque opérateur. Par
+exemple, \timeoutExpr{\texttt{e}}{\texttt{T}} est modélisé par deux règles, une qui réinitialise
+un minuteur interne lorsque l'événement \texttt{e} arrive, et une autre qui produit un événement de
+sortie lorsque le minuteur correspondant expire (le minuteur est réinitialisé également).
+
+\paragraph{Interaction avec \GRSync} Le lien entre les deux mondes est formalisé au niveau de
+l'appel de composants dans un service. Lorsqu'un service \GRFRP propage un changement vers un
+composant \GRSync, il déclenche la fonction de transition \texttt{step} du composant. Cette
+transition n'a lieu que si au moins une des entrées du composant a effectivement changé. Les
+résultats de ce calcul synchrone sont ensuite propagés à leur tour dans le service.
+
+\subsection{Sémantique Dénotationnelle~: Une Vision Abstraite des Flux}
+
+La sémantique dénotationnelle s'intéresse à la signification d'un programme sur une exécution
+infinie. Chaque flux est interprété comme une suite de valeurs infinie, appelée \emph{stream}. Ce
+formalisme repose sur la \emph{coinduction}~\cite{DBLP:journals/mscs/KozenS17}, un principe de
+preuve adapté aux structures de données infinies.
+
+\subsubsection{Composant \GRSync~: Fonction de Streams Synchrones}
+
+Dans le monde synchrone de \GRSync, le temps progresse par \emph{instants logiques} discrets. Un
+flux est donc une séquence infinie de valeurs où le $n^\text{ième}$ élément correspond à la valeur
+du flux au $n^\text{ième}$ instant. Pour gérer les calculs qui ne sont pas actifs à chaque instant
+(par exemple, dans une branche de \kft{match}), on utilise une valeur spéciale $\bot$ (bottom) pour
+marquer l'absence de valeur, garantissant ainsi que tous les flux restent temporellement alignés.
+
+Un composant est interprété comme une fonction de stream, qui transforme des streams d'entrée en
+streams de sortie. Les équations du composant sont vues comme des contraintes d'égalité sur ces
+streams.
+\begin{itemize}
+      \item L'opérateur \lastExpr{\texttt{x}} est modélisé par une fonction
+            \buffer{\texttt{c}}{\texttt{s}}, qui décale la stream \texttt{s} correspondant à
+            \texttt{x} d'un instant et le préfixe avec une valeur initiale.
+
+      \item Les constructions \kft{match} et \kft{when} sont interprétées \via un \emph{calcul
+                  d'horloges} implicite. Une horloge est unz stream de booléens qui dicte quand un
+            calcul est actif. Chaque branche d'un \kft{match} ou d'un \kft{when} définit une
+            \emph{sous-horloge} qui n'est active que lorsque la condition de la branche est vraie.
+            Les calculs de la branche sont alors effectués sur cette sous-horloge. Pour un
+            \kft{match}, l'exhaustivité des patterns garantit que la fusion des sous-horloges de
+            chaque branche recompose l'horloge d'origine. Pour un \kft{when}, la sémantique est
+            différente~: lorsqu'aucune branche n'est active, les signaux conservent leur valeur
+            précédente (\via un opérateur \kft{last} implicite) et les événements sont absents.
+\end{itemize}
+Ce modèle, classique dans la théorie des langages synchrones, permet de raisonner sur le
+comportement temporel global du système de manière purement fonctionnelle.
+
+\subsubsection{Service \GRFRP~: Fonction de Stream Horodatées}
+
+Dans le monde asynchrone de \GRFRP, un flux est interprété comme une stream de valeurs horodatées
+(\emph{timestamped stream}), c'est-à-dire une séquence de paires \texttt{(t, v)} où les horodatages
+sont strictement croissants. Ce modèle, inspiré du Tagged-Signal
+Model~\cite{DBLP:journals/tcad/LeeS98}, capture la nature non-synchronisée des communications.
+
+Un service est interprété comme une fonction qui transforme un contexte de stream d'entrée
+horodatées en un contexte de stream de sortie horodatées. Les opérateurs de la bibliothèque \GReact
+sont définis comme des fonctions coinductives sur ces streams~:
+\begin{itemize}
+      \item \timeoutExpr{\texttt{s}}{\texttt{T}} est une fonction qui compare les horodatages de la
+            stream d'entrée \texttt{s} à une deadline interne pour générer des événements de sortie.
+      \item \mergeExpr{\texttt{s1}}{\texttt{s2}} est une fonction qui fusionne deux streams en une
+            seule de telle sorte que l'horodatage reste croissant, en priorisant la stream de
+            gauche \texttt{s1}.
+\end{itemize}
+La validité de ces fonctions coinductives est prouvée, garantissant la correction de la sémantique.
+
+\paragraph{Le Pont entre \GRFRP et \GRSync} La sémantique dénotationnelle formalise également
+l'interaction entre les deux noyaux. Lorsqu'un service \GRFRP appelle un composant \GRSync, un pont
+sémantique est établi~:
+\begin{enumerate}
+      \item Les streams d'entrée horodatées du service sont projetées sur une horloge synchrone~:
+            pour un signal, sa dernière valeur est répétée à chaque instant logique ; pour un
+            événement, sa valeur est présente uniquement à l'instant de son occurrence et absente
+            ($\bot$) sinon.
+      \item La fonction de streams synchrone du composant \GRSync est ensuite appliquée.
+      \item Les streams synchrones de sortie sont re-basculées dans le monde asynchrone pour devenir
+            des streams horodatées, ne conservant que les changements ou occurrences.
+\end{enumerate}
+Cette double projection assure que la sémantique synchrone et déterministe des composants est
+correctement intégrée dans le cadre global asynchrone des services.
+
+\subsection{Théorèmes Fondamentaux de Correction}
+
+Sur la base des sémantiques opérationnelle et dénotationnelle, nous prouvons des théorèmes qui
+garantissent la prévisibilité des programmes \GRust. Ces preuves sont menées séparément pour les
+deux noyaux, \GRSync et \GRFRP, en respectant leurs sémantiques distinctes.
+
+\subsubsection{Productivité}
+
+Le théorème de productivité garantit qu'un programme \GRust passant les vérifications (typage,
+identifiants, causalité) ne se bloque jamais et produira toujours une sortie pour toute entrée
+valide (en l'absence d'erreurs d'exécution). Pour un système réactif qui doit fonctionner en
+continu, c'est une propriété fondamentale qui assure sa vivacité.
+
+Le théorème énonce que la fonction de transition de la sémantique opérationnelle est totale. Pour
+tout état valide et toute entrée valide, la fonction produit toujours une sortie et un nouvel état
+valides. Pour le prouver, on définit une fonction d'observation qui exécute le programme sur une
+séquence d'entrées et on démontre que cette fonction est toujours définie.
+%
+La preuve est menée par induction structurelle sur les constructions du langage.
+\begin{itemize}
+      \item Pour les constructions simples (constantes, opérations), la preuve est directe.
+      \item Pour les constructions complexes, la preuve s'appuie sur l'hypothèse d'induction
+            appliquée à leurs sous-expressions.
+      \item La principale difficulté, les équations mutuellement récursives de \GRSync, est résolue
+            par une \emph{induction sur le rang de causalité} des identifiants. Le rang d'un
+            identifiant correspond à la longueur de sa plus longue chaîne de dépendances. En
+            prouvant la propriété pour les identifiants de rang 0 (sans dépendances), puis en
+            montrant qu'elle se propage aux rangs supérieurs, on garantit que chaque valeur peut
+            être calculée en un nombre fini d'itérations.
+\end{itemize}
+
+\subsubsection{Déterminisme}
+
+Le théorème de déterminisme assure que le comportement d'un programme est prévisible et
+reproductible. Il est indispensable pour le test, le débogage et la certification, car il garantit
+que les sorties dépendent uniquement des entrées, et non de facteurs externes non spécifiés comme
+l'ordonnancement des tâches.
+
+Le théorème énonce que pour un historique d'entrées donné, l'historique des sorties est unique.
+Formellement, il est prouvé au niveau de la sémantique dénotationnelle~: si deux exécutions partent
+de streams d'entrée équivalentes, alors leurs streams de sortie sont également équivalentes.
+%
+La preuve procède également par induction structurelle sur le langage, en montrant que chaque
+opérateur est une fonction mathématique.
+\begin{itemize}
+      \item Pour les opérateurs simples, la preuve est directe.
+      \item Pour les opérateurs de \GReact, on montre que les fonctions coinductives qui les
+            définissent sont déterministes.
+      \item Pour les équations récursives de \GRSync, on utilise à nouveau une induction sur le rang
+            de causalité pour montrer que chaque stream est uniquement déterminée par les streams
+            dont elle dépend.
+\end{itemize}
+
+\subsubsection{Équivalence}
+
+Le théorème d'équivalence prouve que la sémantique opérationnelle (le modèle d'exécution concret)
+est une implémentation fidèle de la sémantique dénotationnelle (la spécification mathématique
+abstraite). Cette cohérence garantit que les propriétés prouvées sur le modèle abstrait s'appliquent
+bien au comportement réel du programme.
+
+Le théorème établit qu'une simulation infinie de la sémantique opérationnelle sur une séquence
+d'entrées produit une trace de valeurs qui est une dénotation valide, et inversement.
+%
+La preuve est menée par coinduction, la technique appropriée pour raisonner sur les stream infinis.
+\begin{itemize}
+      \item La direction \emph{opérationnelle $\Rightarrow$ dénotationnelle} est la plus complexe.
+            Elle se fait par induction structurelle sur le programme, en montrant que chaque pas de
+            la sémantique opérationnelle respecte les contraintes d'égalité de la sémantique
+            dénotationnelle.
+
+      \item La direction \emph{dénotationnelle $\Rightarrow$ opérationnelle} est plus simple. Elle
+            s'appuie sur les théorèmes de productivité et de déterminisme. On sait qu'il existe
+            \emph{au moins une} exécution opérationnelle (grâce à la productivité). On montre que
+            cette exécution satisfait la sémantique dénotationnelle (grâce à la première direction
+            de la preuve). Enfin, comme la sémantique dénotationnelle est déterministe, on conclut
+            que \emph{toutes} les exécutions possibles sont équivalentes, y compris celle que l'on
+            cherchait à construire.
+\end{itemize}
+
+\subsection{Le Défi du Sur-échantillonnage et sa Solution}
+
+Une contribution théorique majeure de la thèse est la résolution du conflit sémantique entre
+l'exécution événementielle des services \GRFRP et la logique synchrone des composants \GRSync. Cette
+section détaille le problème, la solution apportée par le système de types réactifs, et la
+validation formelle \via le théorème de sur-échantillonnage.
+
+\subsubsection{Le Problème du Sur-échantillonnage (\textit{Oversampling})}
+
+L'architecture GALS de \GRust implique qu'un composant synchrone \GRSync est exécuté par un service
+asynchrone \GRFRP. Idéalement, pour être efficace, le service ne devrait déclencher un pas de calcul
+du composant que lorsque ses entrées changent. Cependant, un service peut être activé par une entrée
+qui n'est pas une dépendance du composant, et il est possible que le composant soit tout de même
+ré-évalué~: il est \emph{sur-échantillonné}.
+
+Ce sur-échantillonnage devient problématique si la logique du composant dépend de flux qui ne sont
+pas stables entre deux de ses propres activations. Il existe trois sources principales d'instabilité~:
+\begin{description}
+      \item[Le temps physique] L'opérateur \timeExpr de \GRFRP fournit l'horodatage de l'événement
+            déclencheur. Si un composant dépend de cette valeur, chaque sur-échantillonnage (qui a
+            un nouvel horodatage) modifiera son état, même si ses entrées fonctionnelles n'ont pas
+            changé.
+      \item[Les mémoires non gardées] Un compteur comme \texttt{o = last o + 1} a une boucle de
+            rétroaction interne non conditionnée. Chaque exécution, y compris un
+            sur-échantillonnage, incrémentera son état.
+      \item[Les émissions d'événements non gardées] Un appel non gardé de \emitExpr{\texttt{x}}
+            produit un évènement qui est sémantiquement toujours présent. Une exécution
+            événementielle ne le déclenchera cependant que lors d'un changement de \texttt{x},
+            créant une incohérence.
+\end{description}
+Dans ces cas, le comportement du composant dépendrait de la fréquence d'activation du service, et
+non plus seulement de ses propres entrées, violant ainsi le principe de compositionnalité.
+
+\subsubsection{La Solution~: un Système de Types Réactifs}
+
+Pour résoudre ce problème, un \emph{système de types réactifs} est introduit. Son rôle est de
+garantir statiquement qu'un sur-échantillonnage n'aura pas d'effets de bord non désirés. Pour ce
+faire, il classifie tous les flux en deux catégories~:
+\begin{description}
+      \item [Discrets] Ce sont les flux dont la valeur ne change qu'en réponse à une modification
+            explicite d'une de leurs dépendances directes. Ils sont stables lors d'un
+            sur-échantillonnage.
+      \item [Continus] Ce sont les flux dont la valeur peut changer lors d'un sur-échantillonnage,
+            dont les trois sources d'instabilité~: \kft{time}, les mémoires \kft{last} et les
+            émissions \kft{emit} non gardées.
+\end{description}
+
+Le système de types impose que les mémoires \kft{last} et la logique événementielle (les patterns
+d'un \kft{when}) ne peuvent dépendre que de flux discrets. Cette règle, appliquée à la fois dans
+\GRSync et \GRFRP, empêche statiquement les dépendances temporelles implicites qui causent les
+problèmes de sur-échantillonnage. La construction \kft{when} devient le mécanisme central de
+\emph{discrétisation}, en s'assurant que les calculs ne sont activés que par des événements discrets.
+
+\subsubsection{Le Théorème de Sur-échantillonnage}
+
+Ce typage est validé par le \emph{Théorème de Sur-échantillonnage}. Pour tout service ou composant
+bien typé comme étant réactif, une évaluation due au sur-échantillonnage (c'est-à-dire une exécution
+alors que ses entrées discrètes n'ont pas changé) ne modifie ni son état interne, ni la valeur de
+ses sorties discrètes. Ce théorème prouve que le modèle d'exécution événementiel de \GRust est
+sémantiquement correct. Il justifie que l'on peut opter pour une exécution évènementielle sans
+sacrifier la prévisibilité et le déterminisme du comportement synchrone.
+
+La preuve est menée par induction structurelle sur les constructions du langage, pour \GRSync et
+\GRFRP.
+\begin{itemize}
+      \item Pour \GRSync, on formalise un pas de sur-échantillonnage en fournissant au composant des
+            entrées qui sont des \emph{non-changements} (la même valeur pour un signal, ou l'absence
+            pour un événement). On prouve alors que l'état interne reste identique et que les
+            sorties discrètes sont également des \emph{non-changements}. La principale difficulté
+            est de montrer que les constructions de contrôle (\kft{match}, \kft{when}) se comportent
+            de manière stable, ce qui est garanti par le système de types réactifs qui assure que
+            leurs conditions de garde sont discrètes.
+
+      \item Pour \GRFRP, le sur-échantillonnage est modélisé par l'arrivée d'un message sur un flux
+            que le service n'importe pas. La preuve montre que cette arrivée ne déclenche aucune
+            chaîne de propagation pour les flux discrets. Pour raisonner sur la stabilité des
+            valeurs à travers plusieurs pas de temps, une fonction auxiliaire
+            \texttt{current\_value} est introduite pour calculer la valeur courante d'un flux à
+            partir de son historique complet de changement. On démontre alors que la valeur courante
+            d'une sortie discrète après une séquence d'exécutions est la même, que cette séquence
+            contienne ou non des pas de sur-échantillonnage.
+\end{itemize}
+Ensemble, ces preuves établissent une fondation solide pour l'exécution événementielle de \GRust.
+
+\subsection{Synthèse}
+
+Cette section a établi les fondations théoriques de \GRust en développant un cadre formel pour ses
+deux noyaux, \GRSync et \GRFRP. Pour chacun, nous avons défini deux sémantiques~:
+\begin{itemize}
+      \item La \emph{sémantique opérationnelle} modélise l'exécution pas à pas du langage. Elle
+            décrit les composants \GRSync comme des machines à états finis et les services \GRFRP
+            comme des machines de propagation asynchrone.
+
+      \item La \emph{sémantique dénotationnelle} fournit une interprétation mathématique abstraite,
+            associant à chaque flux une \textit{stream}. Elle modélise les composants comme des
+            fonctions sur les stream et les équations comme des contraintes, permettant de raisonner
+            sur le comportement global du programme.
+\end{itemize}
+La \emph{productivité} garantit qu'un programme ne se bloque jamais. Le \emph{déterminisme} assure
+que son comportement est prévisible et reproductible. Enfin, le théorème d'\emph{équivalence} prouve
+que les deux sémantiques coïncident, assurant que le modèle d'exécution concret est une
+implémentation fidèle de la spécification mathématique.
+
+Une contribution théorique majeure de cette section a été la résolution formelle du problème de
+\emph{sur-échantillonnage}. Nous avons montré comment une exécution événementielle pouvait entrer
+en conflit avec la sémantique synchrone, et nous avons résolu ce conflit en introduisant un
+\emph{système de types réactifs}. Ce système distingue les flux \emph{continus} (sensibles au
+temps d'exécution) des flux \emph{discrets} et impose des règles strictes pour leur interaction.
+La validité de cette approche a été confirmée par le \emph{théorème de sur-échantillonnage}, qui
+prouve qu'un programme bien typé est sémantiquement insensible aux pas de calcul superflus.
+
+\section{Conclusion et Perspectives}
+
+Cette thèse a abordé les défis logiciels critiques qui émergent de la transition de l'industrie
+automobile vers \emph{Software-Defined Vehicle} (\sdv). Pour répondre à ces enjeux, nous avons
+introduit \GRust, un langage de programmation dédié qui réconcilie les pratiques de modélisation
+établies avec les exigences des architectures logicielles modernes. \GRust unifie la rigueur
+déterministe du paradigme \emph{synchrone}, familier aux ingénieurs, avec la flexibilité de la
+\emph{Programmation Fonctionnelle Réactive} (\frp) pour modéliser les comportements événementiels.
+Cette synthèse permet de concevoir des systèmes complexes à un haut niveau d'abstraction, tout en
+générant automatiquement un code \Rust asynchrone, sûr et performant.
+
+Les contributions de cette thèse sont les suivantes~:
+\begin{enumerate}
+      \item la conception du langage \GRust et de son compilateur prototype ;
+
+      \item l'établissement des fondations théoriques du langage à travers des sémantiques
+            opérationnelle et dénotationnelle ;
+
+      \item la productivité, le déterminisme et l'équivalence des deux sémantiques ;
+
+      \item la résolution du conflit sémantique entre l'exécution événementielle des services et la
+            logique synchrone des composants, que nous nommons sur-échantillonnage, résolu par un
+            système de types réactifs ; et
+
+      \item la validation pratique de l'approche par des benchmarks.
+\end{enumerate}
+
+\subsection{Limites des Travaux Actuels}
+
+Bien que cette thèse établisse la viabilité de l'approche \GRust, certaines limites définissent le
+périmètre des contributions actuelles. Le compilateur prototype n'implémente pas encore le système
+de types réactifs, ce qui signifie que les garanties contre le sur-échantillonnage ne sont pas
+encore appliquées en pratique. Les preuves sémantiques ont été réalisées manuellement et n'ont pas
+été vérifiées par un assistant de preuve formel comme Rocq~\cite{rocq} ou
+Isabelle~\cite{DBLP:books/sp/NipkowPW02}, ce qui représenterait un niveau de confiance supérieur.
+Enfin, l'outil de vérification \GReusot est limité dans sa capacité à raisonner de manière
+compositionnelle sur des composants à état, car il ne permet pas encore de spécifier ou d'utiliser
+des invariants d'état pour les sous-composants.
+
+\subsection{Perspectives et Travaux Futurs}
+
+Les résultats prometteurs de \GRust ouvrent de nombreuses perspectives de recherche et de
+développement pour en faire un outil industriel robuste.
+
+\paragraph{Évolution du Langage et du Compilateur} La priorité est de finaliser l'implémentation du
+système de types réactifs dans le compilateur pour garantir statiquement la résilience au
+sur-échantillonnage. À plus long terme, le compilateur pourrait être rendu agnostique au
+\textit{runtime} asynchrone (actuellement dépendant de \texttt{tokio}~\cite{tokio}) pour cibler des
+environnements embarqués plus contraints.
+
+\paragraph{Vérification et Validation} Pour renforcer les garanties de sûreté, l'outil \GReusot doit
+être étendu pour supporter la vérification compositionnelle de composants à état, notamment par
+l'ajout d'invariants. De plus, la création d'un framework de test intégré à \GRust permettrait aux
+ingénieurs de valider leurs modèles par rapport à des spécifications fonctionnelles. Enfin, la
+vérification formelle du \textit{runtime} asynchrone lui-même et l'intégration d'outils d'analyse de
+temps d'exécution au pire cas (WCET) compléteraient la chaîne de preuves, de la conception à
+l'exécution.
+
+\paragraph{Industrialisation et Écosystème} Pour une adoption industrielle, la chaîne d'outils
+\GRust doit être enrichie pour faciliter la qualification selon la norme \iso. Cela inclut la
+génération automatique d'artefacts de certification, comme des matrices de traçabilité et des
+documents de conception. Des benchmarks sur des cas d'usage plus complexes, comme des systèmes ADAS
+complets, seront également nécessaires pour valider la scalabilité de l'approche.
+
+\subsection{Remarques Finales}
+
+En conclusion, cette thèse a démontré qu'une approche par modélisation de haut niveau, incarnée par
+\GRust, est une stratégie viable et efficace pour maîtriser la complexité croissante des logiciels
+automobiles. En unifiant la rigueur du paradigme synchrone avec l'expressivité de la programmation
+réactive, \GRust comble le fossé entre les outils de conception traditionnels et les exigences des
+architectures logicielles modernes. En générant un code \Rust sûr et performant, il offre une voie
+pragmatique vers le développement de la prochaine génération de systèmes critiques, en garantissant
+à la fois la sûreté, la maintenabilité et la performance.

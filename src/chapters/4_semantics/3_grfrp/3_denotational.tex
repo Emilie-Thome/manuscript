@@ -1,0 +1,897 @@
+\subsection{Denotational Semantics of \GRFRP}
+\label{sec:semantics:grfrp:denot}
+
+The denotational semantics of \GRFRP, following previous work~\cite{DBLP:journals/tcad/LeeS98},
+associates to flows a timestamped stream representing their evolution over time: the timestamped
+values in a signal stream represent its updates, while those of an event represent its occurrences.
+This section reviews its construction.
+
+\begin{table}[!ht]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}\hline
+        $v, \, \some{v}, \, \none \in \Val$          & A value of any type; \ttf{some} and \none represent optional values.                             \\\hline
+        $v_\bot \in \ValBot ::= v \, \vert \, \bot$  & A value that may be present $v$ or absent $\bot$.                                                \\\hline
+        $v_d$                                        & A default value, predefined unique value for each type.                                          \\\hline
+        $sty ::= ty \, \vert \, \mayB{ty}$           & A type, where \kwf{?} indicates an event type.                                                   \\\hline
+        $\tyCtx[x] = sty$                            & A typing context \tyCtx mapping flow identifiers to their types.                                 \\\hline
+        \mkcell{$\G[f] = \mathfoot{\component{f}{\mathtiny{x_i^+}}{\mathtiny{x_o^+}}{\mathtiny{eq^+}}{\mathtiny{x_m^+ = c^+}}}$                         \\
+        $\G[F] = \service{F}{stmt^+}$}               & A program context \G mapping component and service names to their definitions.                   \\\hline
+        $t \in \Time$                                & A timestamp.                                                                                     \\\hline
+        $\ts \in \TStream{\Val}::= (t, v) \next \ts$ & A coinductive stream of increasing timestamped values.                                           \\\hline
+        $\tck ::= (t, \true) \next \tck$             & A timestamped stream constantly equal to \true, named clock.                                     \\\hline
+        $[\ts^+]$                                    & An implicitly finite list of streams $\ts^+$.                                                    \\\hline
+        $\ts_1 \equiv \ts_2$                         & Equivalence of the timestamped streams $\ts_1$ and $\ts_2$.                                      \\\hline
+        $K[x], I[x], O[x]$                           & Stream contexts $I$, $O$, and $K$ that map identifiers to their timestamped streams.             \\\hline
+        \serviceDenot{\tck}{I}{F}{O}                 & The service $F$ is a function on \tck mapping context $I$ to context $O$.                        \\\hline
+        \stmtDenot{\tck}{I}{K}{stmt}{O}              & The constraints of the statement $stmt$ are satisfied by the contexts $I$, $O$, and $K$ on \tck. \\\hline
+        \sigmaDenot{\tck}{K}{\sigma}{\ts^+}          & The flow operation $\sigma$ is associated with the timestamped streams $\ts^+$ on \tck.          \\\hline
+    \end{tabularx}
+    \caption[Notations for the denotational semantics of \GRFRP.]%
+    {Notations for the denotational semantics of \GRFRP.}
+    \label{tab:semantics:grfrp:denot:notations}
+\end{table}
+
+We now introduce the notations used in this section to define the denotational semantics. These
+notations, which build upon those introduced for the operational semantics in
+\Cref{sec:semantics:grfrp:opsem}, are summarized in \Cref{tab:semantics:grfrp:denot:notations}.
+
+In the denotational semantics of \GRFRP, flows are represented as infinite, ordered sequences of
+timestamped values, called timestamped streams. These streams represent the values carried by the
+flow at the times specified by the timestamps, similar to time-aware models such as the Tagged
+Signal Model~\cite{DBLP:journals/tcad/LeeS98}. The set of all possible timestamps is denoted by
+\Time, and a timestamp is denoted by $t$. Timestamped streams are elements of \TStream{\Val}, which
+is the subset of \Stream{\Time \times \Val} containing only streams of increasing timestamps. They
+are denoted by \ts and are coinductively constructed as $(t, v) \next \ts$. A signal (\resp event)
+represented by $(t, v) \next \ts$ is updated (\resp occurs) at time $t$ with value $v$, and the
+stream continues as \ts after $t$.
+%
+Clocks in this denotational semantics are timestamped streams of booleans, denoted by \tck.
+They represent the execution times of computations and play a role similar to the logical clocks in
+synchronous languages~\cite{DBLP:conf/emsoft/ColacoP03}, but are adapted to handle timestamps. A
+stream \ts is said to be \emph{on} the clock \tck, written \on{\ts}{\tck}, when the
+execution times of \tck make it possible to compute or use the values of \ts. In practice, this
+means that the timestamps of \ts are included in the timestamps of \tck associated with the value
+\true. This relationship is formally defined by the rules
+\nameref{rule:semantics:streams:onclock:exact} and \nameref{rule:semantics:streams:onclock:pass}
+(in \Cref{sec:semantics:streams:clock}). More information on timestamped clocks and timestamped
+streams are provided in \Cref{sec:semantics:streams:def,sec:semantics:streams:clock}.
+%
+Finite lists of timestamped streams are denoted by $[\ts^+]$.
+%
+The contexts $I$ and $O$ map imported and exported flow identifiers ($x$) to their timestamped
+streams ($I[x]$ or $O[x]$). Local flow identifiers ($x$) are stored in the context $K$ with their
+timestamped streams ($K[x]$).
+%
+The concatenation of two timestamped stream contexts $X_1$ and $X_2$ ($X$ denoting either an input,
+output, or local context $I$, $O$, or $K$), is defined as their disjoint union,
+$X_1 \ctxconcat X_2$. A context mapping timestamped stream $\ts^+$ to identifiers $x^+$ is denoted
+by $[(\ts/x)^+]$.
+%
+The equivalence of timestamped streams $\ts_1$ and $\ts_2$ is written $\ts_1 \equiv \ts_2$ and
+states their timestamps and values are identical, as defined by the rule \nameref{eq:semantics:streams:equiv}
+(in \Cref{sec:semantics:streams:def}).
+
+Using the defined notations, we refine the purpose of the denotational semantics of \GRFRP. It
+defines how to construct the timestamped streams corresponding to each identifier and flow
+operation. It models flow statements as constraints on the contexts $I$, $O$, and $K$, and
+represents services as functions from the input context $I$ to the output context $O$.%
+\footnote{The determinism of the semantics, under causality of called components, is stated by
+    \Cref{thm:semantics:grfrp:theorems:determinism} and proved in
+    \Cref{sec:semantics:grfrp:theorems:determinism}.}
+%
+The following paragraphs explain in details the mutually recursive rules that define this semantics.
+
+\paragraph{Services}
+
+Consider a service \service{F}{stmt^+} defined in a program \G with typing context \tyCtx. Let \tck
+be a timestamped clock. The denotational semantics of $F$ is a function that maps an input context
+$I$ of timestamped streams to an output context $O$ of timestamped streams. The application of this
+function is denoted by:
+\begin{equation*}
+    \serviceDenot{\tck}{I}{F}{O}.
+\end{equation*}
+The sets of valid input and output contexts are defined inductively over the structure of the
+statements $stmt^+$ defining $F$.
+
+First, we define the set of acceptable input contexts for a sequence of statements $stmt^+$, denoted
+by \InputCtx{stmt^+}. The set is defined by induction on the statements, as shown in \Cref{%
+    eq:semantics:grfrp:inputctx:import,%
+    eq:semantics:grfrp:inputctx:export,%
+    eq:semantics:grfrp:inputctx:decl%
+}. An \kwf{import} statement adds a new identifier to the context, while other statements do not
+affect the set of input contexts.
+
+\begin{align}
+    \InputCtx{\import{x}, stmt^{\prime+}}         & =
+    \{ [\ts/x] \ctxconcat I \mid \ts \in \TStream{\Val}, I \in \InputCtx{stmt^{\prime+}} \} \label{eq:semantics:grfrp:inputctx:import} \\
+    \InputCtx{\export{x}, stmt^{\prime+}}         & = \InputCtx{stmt^{\prime+}} \label{eq:semantics:grfrp:inputctx:export}             \\
+    \InputCtx{\decl{x^+}{\sigma}, stmt^{\prime+}} & = \InputCtx{stmt^{\prime+}} \label{eq:semantics:grfrp:inputctx:decl}
+\end{align}
+
+Similarly, the set of acceptable output contexts, \OutputCtx{stmt^+}, contains mappings for all
+identifiers introduced by \kwf{export} statements. The inductive definition in \Cref{%
+    eq:semantics:grfrp:outputctx:import,%
+    eq:semantics:grfrp:outputctx:export,%
+    eq:semantics:grfrp:outputctx:decl%
+} shows that only \kwf{export} statements extend the output context.
+
+\begin{align}
+    \OutputCtx{\import{x}, stmt^{\prime+}}         & = \OutputCtx{stmt^{\prime+}} \label{eq:semantics:grfrp:outputctx:import}            \\
+    \OutputCtx{\export{x}, stmt^{\prime+}}         & =
+    \{ [\ts/x] \ctxconcat O \mid \ts \in \TStream{\Val}, O \in \OutputCtx{stmt^{\prime+}} \} \label{eq:semantics:grfrp:outputctx:export} \\
+    \OutputCtx{\decl{x^+}{\sigma}, stmt^{\prime+}} & = \OutputCtx{stmt^{\prime+}} \label{eq:semantics:grfrp:outputctx:decl}
+\end{align}
+
+Based on these context definitions, the denotational semantics of \service{F}{stmt^+}, denoted by
+$\tyCtx, \G, \tck \vdashFrp F$, is of type $\InputCtx{stmt^+} \to \OutputCtx{stmt^+}$.
+As established by the rule \nameref{rule:semantics:grfrp:denot:service}, for any input context
+$I \in \InputCtx{stmt^+}$, the context $O \in \OutputCtx{stmt^+}$ is the output context if and only
+if there exists a local context $K$ that satisfies the constraints imposed by the statements
+$stmt^+$.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Service
+            \inferDENOT
+            {
+                \G[F] = \service{F}{stmt^+} \\
+                \exists K, \, \left(\stmtDenot{\tck}{I}{K}{stmt}{O}\right)^+
+            }
+            {\serviceDenot{\tck}{I}{F}{O}}
+            {Serv}
+            \label{rule:semantics:grfrp:denot:service}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The sets of valid local contexts, denoted by \LocalCtx{stmt^+}, is also defined inductively over the
+structure of these statements. It contains mappings for all identifiers introduced by \kwf{import}
+and local \kwf{let} statements. Indeed, the exported identifiers are already defined locally in the
+service. As defined in \Cref{%
+    eq:semantics:grfrp:localctx:import,%
+    eq:semantics:grfrp:localctx:export,%
+    eq:semantics:grfrp:localctx:decl%
+}, only \kwf{import} and \kwf{let} statements extend the local context, but the \kwf{export}
+statement constraints the local context.
+
+\begin{align}
+    \LocalCtx{\import{x}, stmt^{\prime+}}         & =
+    \{ [\ts/x] \ctxconcat K \mid \ts \in \TStream{\Val}, K \in \LocalCtx{stmt^{\prime+}} \} \label{eq:semantics:grfrp:localctx:import} \\
+    \LocalCtx{\export{x}, stmt^{\prime+}}         & =
+    \{ K \mid K \in \LocalCtx{stmt^{\prime+}}, \: K[x] \in \TStream{\Val} \} \label{eq:semantics:grfrp:localctx:export}                \\
+    \LocalCtx{\decl{x^+}{\sigma}, stmt^{\prime+}} & =
+    \{ [(\ts/x)^+] \ctxconcat K \mid (\ts \in \TStream{\Val})^+, K \in \LocalCtx{stmt^{\prime+}} \} \label{eq:semantics:grfrp:localctx:decl}
+\end{align}
+
+We illustrate this semantics with an example.
+For instance, consider the \aeb example from \Cref{fig:semantics:example:aeb}. In the execution
+depicted in the chronogram from \Cref{fig:semantics:example:aeb:chronogram}, the denotational
+semantics of the \idf{aeb} service is a function, defined on the timestamped clock \tck, that maps
+the input context $I$ to the output context $O$:
+\begin{equation*}
+    \tck \vdashFrp \idf{aeb} [I] \Downarrow [O],
+\end{equation*}
+where the timestamped clock \tck, the timestamped streams corresponding to the identifiers
+\idf{speed}, \idf{pedestrian\_l}, and \idf{pedestrian\_r} in the input context $I$, and the
+timestamped stream corresponding to \idf{strat} in the output context $O$ are described below:
+\begin{align*}
+    \tck                              & = (t, \true) \next (t+1s, \true) \next (t+1.2s, \true) \next (t+1.5s, \true) \next (t+3s, \true) \cdots \\
+    I[\idf{speed}]                    & = (t, 32.) \next (t+1.2s, 30.) \next (t+1.5s, 25.) \cdots                                               \\
+    I[\mathfoot{\idf{pedestrian\_l}}] & = (t+1s, 20.) \cdots                                                                                    \\
+    I[\mathfoot{\idf{pedestrian\_r}}] & = \cdots                                                                                                \\
+    O[\idf{strat}]                    & = (t, \No) \next (t+1s, \Soft) \next (t+3s, \No) \cdots                                                 \\
+\end{align*}
+
+\paragraph{Flow statements}
+
+A flow statement $stmt$ denotes constraints towards input, output, and local flow contexts $I$, $O$,
+and $K$. The satisfaction of those constraints is written:
+\begin{equation*}
+    \stmtDenot{\tck}{I}{K}{stmt}{O},
+\end{equation*}
+and is defined by the following rules.
+
+\subparagraph{Imports}
+
+For an import statement \import{x}, rule \nameref{rule:semantics:grfrp:denot:stmt:import} specifies
+that the local context $K$ associates the imported identifier $x$ with the same timestamped stream
+as the input context $I$. In other words, it instantiates the input $x$ locally within the service.
+Those identifiers are present in the contexts $I$ and $K$, as stated by
+\Cref{eq:semantics:grfrp:inputctx:import,eq:semantics:grfrp:localctx:import}.
+Furthermore, the condition \on{I[x]}{\tck} ensures that the timestamped stream $I[x]$ is on the
+execution clock \tck, meaning its timestamps are included in those of \tck. This guarantees that
+\tck is a correct execution clock for this import.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Import
+            \inferDENOTFlowStmt
+            { I[x] \equiv K[x] \\ \on{I[x]}{\tck} }
+            { \stmtDenot{\tck}{I}{K}{\import{x}}{O} }
+            {Import}
+            \label{rule:semantics:grfrp:denot:stmt:import}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subparagraph{Exports}
+
+For an export statement \export{x}, rule \nameref{rule:semantics:grfrp:denot:stmt:export} specifies
+that the local context $K$ associates the exported identifier $x$ with the same timestamped stream
+as the output context $O$. In other words, it makes the local identifier $x$ available outside the
+service.
+Those identifiers are present in the contexts $O$ and $K$, as stated by
+\Cref{eq:semantics:grfrp:outputctx:export,eq:semantics:grfrp:localctx:export}.
+Furthermore, the condition \on{O[x]}{\tck} ensures that the timestamped stream $O[x]$ is on
+the execution clock \tck, meaning its timestamps are included in those of \tck. This guarantees that
+\tck is a correct execution clock for this export.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Export
+            \inferDENOTFlowStmt
+            { O[x] \equiv K[x] \\ \on{O[x]}{\tck} }
+            { \stmtDenot{\tck}{I}{K}{\export{x}}{O} }
+            {Export}
+            \label{rule:semantics:grfrp:denot:stmt:export}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subparagraph{Declarations}
+
+And for a local declaration \decl{x^+}{\sigma} the rule
+\nameref{rule:semantics:grfrp:denot:stmt:decl} states the local context $K$ associates to all
+declared identifiers $x^+$ the timestamped stream corresponding to the evaluation of flow operation
+$\sigma$ on the execution clock \tck.
+Those identifiers are present in the local context $K$, as stated by
+\Cref{eq:semantics:grfrp:localctx:decl}.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Declaration
+            \inferDENOTFlowStmt
+            {
+                \left(K[x] \equiv \ts\right)^+ \\
+                \sigmaDenot{\tck}{K}{\sigma}{\ts^+}
+            }
+            { \stmtDenot{\tck}{I}{K}{\decl{x^+}{\sigma}}{O} }
+            {Decl}
+            \label{rule:semantics:grfrp:denot:stmt:decl}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Flow operations}
+
+A flow operation $\sigma$ is associated, in this denotational semantics, to a list of timestamped
+streams $[\ts^+]$ that corresponds to its entire evaluation with a flow context $K$ and on an
+execution clock \tck. This association is written:
+\begin{equation*}
+    \sigmaDenot{\tck}{K}{\sigma}{\ts^+},
+\end{equation*}
+and is defined by the following rules.
+
+Most \GReact operations create timestamped streams using auxiliary functions that are defined
+coinductively. We prove that these functions are well-defined using the coinduction
+principle~\cite{DBLP:journals/mscs/KozenS17}, which ensures that the output timestamped streams are
+constructed correctly and progress indefinitely. This principle, introduced earlier in
+\Cref{sec:semantics:streams:coinduction}, provides a framework for reasoning about infinite
+structures like timestamped streams. Specifically, it allows us to apply the coinduction hypothesis
+only to streams that have \emph{progressed} and remain \emph{opaque}. For instance, to prove a
+property on a timestamped stream $\ts = (t, v) \next \ts'$ ($\ts'$ has progressed), where no
+assumptions are made about $\ts'$ ($\ts'$ is opaque), we invoke the coinduction hypothesis to
+establish that the property holds for $\ts'$. Using this, we then prove that the property holds for
+$(t, v) \next \ts'$ to conclude.
+
+\subparagraph{Identifiers}
+
+Identifiers ($x$) are associated with the corresponding timestamped stream in the local context
+($K[x]$), see rule \nameref{rule:semantics:grfrp:denot:op:ident}. Moreover, this timestamped stream is on
+the execution clock \tck, meaning that the clock \tck is a correct execution clock for this
+identifier.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Identifier
+            \inferDENOTFlow
+            {K[x] \equiv \ts \\ \on{K[x]}{\tck}}
+            {\sigmaDenot{\tck}{K}{x}{\ts}}
+            {ID}
+            \label{rule:semantics:grfrp:denot:op:ident}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subparagraph{Component applications}
+
+The denotational semantics of \GRSync, detailed in \Cref{sec:semantics:grsync:denot}, models flows
+as simple streams (no timestamps) that have values on a simple clock $ck$ (no timestamps either).
+This clock without timestamps represents a logical model of time, where each boolean value that is
+\true (a tick) symbolize an instant of computation. In this semantics, see rule \nameref{rule:%
+    semantics:grsync:denot:comp}, components are functions from input to output streams that are
+on the same clock.
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Component application
+            \inferDENOTFlow
+            {
+                \left(\sigmaDenot{\tck}{K}{\sigma}{\ts_i}\right)^+ \\
+                \left(\on{\ts_i}{\tck}\right)^+ \\ \left(\on{\ts_o}{\tck}\right)^+ \\
+                \G[f] = \component{f}{x_i^+}{x_o^+}{eq^+}{x_m^+ = c^+} \\
+                \compDenot{\clock{\tck}}{f}{\clocked{\tyCtx[x_i]}{v_d}{\ts_i}{\tck}^+}{\clocked{\tyCtx[x_o]}{v_d}{\ts_o}{\tck}^+}
+            }
+            {\sigmaDenot{\tck}{K}{f(\sigma^+)}{\ts_o^+}}
+            {App}
+            \label{rule:semantics:grfrp:denot:op:app}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The semantics of a component application $f(\sigma^+)$, see rule \nameref{rule:semantics:grfrp:%
+    denot:op:app}, is a bridge between clocked streams of \GRSync and timestamped streams of \GRFRP.
+%
+From the timestamped clock \tck, we construct a simple clock \clock{\tck} that forgets the
+timestamps as defined by \Cref{eq:semantics:grfrp:denot:aux:clock}, keeping only the logical symbol
+of the instants of computation.
+\begin{align}
+    \clock{(t, \true) \next \tck} & = \true \step \clock{\tck} \label{eq:semantics:grfrp:denot:aux:clock}
+\end{align}
+
+The denotational semantics of \GRSync components is defined as a function that maps input simple
+streams to output simple streams. These simple streams are obtained by projecting the input and
+output timestamped streams onto a simple clock induced by \tck. This projection, denoted
+\clocked{\tyCtx[x]}{v_d}{\ts}{\tck} for an identifier $x$ associated with a timestamped stream \ts,
+is formally defined in
+\Crefrange{eq:semantics:grfrp:denot:clocked:update}{eq:semantics:grfrp:denot:clocked:none}.
+The projection uses \tyCtx to determine whether $x$ is a signal or an event, as the interpretation
+of timestamped values depends on the flow type. For signals, the timestamped values represent
+updates, with $v_d$ serving as the initial default value. The projection repeats the same value on
+the simple clock ticks until the next update occurs
+(\Crefrange{eq:semantics:grfrp:denot:clocked:update}{eq:semantics:grfrp:denot:clocked:repeat}).
+For events, the timestamped values represent occurrences. The projection wraps these values in a
+\ttf{some} option and inserts \none for all other ticks of the simple clock
+(\Crefrange{eq:semantics:grfrp:denot:clocked:some}{eq:semantics:grfrp:denot:clocked:none}).
+
+\begin{center}
+    \scalebox{0.85}{
+        \begin{minipage}{1.15\textwidth}
+            \begin{align}
+                \clocked{ty}{v^\explast}{(t, v) \next \ts}{(t', \true) \next \tck}        & = v \step \clocked{ty}{v}{\ts}{\tck}                                & \text{if} & \, t = t' \label{eq:semantics:grfrp:denot:clocked:update} \\
+                \clocked{ty}{v^\explast}{(t, v) \next \ts}{(t', \true) \next \tck}        & = v^\explast \step \clocked{ty}{v^\explast}{(t, v) \next \ts}{\tck} & \text{if} & \, t > t' \label{eq:semantics:grfrp:denot:clocked:repeat} \\
+                \clocked{\mayB{ty}}{v^\explast}{(t, v) \next \ts}{(t', \true) \next \tck} & = \some{v} \step \clocked{\mayB{ty}}{\some{v}}{\ts}{\tck}           & \text{if} & \, t = t' \label{eq:semantics:grfrp:denot:clocked:some}   \\
+                \clocked{\mayB{ty}}{v^\explast}{(t, v) \next \ts}{(t', \true) \next \tck} & = \none \step \clocked{\mayB{ty}}{\none}{(t, v) \next \ts}{\tck}    & \text{if} & \, t > t' \label{eq:semantics:grfrp:denot:clocked:none}
+            \end{align}
+        \end{minipage}}
+\end{center}
+
+\begin{lemma}
+    For all identifier $x$ typed by \tyCtx, all default value $v_d$, all timestamped clock \tck, and
+    all timestamped stream \ts defined on \tck, the stream \clocked{\tyCtx[x]}{v_d}{\ts}{\tck} is
+    well-defined.
+\end{lemma}
+\begin{skippableproof}
+    Let $x$ be an identifier typed by \tyCtx, $v_d$ be a default value, \tck be a timestamped clock,
+    and \ts be a timestamped stream defined on \tck.
+    In all cases described by
+    \Cref{%
+        eq:semantics:grfrp:denot:clocked:update,%
+        eq:semantics:grfrp:denot:clocked:repeat,%
+        eq:semantics:grfrp:denot:clocked:some,%
+        eq:semantics:grfrp:denot:clocked:none%
+    }, the function advances at least one of the two input streams to its tail before its recursive
+    call. As established in the analysis of coinductive stream pairs
+    (\Cref{sec:semantics:streams:coinductive_constructs}), advancing even a single stream is
+    sufficient to demonstrate progress for the pair as a whole, thereby justifying the use of the
+    coinductive hypothesis.
+    Moreover, the cases are exhaustive under the assumption that \ts is defined on \tck and that
+    timestamps are strictly increasing, covering all possible combinations of timestamps, and
+    ensuring opacity.
+\end{skippableproof}
+
+\subparagraph{Onchange}
+
+In this denotational semantics, an operation \onchange{\sigma} is associated with the same timestamped
+stream as its input signal $\sigma$, as described by the rule \nameref{rule:semantics:grfrp:denot:%
+    op:onchange}. However, the meaning of this timestamped stream has changed: a timestamped value
+for $\sigma$ denotes an update, while for the event \onchange{\sigma} it denotes an occurrence.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% OnChange
+            \inferDENOTFlow
+            {
+                \sigmaDenot{\tck}{K}{\sigma}{\ts}
+            }
+            { \sigmaDenot{\tck}{K}{\onchange{\sigma}}{\ts} }
+            {OChg}
+            \label{rule:semantics:grfrp:denot:op:onchange}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subparagraph{Persist}
+
+Most \GReact operations create timestamped streams using auxiliary functions.
+%
+The rule \nameref{rule:semantics:grfrp:denot:op:persist} states that, if $\sigma$ is an event
+associated with the stream \ts, the semantics of \persist{\sigma} uses the function \persistAux{\ts}
+{v^\explast}, defined in \Crefrange{eq:semantics:grfrp:denot:op:persist:aux:equal}{eq:semantics:grfrp:%
+    denot:op:persist:aux:diff}, that creates a timestamped stream for the signal corresponding to
+the persistence of $\sigma$.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Persist
+            \inferDENOTFlow
+            {
+                \sigmaDenot{\tck}{K}{\sigma}{\ts} \\
+                \persistAux{\ts}{v_d} \equiv \ts'
+            }
+            { \sigmaDenot{\tck}{K}{\persist{\sigma}}{\ts'} }
+            {Prst}
+            \label{rule:semantics:grfrp:denot:op:persist}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The function \persistAux{\ts}{v^\explast} filters the successive identical values by storing the last
+occurrence value $v^\explast$. As a signal always has a value, all signals start with a default value
+$v_d$, which is a predefined unique value for each type.
+\begin{align}
+    \persistAux{(t, v) \next \ts}{v^\explast} & =  \persistAux{\ts}{v^\explast}    & \text{if} & \, v = v^\explast \label{eq:semantics:grfrp:denot:op:persist:aux:equal}   \\
+    \persistAux{(t, v) \next \ts}{v^\explast} & = (t, v) \next \persistAux{\ts}{v} & \text{if} & \, v \neq v^\explast \label{eq:semantics:grfrp:denot:op:persist:aux:diff}
+\end{align}
+
+\begin{lemma}
+    For all timestamped stream \ts and all value $v^\explast \in \Val$, the timestamped stream
+    \persistAux{\ts}{v^\explast} is well-defined.
+\end{lemma}
+\begin{skippableproof}
+    Let \ts be a timestamped stream and $v^\explast \in \Val$.
+    In all cases described by
+    \Cref{%
+        eq:semantics:grfrp:denot:op:persist:aux:equal,%
+        eq:semantics:grfrp:denot:op:persist:aux:diff%
+    }, the timestamped stream is consumed at each step, ensuring progress.
+    Moreover, the cases are exhaustive ensuring opacity.
+\end{skippableproof}
+
+\subparagraph{Scan}
+
+The rule \nameref{rule:semantics:grfrp:denot:op:scan} states that, if $\sigma$ is a signal
+associated with the stream \ts, the semantics of the signal \scan{\sigma}{T} uses the function
+\scanAux{\ts}{T}{t'}{v_{u\bot}}{v^\explast}, defined in \Crefrange{eq:semantics:grfrp:denot:op:scan:aux:1}
+{eq:semantics:grfrp:denot:op:scan:aux:4}, that creates a timestamped stream corresponding to
+$T$-periodical updates of $\sigma$.
+%
+As this operation has different timestamps compared to \ts, they have to be included in \tck.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Scan
+            \inferDENOTFlow
+            {
+                \sigmaDenot{\tck}{K}{\sigma}{\ts} \\
+                \scanAux{\ts}{T}{T}{\bot}{v_d} \equiv \ts' \\
+                \on{\ts'}{\tck}
+            }
+            { \sigmaDenot{\tck}{K}{\scan{\sigma}{T}}{\ts'} }
+            {Scan}
+            \label{rule:semantics:grfrp:denot:op:scan}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The function \scanAux{\ts}{T}{t'}{v_{u\bot}}{v^\explast} stores the last update of \ts in $v_{u\bot}$ until
+the next timer $t'$, when it produces this value:
+if the next update of \ts occurs after $t'$ and there has been an update $v_u$, then it produces
+$v_u$ at time $t'$ and continues for the next timer $t' + T$;
+if the next update of \ts occurs after $t'$ but there has been no update ($v_{u\bot} = \bot$), then
+no value is produced at time $t'$ and it continues for the next timer $t' + T$;
+if the next update of \ts occurs before $t'$ and the value differs from the last periodic update
+($v^\explast$), then the update is stored in $v_{u\bot}$; and
+if the next update of \ts occurs before $t'$ but the value equals the last periodic update ($v^\explast$),
+then $v_{u\bot}$ is reset to $\bot$.
+\begin{align}
+    \scanAux{(t, v) \next \ts}{T}{t'}{v_u}{v^\explast}       & = (t', v_u) \next \scanAux{(t, v) \next \ts}{T}{t'+T}{\bot}{v_u} & \text{if} & \, t > t' \label{eq:semantics:grfrp:denot:op:scan:aux:1}                            \\
+    \scanAux{(t, v) \next \ts}{T}{t'}{\bot}{v^\explast}      & = \scanAux{(t, v) \next \ts}{T}{t'+T}{\bot}{v^\explast}          & \text{if} & \, t > t' \label{eq:semantics:grfrp:denot:op:scan:aux:2}                            \\
+    \scanAux{(t, v) \next \ts}{T}{t'}{v_{u\bot}}{v^\explast} & = \scanAux{\ts}{T}{t'}{v}{v^\explast}                            & \text{if} & \, t \le t' \wedge v \neq v^\explast \label{eq:semantics:grfrp:denot:op:scan:aux:3} \\
+    \scanAux{(t, v) \next \ts}{T}{t'}{v_{u\bot}}{v^\explast} & = \scanAux{\ts}{T}{t'}{\bot}{v^\explast}                         & \text{if} & \, t \le t' \wedge v = v^\explast \label{eq:semantics:grfrp:denot:op:scan:aux:4}
+\end{align}
+
+\begin{lemma}
+    For all period $T$, all timestamped stream \ts, all timer $t'$, all bottom value
+    $v_{u\bot} \in \ValBot$, and all value $v^\explast \in \Val$, the timestamped stream
+    \scanAux{\ts}{T}{t'}{v_{u\bot}}{v^\explast} is well-defined.
+\end{lemma}
+\begin{skippableproof}
+    The proof proceeds by coinduction. We consider the function \smf{scan^\#} as operating on a pair
+    of streams: the explicit data stream \ts and an implicit timer stream, which we denote
+    $\mathcal{T}$ and defined as follows, using the notations established in
+    \Cref{sec:semantics:streams:coinductive_constructs}.
+    \begin{equation*}
+        \begin{split}
+            \mathcal{T} & = t' + S_0^T                                \\
+                        & = \texttt{trans}(t', S_0^T)                 \\
+                        & = \texttt{trans}(t', 0 \step T \step S_2^T) \\
+                        & = t' \step \texttt{trans}(t' + T, S_1^T)    \\
+                        & = t' \step (t'+T + S_1^T)
+        \end{split}
+    \end{equation*}
+    %
+    To prove the function is well-defined, we must show that for any state, it makes progress on
+    this pair before any recursive call. We analyze the four defining cases from
+    \Cref{%
+        eq:semantics:grfrp:denot:op:scan:aux:1,%
+        eq:semantics:grfrp:denot:op:scan:aux:2,%
+        eq:semantics:grfrp:denot:op:scan:aux:3,%
+        eq:semantics:grfrp:denot:op:scan:aux:4%
+    }:
+    %
+    \begin{description}
+        \item[Cases 1 and 2 ($t > t'$)] The recursive call is made with the timer parameter advanced
+              to $t' + T$. This corresponds to consuming the head of the timer stream $\mathcal{T}$
+              (which is $t'$) and continuing with its tail, $t'+T + S_1^T$. The data stream \ts is
+              not advanced. Thus, the pair $(\ts, \mathcal{T})$ makes progress.
+
+        \item[Cases 3 and 4 ($t \le t'$)] The recursive call is made with the data stream advanced
+              to its tail, \ts. The timer parameter $t'$ is unchanged, meaning the timer stream
+              $\mathcal{T}$ is not advanced. Thus, the pair $(\ts, \mathcal{T})$ makes progress.
+    \end{description}
+    %
+    In all four exhaustive cases, the function advances at least one of the two component streams of
+    the pair before the recursive call. As established in the analysis of coinductive
+    stream pairs (\Cref{sec:semantics:streams:coinductive_constructs}), advancing even a single
+    stream is sufficient to demonstrate progress for the pair as a whole.
+    %
+    Because progress is established, we can apply the \emph{coinductive hypothesis} and assume that
+    any recursive call to \smf{scan^\#} yields a well-defined timestamped stream. Since the
+    function's output is either constructed with a new head (Case 1) or is the direct result of
+    the recursive call, we conclude that \scanAux{\ts}{T}{t'}{v_{u\bot}}{v^\explast} is
+    well-defined.
+\end{skippableproof}
+
+\subparagraph{Sample}
+
+The rule \nameref{rule:semantics:grfrp:denot:op:sample} states that, if $\sigma$ is an event
+associated with the stream \ts, the semantics of the event \sample{\sigma}{T} uses the function
+\sampleAux{\ts}{T}{t'}{v_{u\bot}}, defined in \Crefrange{eq:semantics:grfrp:denot:op:sample:aux:1}
+{eq:semantics:grfrp:denot:op:sample:aux:3}, that creates a timestamped stream corresponding to
+$T$-periodical occurrences of $\sigma$.
+%
+As this operation has different timestamps compared to \ts, they have to be included in \tck.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Sample
+            \inferDENOTFlow
+            {
+                \sigmaDenot{\tck}{K}{\sigma}{\ts} \\
+                \sampleAux{\ts}{T}{T}{\bot} \equiv \ts' \\
+                \on{\ts'}{\tck}
+            }
+            { \sigmaDenot{\tck}{K}{\sample{\sigma}{T}}{\ts'}}
+            {Samp}
+            \label{rule:semantics:grfrp:denot:op:sample}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The function \sampleAux{\ts}{T}{t'}{v_{u\bot}} stores the last occurrence of \ts in $v_{o\bot}$ until
+the next period $t'$, when it produces this value:
+if the next occurrence of \ts occurs after $t'$ and there has been an occurrence $v_u$, then it
+produces $v_o$ at time $t'$ and continues for the next period $t' + T$;
+if the next occurrence of \ts occurs after $t'$ but there has been not occurrence ($v_{o\bot} =
+    \bot$), then no value is produced at time $t'$ and it continues for the next period $t' + T$;
+and
+if the next occurrence of \ts occurs before $t'$, then the occurrence is stored in $v_{o\bot}$.
+\begin{align}
+    \sampleAux{(t, v) \next \ts}{T}{t'}{v_o}       & = (t', v_o) \next \sampleAux{(t, v) \next \ts}{T}{t'+T}{\bot} & \text{if} & \, t > t' \label{eq:semantics:grfrp:denot:op:sample:aux:1}   \\
+    \sampleAux{(t, v) \next \ts}{T}{t'}{\bot}      & = \sampleAux{(t, v) \next \ts}{T}{t'+T}{\bot}                 & \text{if} & \,  t > t' \label{eq:semantics:grfrp:denot:op:sample:aux:2}  \\
+    \sampleAux{(t, v) \next \ts}{T}{t'}{v_{o\bot}} & = \sampleAux{\ts}{T}{t'}{v}                                   & \text{if} & \, t \le t' \label{eq:semantics:grfrp:denot:op:sample:aux:3}
+\end{align}
+
+\begin{lemma}
+    For all period $T$, all timestamped stream \ts, all time $t'$, and all bottom value
+    $v_{u\bot} \in \ValBot$, the timestamped stream \sampleAux{\ts}{T}{t'}{v_{u\bot}} is well-defined.
+\end{lemma}
+\begin{skippableproof}
+    The proof follows the same coinductive reasoning established for the \smf{scan^\#} function. We
+    consider \smf{sample^\#} as a function operating on a pair of streams: the explicit data stream
+    \ts and an implicit timer stream, $\mathcal{T} = t' + S_0^T$.
+    %
+    To prove the function is well-defined, we show that it makes progress on this pair in all
+    defining cases from \Cref{%
+        eq:semantics:grfrp:denot:op:sample:aux:1,%
+        eq:semantics:grfrp:denot:op:sample:aux:2,%
+        eq:semantics:grfrp:denot:op:sample:aux:3%
+    }:
+    %
+    \begin{description}
+        \item[Cases 1 and 2 ($t > t'$)] The timer parameter is advanced to $t' + T$. This
+              corresponds to consuming the head of the timer stream $\mathcal{T}$ while the data
+              stream \ts is not advanced. The pair thus makes progress.
+
+        \item[Case 3 ($t \le t'$)] The data stream is advanced to its tail, \ts, while the timer
+              parameter $t'$ is unchanged. The pair thus makes progress.
+    \end{description}
+    %
+    In all three exhaustive cases, the function advances at least one of the two component streams
+    of the pair before the recursive call. As established in
+    \Cref{sec:semantics:streams:coinductive_constructs}, this is sufficient to demonstrate progress
+    for the pair as a whole.
+    %
+    Because progress is established, the coinductive hypothesis allows us to assume that any
+    recursive call to \smf{sample^\#} yields a well-defined timestamped stream. Since the output of
+    the function is either constructed with a new head (Case 1) or is the direct result of the
+    recursive call, we conclude that \sampleAux{\ts}{T}{t'}{v_{o\bot}} is well-defined.
+\end{skippableproof}
+
+\subparagraph{Timeout}
+
+The rule \nameref{rule:semantics:grfrp:denot:op:timeout} states that, if $\sigma$ is an event
+associated with the stream \ts, the semantics of the event \timeout{\sigma}{T} uses the function
+\timeoutAux{\ts}{T}{t'}, defined in \Crefrange{eq:semantics:grfrp:denot:op:timeout:aux:1}
+{eq:semantics:grfrp:denot:op:timeout:aux:2}, that creates a timestamped stream with unit values when
+$\sigma$ has not occurred for $T$ milliseconds.
+%
+As this operation has different timestamps compared to \ts, they have to be included in \tck.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Timeout
+            \inferDENOTFlow
+            {
+                \sigmaDenot{\tck}{K}{\sigma}{\ts} \\
+                \timeoutAux{\ts}{T}{T} \equiv \ts' \\
+                \on{\ts'}{\tck}
+            }
+            { \sigmaDenot{\tck}{K}{\timeout{\sigma}{T}}{\ts'}}
+            {TOut}
+            \label{rule:semantics:grfrp:denot:op:timeout}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+If the next occurrence of \ts occurs after the timer $t'$, then \timeoutAux{\ts}{T}{t'} produces a
+unit value $()$ at time $t'$ and continues with the next timer set to $t' + T$. Otherwise, it sets
+the next timer to $t + T$, where $t$ is the timestamp of the occurrence of \ts.
+\begin{align}
+    \timeoutAux{(t, v) \next \ts}{T}{t'} & = (t', ()) \next \timeoutAux{(t, v) \next \ts}{T}{t' + T} & \text{if} & \, t > t' \label{eq:semantics:grfrp:denot:op:timeout:aux:1}   \\
+    \timeoutAux{(t, v) \next \ts}{T}{t'} & = \timeoutAux{\ts}{T}{t + T}                              & \text{if} & \, t \le t' \label{eq:semantics:grfrp:denot:op:timeout:aux:2}
+\end{align}
+
+\begin{lemma}
+    For all period $T$, all timestamped stream \ts, and all timer $t'$, the timestamped stream
+    \timeoutAux{\ts}{T}{t'} is well-defined.
+\end{lemma}
+\begin{skippableproof}
+    The proof proceeds by coinduction, following the same structure used for \smf{scan^\#} and
+    \smf{sample^\#}. We consider \smf{timeout^\#} as a function operating on a pair of streams: the
+    explicit data stream \ts and an implicit timer stream, which we denote $\mathcal{T}$. Unlike the
+    previous functions, the timer stream here is not independent of the data stream. At any point,
+    $\mathcal{T}$ is defined by its current starting time, say $t'$, as $\mathcal{T} = t' + S_0^T$.
+    %
+    To prove the function is well-defined, we must show that it makes progress on this pair in
+    all defining cases from \Cref{%
+        eq:semantics:grfrp:denot:op:timeout:aux:1,%
+        eq:semantics:grfrp:denot:op:timeout:aux:2%
+    }:
+    %
+    \begin{description}
+        \item[Case 1 ($t > t'$)] The recursive call is made with the timer parameter advanced to
+              $t' + T$. As shown in the proof for \smf{scan^\#}, this corresponds to consuming
+              the head of the current timer stream $\mathcal{T} = t' + S_0^T$ and continuing with
+              its tail $t'+T + S_1^T$. The data stream \ts is not advanced. The pair thus makes
+              progress.
+
+        \item[Case 2 ($t \le t'$)] The data stream is advanced to its tail, \ts. Simultaneously,
+              the timer parameter is reset to $t + T$. This redefines the implicit timer stream for
+              the subsequent computation to $\mathcal{T}' = t + S_0^T = t \step ((t+T) + S_1^T)$,
+              consumes its head, and make the recursive call on its tail. Since both the data
+              stream and the timer stream have progressed (one to its tail, the other to the tail of
+              its new definition), the pair as a whole makes progress.
+    \end{description}
+    %
+    In both exhaustive cases, the function makes progress on the stream pair before the recursive
+    call. Because progress is established, we can apply the \emph{coinductive hypothesis} and assume
+    that any recursive call to \smf{timeout^\#} yields a well-defined timestamped stream. Since the
+    output of the function is either constructed with a new head (Case 1) or is the direct result of
+    the recursive call, we conclude that \smf{timeout^\#} is well-defined for any valid initial
+    timer $t'$.
+\end{skippableproof}
+
+\subparagraph{Merge}
+
+The rule \nameref{rule:semantics:grfrp:denot:op:merge} states that, if $\sigma_1$ and $\sigma_2$ are
+two events associated with the streams $\ts_1$ an $\ts_2$ respectively, the semantics of the event
+\mergeop{\sigma_1}{\sigma_2} uses the function \mergeAux{\ts_1}{\ts_2}, defined in \Crefrange{eq:%
+    semantics:grfrp:denot:op:merge:aux:1}{eq:semantics:grfrp:denot:op:merge:aux:3}, that creates a
+timestamped stream that contains the union of both occurrences, with priority to the first event
+$\sigma_1$ in case they occur simultaneously.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Merge
+            \inferDENOTFlow
+            {
+                \sigmaDenot{\tck}{K}{\sigma_1}{\ts_1} \\
+                \sigmaDenot{\tck}{K}{\sigma_2}{\ts_2} \\
+                \mergeAux{\ts_1}{\ts_2} \equiv \ts'
+            }
+            { \sigmaDenot{\tck}{K}{\mergeop{\sigma_1}{\sigma_2}}{\ts'}}
+            {Mrg}
+            \label{rule:semantics:grfrp:denot:op:merge}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+If the next occurrence of $\ts_1$ occurs at the same time as $\ts_2$, then the value of $\ts_1$ is emitted
+by \mergeAux{\ts_1}{\ts_2} and the one of $\ts_2$ is dropped; if one occurs before the other, its value
+is emitted.
+\begin{align}
+    \mergeAux{(t_1, v_1) \next \ts_1}{(t_2, v_2) \next \ts_2} & = (t_1, v_1) \next \mergeAux{\ts_1}{\ts_2}                   &
+    \text{if}                                                 & \, t_1 = t_2 \label{eq:semantics:grfrp:denot:op:merge:aux:1}   \\
+    \mergeAux{(t_1, v_1) \next \ts_1}{(t_2, v_2) \next \ts_2} & = (t_1, v_1) \next \mergeAux{\ts_1}{(t_2, v_2) \next \ts_2}  &
+    \text{if}                                                 & \, t_1 < t_2 \label{eq:semantics:grfrp:denot:op:merge:aux:2}   \\
+    \mergeAux{(t_1, v_1) \next \ts_1}{(t_2, v_2) \next \ts_2} & = (t_2, v_2) \next \mergeAux{(t_1, v_1) \next \ts_1}{\ts_2}  &
+    \text{if}                                                 & \, t_1 > t_2 \label{eq:semantics:grfrp:denot:op:merge:aux:3}
+\end{align}
+
+\begin{lemma}
+    For all timestamped streams $\ts_1$ and $\ts_2$, the timestamped stream \mergeAux{\ts_1}{\ts_2}
+    is well-defined.
+\end{lemma}
+\begin{skippableproof}
+    The proof proceeds by coinduction. We consider \smf{merge^\#} as a function operating on the
+    coinductive stream pair $(\ts_1, \ts_2)$. To prove the function is well-defined, we must show
+    that it makes progress on this pair before any recursive call. We analyze the three defining
+    cases from \Cref{%
+        eq:semantics:grfrp:denot:op:merge:aux:1,%
+        eq:semantics:grfrp:denot:op:merge:aux:2,%
+        eq:semantics:grfrp:denot:op:merge:aux:3%
+    }:
+    %
+    \begin{description}
+        \item[Case 1 ($t_1 < t_2$)] The recursive call is made on $(\texttt{tail}(\ts_1), \ts_2)$.
+              The first component of the pair is advanced. The pair thus makes progress.
+
+        \item[Case 2 ($t_1 > t_2$)] The recursive call is made on $(\ts_1, \texttt{tail}(\ts_2))$.
+              The second component of the pair is advanced. The pair thus makes progress.
+
+        \item[Case 3 ($t_1 = t_2$)] The recursive call is made on $(\texttt{tail}(\ts_1), \texttt{tail}(\ts_2))$.
+              Both components of the pair are advanced. The pair thus makes progress.
+    \end{description}
+    %
+    In all three exhaustive cases, the function advances at least one of the two component streams
+    before the recursive call. As established in the analysis of coinductive stream pairs
+    (\Cref{sec:semantics:streams:coinductive_constructs}), advancing even a single component stream
+    is sufficient to demonstrate progress for the pair as a whole.
+    %
+    Because progress is established, we can apply the \emph{coinductive hypothesis} and assume that
+    any recursive call to \smf{merge^\#} yields a well-defined timestamped stream. Since the
+    output of the function is always constructed by prepending a new head to the result of the
+    recursive call, we conclude that \mergeAux{\ts_1}{\ts_2} is well-defined.
+\end{skippableproof}
+
+\subparagraph{Throttle}
+
+The rule \nameref{rule:semantics:grfrp:denot:op:throttle} states that, if $\sigma$ is a signal
+associated with the stream \ts, the semantics of the signal \throttle{\sigma}{\Delta} uses the
+function \throttleAux{\ts}{\Delta}{v^\explast}, defined in \Crefrange{eq:semantics:grfrp:denot:op:throttle:%
+    aux:1}{eq:semantics:grfrp:denot:op:throttle:aux:2}, that creates a timestamped stream of the
+updates from $\sigma$ that have a difference greater that $\Delta$ from each other.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Throttle
+            \inferDENOTFlow
+            {
+                \sigmaDenot{\tck}{K}{\sigma}{\ts} \\
+                \throttleAux{\ts}{\Delta}{v_d} \equiv \ts'
+            }
+            { \sigmaDenot{\tck}{K}{\throttle{\sigma}{\Delta}}{\ts'}}
+            {Thrt}
+            \label{rule:semantics:grfrp:denot:op:throttle}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The function \throttleAux{\ts}{\Delta}{v^\explast} stores its last update in $v^\explast$ to filter the changes that
+are not significant:
+if the difference between the next update of \ts and the last value $v^\explast$ is greater that $\Delta$,
+then this value passes and $v^\explast$ is updated; otherwise, the value is filtered.
+\begin{align}
+    \throttleAux{(t', v') \next \ts'}{\Delta}{v^\explast} & = (t', v') \next \throttleAux{\ts'}{\Delta}{v'}                                    &
+    \text{if}                                             & \, |v' - v^\explast| \ge \Delta \label{eq:semantics:grfrp:denot:op:throttle:aux:1}   \\
+    \throttleAux{(t', v') \next \ts'}{\Delta}{v^\explast} & = \throttleAux{\ts'}{\Delta}{v^\explast}                                           &
+    \text{if}                                             & \, |v' - v^\explast| > \Delta \label{eq:semantics:grfrp:denot:op:throttle:aux:2}
+\end{align}
+
+\begin{lemma}
+    For all value $\Delta \in \Val$, all timestamped stream \ts, and all value $v^\explast \in \Val$,
+    the timestamped stream \throttleAux{\ts}{\Delta}{v^\explast} is well-defined.
+\end{lemma}
+\begin{skippableproof}
+    Let $\Delta \in \Val$, \ts be a timestamped stream, and $v^\explast \in \Val$.
+    In all cases described by
+    \Cref{%
+        eq:semantics:grfrp:denot:op:throttle:aux:1,%
+        eq:semantics:grfrp:denot:op:throttle:aux:2%
+    }, \ts is consumed at each step, ensuring progress. Moreover, the cases are exhaustive ensuring
+    opacity.
+\end{skippableproof}
+
+\setcounter{subparagraph}{0}
+\subparagraph{Time}
+
+The operation \timeop returns the timestamps of the clock \tck. This behavior is defined
+by rule \nameref{rule:semantics:grfrp:denot:op:time}, which relies on the auxiliary function
+\timeAux{\tck}. This function, defined in \Cref{eq:semantics:grfrp:denot:op:time:aux}, creates the
+corresponding timestamped stream from \tck.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Time
+            \inferDENOTFlow
+            { \timeAux{\tck} \equiv \ts }
+            { \sigmaDenot{\tck}{K}{\timeop}{\ts}}
+            {Time}
+            \label{rule:semantics:grfrp:denot:op:time}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\begin{align}
+    \timeAux{(t, \true) \next \tck} & = (t, t) \next \timeAux{\tck} \label{eq:semantics:grfrp:denot:op:time:aux}
+\end{align}
+
+\begin{lemma}
+    For all timestamped clock \tck, the timestamped stream \timeAux{\tck} is well-defined.
+\end{lemma}
+\begin{skippableproof}
+    In \Cref{eq:semantics:grfrp:denot:op:time:aux}, the clock is consumed without making any
+    assumptions about the remaining tail of the clock, thereby ensuring both progress and opacity.
+\end{skippableproof}
+
+\paragraph{Summary}
+This section presented the denotational semantics for \GRFRP, which interprets flows as infinite
+timestamped streams. This model provides a declarative, time-aware perspective on system behavior.
+Services are modeled as functions that map input stream contexts to output stream contexts, while
+statements are interpreted as constraints on these contexts. The semantics of each flow operation is
+defined by a coinductive stream-transforming function. A key aspect of this formalization is the
+semantic bridge to \GRSync: component applications are handled by projecting timestamped streams
+onto a logical clock, allowing the synchronous, clocked semantics of components to be integrated
+into the asynchronous, timestamped world of services. This provides a functional interpretation of
+\GRFRP programs, abstracting away from execution order to focus on the temporal relationships
+between dataflows.

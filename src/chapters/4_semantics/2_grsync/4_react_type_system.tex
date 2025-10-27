@@ -1,0 +1,697 @@
+\subsection{Reactive Type System of \GRSync}
+\label{sec:semantics:grsync:react_typing}
+
+While \GRSync components are synchronous, they are designed to be instantiated within the
+asynchronous, event-driven services of \GRFRP. To ensure efficient execution while maintaining all
+flows up-to-date, services in \GRFRP compute by propagating signal updates and event occurrences.
+A key challenge in such a system is to ensure that service behavior remains \emph{compositional}:
+extending a service with new imports or timers must not alter its original observable behavior.
+Compositionality guarantees that outputs (exports and timers) are determined solely by declared
+dependencies, not by the timing or arrival rate of inputs (imports and timers).
+
+This guarantee is challenged when, for instance, a service is extended with a new import. A value
+arriving on this new import triggers an execution of the service. We refer to this situation as an
+\emph{oversampling} of the original service logic, since a computation occurs without any change to
+the initial set of inputs. The risk is that this unintended execution could alter the internal state
+of components or produce new outputs. Such side effects would change subsequent computations and
+violate the principle of compositionality.
+
+Three issues threaten this principle.
+
+\paragraph{Three compositionality issues}
+
+The first issue involves interaction with physical time. The \GRFRP language provides a built-in
+operator, \timeop, that produces a flow representing the current time. The values of this flow are
+sourced from the timestamps of all arriving inputs. This design creates a direct conflict with
+compositionality.
+%
+Consider the \idf{integrate} component defined below:
+\begin{equation*}
+    \componentTab[\idf{x} = 0, \idf{t} = 0]{\idf{integrate}}{\idf{v}, \idf{t}}{\idf{x}}{
+        \idf{x} = \last{\idf{x}} + \idf{v}*(\idf{t} - \last{\idf{t}})
+    }
+\end{equation*}
+It integrates a flow \idf{v} over a flow \idf{t} representing the time. This component is intended
+for use in a service where the input \idf{t} is connected to \timeop.
+%
+\Cref{tab:semantics:grsync:react_typing:last} demonstrates how oversampling corrupts the computation
+by comparing a reference execution (left) with an oversampled one (right). The oversampling at
+$\idf{t} = 6$ (\textcolor{gray}{gray}) changes the value of the \timeop operator, causing the
+component recompute and alter its internal state. This additional computation causes all subsequent
+outputs to diverge from the reference execution (in \textcolor{red}{red}).
+
+\begin{table}[ht!]
+    \centering
+    \begin{tabular}{r|ccccc ccc r|cccccc}
+        \idf{v}        & 2 & 3 & 3  & 2                    & 4                   &                     &  &  &
+        \idf{v}        & 2 & 3 & 3  & \textcolor{gray}{3}  & 2                   & 4                           \\
+        \idf{t}        & 1 & 3 & 4  & 7                    & 9                   &                     &  &  &
+        \idf{t}        & 1 & 3 & 4  & \textcolor{gray}{6}  & 7                   & 9                           \\
+        \last{\idf{t}} & 0 & 1 & 3  & 4                    & 7                   &                     &  &  &
+        \last{\idf{t}} & 0 & 1 & 3  & \textcolor{gray}{4}  & \textcolor{red}{6}  & 7                           \\
+        \idf{x}        & 2 & 8 & 11 & 17                   & 25                  &                     &  &  &
+        \idf{x}        & 2 & 8 & 11 & \textcolor{gray}{17} & \textcolor{red}{19} & \textcolor{red}{27}         \\
+        \last{\idf{x}} & 0 & 2 & 8  & 11                   & 17                  &                     &  &  &
+        \last{\idf{x}} & 0 & 2 & 8  & \textcolor{gray}{11} & \textcolor{red}{17} & \textcolor{red}{19}         \\
+    \end{tabular}
+    \caption[A \kwf{last} memory breaks the oversampling.]%
+    {Two executions with the same input flow: one reacting on input changes (left), and one
+        oversampled at time $\idf{t} = 6$ in \textcolor{gray}{gray} (right). Oversampling caused
+        modifications, in \textcolor{red}{red}, during the execution afterwards.}
+    \label{tab:semantics:grsync:react_typing:last}
+\end{table}
+
+The second issue stems from the unrestricted use of \kwf{last} memories. Consider the following
+\idf{count} component, which implements a simple counter with no inputs:
+\begin{equation*}
+    \component{\idf{count}}{}{\idf{o}}{\idf{o} = \last{\idf{o}} + 1}{\idf{o} = 0}.
+\end{equation*}
+From an event-driven perspective, this component should remain inactive, as it has no inputs to
+trigger a computation. However, its definition implies a free-running feedback loop through the
+memory \last{\idf{o}}: the value of \idf{o} at any given instant is used to define the value of
+\last{\idf{o}} at the very next instant. The output flow is therefore \emph{continuous} in the sense
+that its definition suggests it should be continuously re-evaluated in order to maintain its value
+up-to-date. This ambiguity makes the behavior dependent on an implicit execution rate rather than a
+reaction to explicit inputs, violating the principles of reactive programming.
+
+The third issue arises from unrestricted event emissions, using the \kwf{emit} operator. Consider
+the \idf{emit\_now} component, which creates an event that unconditionally occurs:
+\begin{equation*}
+    \component{\idf{emit\_now}}{\idf{s}}{\idf{e}}{\idf{e} = \emit{\idf{s}}}{}.
+\end{equation*}
+Conceptually, the output event \idf{e} is \emph{continuously} present, since its emission is not
+guarded by any condition. An event-driven execution, however, would only trigger this component when
+the input signal \idf{s} is updated, emitting the event only at that time. This creates a
+fundamental conflict between the declarative semantics and the reactive execution model.
+
+\paragraph{The solution: explicit activation}
+
+To resolve these issues, \GRust provides the \kwf{when} construct, which enables computations and
+event emissions to be triggered explicitly. It activates a computation block only upon the
+occurrence of a discrete event, such as the occurrence of an event or the rising edge of a boolean
+signal. This mechanism ensures that computations are executed only at precise, explicitly defined
+moments.
+
+The first issue, caused by the implicit dependency on \timeop, is resolved by guarding the
+integration. The \idf{integrate\_every} component updates the position \idf{x} only when the event
+\idf{i} occurs:
+\begin{equation*}
+    \componentTab{\idf{integrate\_every}}{\idf{v}, \idf{t}, \idf{i}}{\idf{x}}{
+        \whenTab{\idf{x}}{\idf{x} = 0}{
+            \branch{\detect{\_}{\idf{i}}}{\true}{\idf{x} = \idf{integrate}(\idf{v}, \idf{t})}
+        }
+    }
+\end{equation*}
+Because the \kwf{when} clause conditions the execution, the output \idf{x} is not updated during
+oversampling, \emph{provided the event \idf{i} does not occur during oversampling} (we come back to
+this point in Paragraph~\textbf{iii}). This restores compositionality.
+
+Similarly, the \kwf{when} construct addresses the ambiguity of the free-running counter. The
+\idf{count\_every} component increments its output only upon the occurrence of event \idf{i}:
+\begin{equation*}
+    \componentTab{\idf{count\_every}}{\idf{i}}{\idf{o}}{
+        \whenTab{\idf{o}}{\idf{o} = 0}{
+            \branch{\detect{\_}{\idf{i}}}{\true}{\idf{o} = \idf{count}()}
+        }
+    }
+\end{equation*}
+This approach discretizes the behavior of the \idf{count} component, giving it a clear, reactive
+semantic. The \idf{count\_every} component is therefore resilient to oversampling \emph{as long as
+    the triggering event \idf{i} is absent during oversampling}.
+
+Finally, the problem of continuous event emission is handled in the same manner. The component
+\idf{emit\_every} emits an event only when the event \idf{i} occurs:
+\begin{equation*}
+    \componentTab{\idf{emit\_every}}{\idf{s}, \idf{i}}{\idf{e}}{
+        \whenTab{\idf{e}}{}{
+            \branch{\detect{\_}{\idf{i}}}{\true}{\idf{e} = \idf{emit\_now}(\idf{s})}
+        }
+    }
+\end{equation*}
+Consequently, the event \idf{e} is emitted only at explicitly defined moments, preventing unintended
+emissions during oversampling, \emph{as long as the event \idf{i} is absent during oversampling},
+and aligning the behavior with the event-driven execution model.
+
+\paragraph{A reactive type system}
+
+In the preceding examples, the correctness of the \kwf{when} construct hinges on a critical
+assumption: \emph{the triggering event \idf{i} must not occur during an oversampling execution}.
+\GRust enforces this property statically through a reactive type system. This system analyzes the
+activation conditions of every flow to ensure it is only activated by its declared dependencies. By
+doing so, it restricts the influence of the three sources of compositionality issues: \timeop,
+unguarded \kwf{last} memories, and unconditional event emissions. As a result, oversampling by an
+unrelated input cannot produce spurious events or rising edges, preserving compositionality by
+construction.
+
+To formalize this guarantee, the type system distinguishes between two kinds of flows, based on
+their sensitivity to oversampling:
+%
+\begin{itemize}
+    \item \emph{Continuous flows}, which are inherently tied to the execution step itself. This
+          category includes \timeop, as well as unguarded \kwf{last} memories and event emissions.
+          Their values can change with every computation, making them sensitive to the execution
+          rate.
+
+    \item \emph{Discrete flows}, which encompass all other flows. These are driven by explicit input
+          events and are guaranteed to be stable during oversampling: signals hold their last value,
+          and events remain absent.
+\end{itemize}
+
+The reactive type system classifies every flow as either continuous or discrete, statically
+prohibiting the activation of discrete computations by continuous sources. This section details the
+\GRSync portion of this system. By enforcing these rules, the type system provides the foundation
+for the oversampling theorem (\Cref{thm:semantics:grsync:theorems:oversampling}), which guarantees
+that event-driven execution preserves the semantics of the underlying synchronous model.
+
+\begin{table}[!ht]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}\hline
+        \rType ::= \cType $\vert$ \dType                       & Reactive type denoting if the
+        associated element is continuous (depending on \timeop or untriggered event emissions and
+        \kwf{last} memories) or discrete.                                                            \\\hline
+        $\Theta[x] = \rType$                                   & A reactive typing context $\Theta$
+        mapping flow identifiers to their \rType.                                                    \\\hline
+        \compTypedReact{f}{\rType^+}{\rType^+}                 & The component $f$ is reactive and,
+        when given input types $\rType^+$, it returns values of types $\rType^+$.                    \\\hline
+        \eqTypedReact{\Theta}{eq^+}                            & The equations $eq^+$ are reactive
+        in the reactive typing context $\Theta$.                                                     \\\hline
+        \exprTypedReact{\Theta}{e}{\rType^+}                   & The expression $e$ has type
+        $\rType^+$ in the reactive typing context $\Theta$.                                          \\\hline
+        \patTypedReact{\Theta}{\guarded{pat^+}{e_g}}{\rType^+} & The pattern \guarded{pat^+}{e_g} is
+        reactive to the type $\rType^+$ in the reactive typing context $\Theta$.                     \\\hline
+        \epatTypedReact{\Theta}{\guarded{epat^+}{e_g}}         & The guarded event pattern
+        \guarded{epat^+}{e_g} is reactive in the reactive typing context $\Theta$.                   \\\hline
+    \end{tabularx}
+    \caption[Notations for the reactive type system of \GRSync.]%
+    {Notations for the logic of the reactive type system of \GRSync.}
+    \label{tab:semantics:grsync:react_typing:notations}
+\end{table}
+
+We first introduce the notations used throughout this type system, summarized in
+\Cref{tab:semantics:grsync:react_typing:notations}.
+%
+The reactive type \rType is used to detect a dependency to the \timeop operation and to an
+untriggered event emission and \kwf{last} memory. It is recorded in a reactive typing context
+$\Theta$, where for all identifier $x$, $\Theta[x] = \cType$ denotes that $x$ depends on those
+constructs ($x$ is a \emph{continuous} flow), and $\Theta[x] = \dType$ denotes that $x$ has no such
+dependencies ($x$ is a \emph{discrete} flow).
+%
+When given the input types $\rType_i^+$, the component $f$ is reactive and returns values of type
+$\rType_o^+$ if we have \compTypedReact{f}{\rType_i^+}{\rType_o^+}.
+%
+The judgement \eqTypedReact{\Theta}{eq^+} denotes that the equations $eq^+$ are reactive and that
+the typing context $\Theta$ corresponds to the induced dependencies.
+%
+An expression $e$ has type $\rType^+$ in the typing context $\Theta$ if we have
+\exprTypedReact{\Theta}{e}{\rType^+}.
+%
+When matching an expression of type $\rType^+$, the pattern \guarded{pat^+}{e_g} is reactive in
+the reactive typing context $\Theta$ if we have \patTypedReact{\Theta}{\guarded{pat^+}{e_g}}
+{\rType^+}.
+%
+The judgement \epatTypedReact{\Theta}{\guarded{epat^+}{e_g}} denotes that the event pattern
+\guarded{epat^+}{e_g} is reactive and that the typing context $\Theta$ corresponds to the induced
+dependencies.
+
+The following paragraphs explain in details the rules that define the \GRSync portion of this
+reactive type system.
+
+\paragraph{Components}
+
+The reactivity of a component is crucial to ensure a sound usage in an asynchronous service.
+\Cref{thm:semantics:grsync:theorems:oversampling} states that a reactive component can be executed
+in an event-driven manner, only propagating changes. This execution is proved to be resilient to
+oversampling: the absence of changes from the discrete input flows of the component leads to an
+absence of changes from its internal memory and from its discrete output flows. The presented
+reactive type system tracks dependencies to continuous constructs inside \emph{top-level
+    components} (\ie components that are called by services). Components that are not reactive must
+be called in reactive components---that are in turn called by services. The tracking ends as soon as
+it enters a \kwf{when} equation. This kind of equation discretizes computations, preventing changes
+during an oversampling.
+
+Given the input and output reactive types $\rType_i^+$ and $\rType_o^+$, we say that the component $f$
+(\component{f}{x_i^+}{x_o^+}{eq^+}{x_m^+ = c^+}) is reactive, following the rule \nameref{rule:%
+    semantics:grsync:react_typing:comp}, if there exists a typing context $\Theta$ such that it maps
+the input and output identifiers to their corresponding types ($\Theta[x_i] = \rType_i$ and
+$\Theta[x_o] = \rType_o$), the memorized identifiers are discrete ($\Theta[x_m] = \dType$), their
+memory identifiers are continuous ($\Theta[\last{x_m}] = \cType$), and the block of equations
+is reactive. The memorized identifiers need to be discrete to preserve the state of the component
+during an oversampling: if they were not, their values could change during an oversampling and be
+stored in memory for the next computations.
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \begin{mathpar}
+            \inferREACT
+            {
+                G[f] = \component{f}{x_i^+}{x_o^+}{eq^+}{x_m^+ = c^+} \\
+                \eqTypedReact{\Theta}{eq^+} \\
+                \left(\Theta[x_i] = \rType_i\right)^+ \\
+                \left(\Theta[x_o] = \rType_o\right)^+ \\
+                \left(\Theta[x_m] = \dType \right)^+ \\
+                \left(\Theta[\last{x_m}] = \cType \right)^+
+            }
+            { \compTypedReact{f}{\rType_i^+}{\rType_o^+} }
+            {Comp}
+            \label{rule:semantics:grsync:react_typing:comp}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+This rule allows components to return continuous flows. For instance, component that multiplies
+\timeop by two is not an issue as long as its output is tracked as continuous.
+
+\paragraph{Expressions}
+
+The reactive type system for expressions informs whether the expression can change during an
+oversampling (\ie the expression is continuously), or if it is resilient to it (\ie the expression
+is discrete). It propagates the continuous dependencies.
+%
+The two continuous expressions (\last{x_m} and \emit{e}) are propagated by the
+rules \nameref{rule:semantics:grsync:react_typing:e:last} and
+\nameref{rule:semantics:grsync:react_typing:e:emit}. For the \kwf{last} memory, the type stored in
+the context is verified to be the continuous type~\cType.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferREACTE
+            { \Theta[\last{x_m}] = \cType }
+            { \exprTypedReact{\Theta}{\last{x_m}}{\cType} }
+            {Last}
+            \label{rule:semantics:grsync:react_typing:e:last}
+
+            \inferREACTE
+            { }
+            { \exprTypedReact{\Theta}{\emit{e}}{\cType} }
+            {Emit}
+            \label{rule:semantics:grsync:react_typing:e:emit}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+% For example, let $f$ be a component with input \idf{x_i} and output \idf{x_o}, such that \init
+% {\idf{x_o}= 0} and $\idf{x_o} = \last{\idf{x_o}} + \idf{x_i}$. A call of $f$ in a service would
+% define a flow whose values depend on the execution times and not only on value updates. This is
+% depicted in the chronograms from \Cref{tab:semantics:grsync:react_typing:last}, illustrating two
+% executions starting with the same input flow: one execution reacting on the input changes (left),
+% and the other oversampled at time $t_{\text{OS}}$ (right). Oversampling caused a difference of
+% output value for the timestamp $t_2$.
+
+% \begin{table}[ht!]
+%     \centering
+%     \begin{tabular}{r|llll ccc r|lllll}
+%         Time                                       & $t_0$ & $t_1$ & $t_2$                             & \dots &       &  &  &
+%         Time                                       & $t_0$ & $t_1$ & \textcolor{gray}{$t_{\text{OS}}$} & $t_2$ & \dots         \\
+%         \idf{x_i}                                  & $0$   & $1$   & $2$                               & \dots &       &  &  &
+%         \idf{x_i}                                  & $0$   & $1$   & \textcolor{gray}{$1$}             & $2$   & \dots         \\
+%         $\idf{x_o} = \last{\idf{x_o}} + \idf{x_i}$ & $0$   & $1$   & $3$                               & \dots &       &  &  &
+%         $\idf{x_o} = \last{\idf{x_o}} + \idf{x_i}$ & $0$   & $1$   & \textcolor{gray}{$2$}             & $4$   & \dots         \\
+%     \end{tabular}
+%     \caption{Two executions with the same input flow: one reacting on input changes (left), and one
+%         oversampled at time $t_{\text{OS}}$ (right). Oversampling caused a shift for the timestamp
+%         $t_2$.}
+%     \label{tab:semantics:grsync:react_typing:last}
+% \end{table}
+
+% Similarly, an event emission outside the branch of a \kwf{when} equation could simulate an event
+% arrival, allowing the usage of \kwf{last}. For example, the following equations present the same
+% issue depicted by the chronograms from \Cref{tab:semantics:grsync:react_typing:last}.
+% \begin{align*}
+%      & \idf{x} = \emit{()},                                                                            \\
+%      & \when{\idf{y}}{\idf{y} = 0}{\branch{\detect{\_}{\idf{x}}}{\true}{\idf{y} = \last{\idf{y}} + 1}}
+% \end{align*}
+
+The rule \nameref{rule:semantics:grsync:react_typing:e:const} ensures constants ($c$) are of type
+\dType, as they do not depend on any continuous flow.
+%
+Identifiers ($x$) have the type stored in the context $\Theta$, as stated by \nameref{rule%
+    :semantics:grsync:react_typing:e:ident}.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferREACTE
+            { }
+            { \exprTypedReact{\Theta}{c}{\dType} }
+            {Cst}
+            \label{rule:semantics:grsync:react_typing:e:const}
+
+            \inferREACTE
+            { }
+            { \exprTypedReact{\Theta}{x}{\Theta[x]} }
+            {ID}
+            \label{rule:semantics:grsync:react_typing:e:ident}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+An operation ($op(e^+)$) is of type \dType if all input expressions ($e^+$) are of type
+\dType, as defined by the rule \nameref{rule:semantics:grsync:react_typing:e:op:value}.
+In the case one expression has type \cType, the rule \nameref{rule:semantics:grsync:react_typing:%
+    e:op:time} states the operation is of type \cType. Those rules implement the propagation of
+continuous dependencies.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferREACTE
+            { \left(\exprTypedReact{\Theta}{e}{\dType}\right)^+ }
+            { \exprTypedReact{\Theta}{op(e^+)}{\dType} }
+            {Op{\scriptsize Disc}}
+            \label{rule:semantics:grsync:react_typing:e:op:value}
+
+            \inferREACTE
+            {
+                \left(\exprTypedReact{\Theta}{e}{\rType}\right)^+ \\\\
+                \exists \rType = \cType
+            }
+            { \exprTypedReact{\Theta}{op(e^+)}{\cType} }
+            {Op{\scriptsize Cont}}
+            \label{rule:semantics:grsync:react_typing:e:op:time}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+A component application $f(e^+)$ is typed $\rType_o^+$ if the input expressions are typed
+$\rType_i^+$, and if the called component ($f$) is reactive with the input types $\rType_i^+$ and
+the output types $\rType_o^+$. This is defined by the rule
+\nameref{rule:semantics:grsync:react_typing:e:app}. As previously said, the reactive type system
+tracks and propagates dependencies to continuous constructs inside top-level components. This
+propagation ends as soon as it enters a \kwf{when} equation---which is resilient to oversampling by
+construction. Therefore, the reactive typing of expressions ends in \kwf{when} equations; the rule
+\nameref{rule:semantics:grsync:react_typing:e:app} is only applied outside \kwf{when} equations, and
+thus requires the called component ($f$) to be reactive.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferREACTE
+            {
+                \left(\exprTypedReact{\Theta}{e}{\rType_i}\right)^+ \\
+                \compTypedReact{f}{\rType_i^+}{\rType_o^+}
+            }
+            { \exprTypedReact{\Theta}{f(e^+)}{\rType_o^+} }
+            {App}
+            \label{rule:semantics:grsync:react_typing:e:app}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Patterns}
+
+A pattern matching is reactive if and only if an oversampling does not change the matched branch. So
+it is reactive if and only if the success of a pattern is resilient to oversampling. The reactivity
+of a pattern captures this resilience.
+%
+Guarded patterns (\guarded{pat^+}{e_g}) are reactive, with regard to the matching types
+($\rType^+$), if each individual pattern ($pat$) is reactive with its corresponding type, and if the
+guard ($e_g$) is of discrete type \dType, as stated by the rule
+\nameref{rule:semantics:grsync:react_typing:pats}. The guard should be discrete so that its value
+does not change during an oversampling.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferREACTPat
+            {
+                \left(\patTypedReact{\Theta}{pat}{\rType}\right)^+ \\
+                \exprTypedReact{\Theta}{e_g}{\dType}
+            }
+            { \patTypedReact{\Theta}{\guarded{pat^+}{e_g}}{\rType^+} }
+            {Tple}
+            \label{rule:semantics:grsync:react_typing:pats}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The rule \nameref{rule:semantics:grsync:react_typing:pat:const} ensures that a constant pattern is
+reactive if and only if it matches a discrete type \dType. Indeed, a constant pattern acts just like
+a guard, so we need to make sure that the matched expression does not change its value during the
+oversampling.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferREACTPat
+            { }
+            { \patTypedReact{\Theta}{c}{\dType} }
+            {Const}
+            \label{rule:semantics:grsync:react_typing:pat:const}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+Without this restriction, all identifiers defined by a \kwf{match} equation could depend on \timeop.
+For example, if \idf{t} is an identifier depending on \timeop, then the following block of equations
+presents the issue depicted by the chronograms from \Cref{tab:semantics:grsync:react_typing:pat}:
+the selected branch in the pattern matching changes during the oversampling, making the rising edge
+on \idf{x} tick, which in turn increments \idf{f}, altering the memory of the program for the long
+term.
+\begin{equation*}
+    \left\{
+    \matchTab{\idf{t}}{\idf{x}}{\branch{6}{\true}{\idf{x} = \true},\\\qquad\branch{\_}{\true}{\false}}
+    \qquad
+    \whenTab{\idf{y}}{\idf{y} = 0}{\branch{\idf{x}}{\true}{\idf{y} = \last{\idf{y}} + 1}}
+    \right\}
+\end{equation*}
+%
+The reactive type system prevents this issue: \idf{t} is associated with a \cType by rule
+\nameref{rule:semantics:grsync:react_typing:e:ident}, the \kwf{match} equation follows rule
+\nameref{rule:semantics:grsync:react_typing:eq:match} and tries to associate the constant pattern
+\guarded{6}{\true} to the \cType type, but only \dType type is allowed for this pattern, as stated
+by rule \nameref{rule:semantics:grsync:react_typing:pat:const}.
+
+\begin{table}[ht!]
+    \centering
+    \begin{tabular}{r|ccc ccc r|cccc}
+        \idf{t}        & 1      & 7                       & 9                  &                    &  &  &
+        \idf{t}        & 1      & \textcolor{gray}{6}     & 7                  & 9                          \\
+        \idf{x}        & \false & \false                  & \false             &                    &  &  &
+        \idf{x}        & \false & \textcolor{gray}{\true} & \false             & \false                     \\
+        \idf{y}        & 0      & 0                       & 0                  &                    &  &  &
+        \idf{y}        & 0      & \textcolor{gray}{1}     & \textcolor{red}{1} & \textcolor{red}{1}         \\
+        \last{\idf{y}} & 0      & 0                       & 0                  &                    &  &  &
+        \last{\idf{y}} & 0      & \textcolor{gray}{0}     & \textcolor{red}{1} & \textcolor{red}{1}         \\
+    \end{tabular}
+    \caption[A \kwf{match} equation breaks the oversampling.]%
+    {Two executions with the same input flow: the left one is the reference execution, and
+        the right one is oversampled at time $\idf{t} = 6$ (in \textcolor{gray}{gray}). Oversampling
+        caused modifications, in \textcolor{red}{red}, during the execution afterwards.}
+    \label{tab:semantics:grsync:react_typing:pat}
+\end{table}
+
+An identifier pattern ($x$), following the rule \nameref{rule:semantics:grsync:react_typing:pat:%
+    ident}, associates to the identifier the corresponding type stored in the context ($\Theta[x]$).
+%
+A wildcard is reactive and corresponds to any type, as stated by the rule \nameref{rule:semantics:%
+    grsync:react_typing:pat:wild}, because it always matches (with or without oversampling).
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferREACTPat
+            { }
+            { \patTypedReact{\Theta}{x}{\Theta[x]} }
+            {ID}
+            \label{rule:semantics:grsync:react_typing:pat:ident}
+
+            \inferREACTPat
+            { }
+            { \patTypedReact{\Theta}{\_}{\rType} }
+            {Wild}
+            \label{rule:semantics:grsync:react_typing:pat:wild}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Event patterns}
+
+Similarly to pattern matching, a \kwf{when} equation is reactive if and only if an oversampling does
+not change the triggered branch. So it is reactive if and only if the success of an event pattern is
+resilient to oversampling.
+%
+Guarded event patterns (\guarded{epat^+}{e_g}) are reactive if each individual event pattern
+($epat$) is reactive, as stated by the rule \nameref{rule:semantics:grsync:react_typing:epats}.
+Because each individual event pattern is resilient to oversampling (is not triggered during an
+oversampling), the guard is computed only when a change occurred, and thus can depend on continuous
+flows.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferREACTEPat
+            { \left(\epatTypedReact{\Theta}{epat}\right)^+ }
+            { \epatTypedReact{\Theta}{\guarded{epat^+}{e_g}} }
+            {Tple}
+            \label{rule:semantics:grsync:react_typing:epats}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+Event detections are reactive if the event (and the identifiers they define) are of discrete type
+\dType, as stated by the rule \nameref{rule:semantics:grsync:react_typing:epat:event}.
+%
+The detection of a rising edge ($e$) follows the rule \nameref{rule:semantics:grsync:react_typing:%
+    epat:edge}, and is reactive if and only if the boolean expression ($e$) is of type \dType.
+This makes sure that only discrete changes are detected by an event pattern.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferREACTEPat
+            { \Theta[y] = \dType \\ \Theta[x] = \dType }
+            { \epatTypedReact{\Theta}{\detect{x}{y}} }
+            {Dtct}
+            \label{rule:semantics:grsync:react_typing:epat:event}
+
+            \inferREACTEPat
+            { \exprTypedReact{\Theta}{e}{\dType} }
+            { \epatTypedReact{\Theta}{e} }
+            {Edge}
+            \label{rule:semantics:grsync:react_typing:epat:edge}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\newpage
+
+\paragraph{Equations}
+%
+Equations link expressions dependencies to identifiers. They are reactive with regard to the
+reactive type context $\Theta$ if the dependencies to continuous flows that they induce satisfy the
+typing context.
+%
+A block of equations ($eq^+$) is reactive if and only if each individual equation ($eq$) is
+reactive, as defined by the rule \nameref{rule:semantics:grsync:react_typing:eqs}.
+%
+A declaration ($x^+ = e$) is reactive and satisfies the typing context ($\Theta$), following the
+rule \nameref{rule:semantics:grsync:react_typing:eq:decl}, if the reactive type of the expression
+($e$) corresponds to the context ($\Theta[x]$).
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferREACTEq
+            { \left(\eqTypedReact{\Theta}{eq}\right)^+ }
+            { \eqTypedReact{\Theta}{eq^+} }
+            {Blck}
+            \label{rule:semantics:grsync:react_typing:eqs}
+
+            \inferREACTEq
+            { \exprTypedReact{\Theta}{e}{(\Theta[x])^+} }
+            { \eqTypedReact{\Theta}{x^+ = e} }
+            {Decl}
+            \label{rule:semantics:grsync:react_typing:eq:decl}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+A \kwf{match} equation (\match{e}{x^+}{(\branch{pat_k^+}{e_k}{eq_k^+})^+}) is reactive if the
+reactive types of the matched expression ($e$) make the patterns (\guarded{pat_k^+}{e_k}) reactive
+in the context $\Theta$, and each branch equations ($eq_k^+$) are reactive, as defined by the rule
+\nameref{rule:semantics:grsync:react_typing:eq:match}.
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \begin{mathpar}
+            \inferREACTEq
+            {
+                \exprTypedReact{\Theta}{e}{\rType^+} \\
+                \left(\patTypedReact{\Theta}{\guarded{pat_k^+}{e_k}}{\rType^+}\right)^+ \\
+                \left(\eqTypedReact{\Theta}{eq_k^+}\right)^+
+            }
+            { \eqTypedReact{\Theta}{\match{e}{x^+}{(\branch{pat_k^+}{e_k}{eq_k^+})^+}} }
+            {Mtch}
+            \label{rule:semantics:grsync:react_typing:eq:match}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+A \kwf{when} equation \emph{discretizes continuous flows} in reactive components. The rule
+\nameref{rule:semantics:grsync:react_typing:eq:when} ensures \when{x^+}{x_m^+ = c^+}{(\branch
+    {epat_k^+}{e_k}{eq_k^+})^+} is reactive if and only if its event patterns
+(\guarded{epat_k^+}{e_k}) are reactive, meaning that the event detection is resilient to
+oversampling. All defined identifiers ($x^+$) are of discrete type \dType. The reactive type system
+ends as soon as it enters the \kwf{when} equation, because everything inside is discrete.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \begin{mathpar}
+            \inferREACTEq
+            {
+                \left(\Theta[x] = \dType\right)^+ \\
+                \left(\epatTypedReact{\Theta}{\guarded{epat_k^+}{e_k}}\right)^+
+            }
+            { \eqTypedReact{\Theta}{\when{x^+}{x_m^+ = c^+}{(\branch{epat_k^+}{e_k}{eq_k^+})^+}} }
+            {When}
+            \label{rule:semantics:grsync:react_typing:eq:when}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Relation with the type system of \Zelus}
+
+The reactive type system introduced in this section is reminiscent of the approach taken by the
+synchronous language \Zelus~\cite{DBLP:conf/emsoft/BenvenisteBCP11} to solve a similar problem. In \Zelus, a language
+to model hybrid systems, the core challenge is managing the interaction between discrete software
+logic and continuous physical dynamics described by Ordinary Differential Equations (ODEs). A
+synchronous program operates in discrete steps, with its state defined only at these specific
+instants. In contrast, the values described by ODEs evolve continuously, changing smoothly between
+these steps. This creates a fundamental conflict: the discrete program only sees samples of the
+continuous world, making it blind to crucial events (like a value crossing a threshold) that could
+occur between samples. Consequently, operations like checking for equality on a continuous value are
+ill-defined in the discrete logic.
+
+To ensure predictable behavior, the \Zelus type system enforces a strict separation between its
+\emph{continuous values} (derived from ODEs) and \emph{discrete values}. This guarantees the
+soundness of their interaction by preventing such ill-defined operations and ensuring the continuous
+domain can only influence the discrete logic at specific, well-defined moments (such as
+zero-crossing events).
+
+While \GRust does not model ODEs, its \timeop operator introduces a similar conflict. It provides a
+continuous flow that changes at every evaluation, clashing with the discrete flows during an
+oversampling step. Our reactive type system classifies flows as either continuous (typed \cType) or
+discrete (typed \dType) to ensure that continuous time from \timeop cannot improperly influence stateful
+computations, thereby ensuring the soundness of the program during an oversampling.
+
+\paragraph{Relation with Call-By-Push-Value}
+
+A more theoretical understanding of our reactive type system is provided by Call-By-Push-Value
+(CBPV)~\cite{DBLP:phd/ethos/Levy01}. CBPV is a programming paradigm that distinguishes \emph{value
+    types} from \emph{computation types}. Value types represent stable data that can be passed and
+stored. In contrast, computation types represent actions that, when executed, produce a value and
+may have effects.
+
+In CBPV, to treat a computation as a value, it must be packaged into a \emph{thunk} that freezes
+the computation into a value. To run the computation, the thunk must be explicitly \emph{forced}.
+This formalizes the distinction between having data \versus having a process to generate data.
+
+Our reactive type system can be understood as a domain-specific application of this principle. A
+discrete flow (typed \dType) corresponds to a CBPV value: it represents stable data that is
+unaffected by re-evaluation during an oversampling step. Conversely, a continuous flow
+(typed \cType), originating from \timeop, corresponds to a CBPV computation: evaluating \timeop is
+an action (getting the current time) that produces a new result each time.
+
+From this perspective, our reactive type system acts as a static guard that restricts where the
+implicit \emph{force} operation on \timeop is allowed to occur. It forbids forcing a time-based
+computation if its result could alter the discrete memory of the program.
+
+\paragraph{Summary}
+
+This section has introduced the reactive type system for \GRSync. The primary goal of this system is
+to resolve the conflict between the synchronous semantics of components and the asynchronous,
+event-driven execution model of services. It formally addresses this challenge by distinguishing
+between \emph{continuous} flows, which depend on execution time or implicit feedback loops, and
+\emph{discrete} flows, which are driven by explicit input changes.
+
+The presented rules systematically propagate continuity, ensuring that dependencies on \timeop and
+untriggered \kwf{last} memories and \kwf{emit} operations are tracked. The \kwf{when} equation is
+the central mechanism for discretizing this behavior. By enforcing that its triggers are discrete,
+the \kwf{when} construct establishes a boundary that prevents continuous flows from causing
+unintended effects during oversampling.
+
+A component that adheres to this type system is consequently deemed \emph{reactive}. This static
+guarantee is essential, as it ensures the component can be safely and compositionally integrated
+into an asynchronous system (\cf \Cref{thm:semantics:grsync:theorems:oversampling}), providing a
+sound foundation for the event-driven execution model of \GRust.

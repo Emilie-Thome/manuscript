@@ -1,0 +1,873 @@
+%% "reactive systems" in everyday life
+When we think of computers, we usually picture desktops, laptops, or maybe smartphones. But our
+interaction with computer-based systems extends far beyond these familiar devices. From coffee
+machines to modern vehicles, many systems around us continuously and automatically react to
+\emph{real-time} information. Such systems are naturally referred to as \emph{reactive systems}.
+
+\begin{wrapfigure}{r}{0.5\textwidth}
+    \centering
+    \includegraphics[width=0.4\textwidth]{reactive_system.png}
+    \caption[Reactive system illustration.]%
+    {A reactive system illustrated as a coffee machine: the programmer requests coffee, the
+        machine produces it, the programmer drinks, and requests again, \textit{ad infinitum}.}
+    \label{fig:intro:topic:reactive_systems}
+\end{wrapfigure}
+
+Reactive systems are designed to respond immediately to changes in their environment, performing the
+reaction loop depicted in \Cref{fig:intro:topic:reactive_systems}. These systems constantly monitor
+the flow of inputs and adjust their behavior---whether handling a coffee request or responding to
+throttle pedal pressure. The goal is clear: to react promptly and correctly to external events.
+%
+The level of guarantees expected to achieve this goal varies across reactive systems. Some systems
+are considered critical and must provide strong assurances of correct behavior under all conditions,
+while others can tolerate occasional failures.
+%
+For example, if a coffee machine fails to operate one morning, it is merely an inconvenience, not as
+serious a hazard as a car blocked in cruise control~\footnote{%
+    \href{https://www.ladepeche.fr/article/2013/02/12/1559158-son-regulateur-de-vitesse-bloque-il-franchit-3-peages-a-200-km-h.html}%
+    {A real-world example of a blocked cruise control.}%
+}.
+
+This thesis addresses the programming of \emph{critical} reactive systems \emph{embedded} in
+automotive applications, such as the Adaptive Cruise Control or anti-lock braking. The research was
+conducted at \ampere, the software division of the Renault Group.
+
+\section{Domain Specific Languages}
+\label{sec:intro:dsl}
+
+Programming critical reactive systems is inherently complex and error-prone. These systems
+often handle multiple concurrent processes under strict timing constraints, and must operate
+within tight computational limits, such as restricted memory and processing power. In embedded
+applications---like those found in automotive systems---these constraints are particularly severe:
+the software must be lightweight and efficient to execute on constrained hardware.
+
+\subsection{Low-Level Programming and Its Challenges}
+\label{sec:intro:dsl:challenge}
+
+\begin{wrapfigure}{l}{0.5\textwidth}
+    \centering
+    \includegraphics[width=0.5\textwidth]{languages_level.png}
+    \caption[Abstraction level of programming languages.]%
+    {A classification of programming languages by abstraction level: lower levels are closer
+        to hardware; higher levels offer greater abstractions.}
+    \label{sec:intro:dsl:level}
+\end{wrapfigure}
+
+To meet these constraints, embedded systems are implemented using \emph{low-level} programming
+languages such as \Ci or even assembly.
+%
+A (subjective) classification of language abstraction levels is illustrated in
+\Cref{sec:intro:dsl:level}. In this classification, the lower levels correspond to languages closest
+to machine code---those that operate near the hardware and binary encoding. These provide
+fine-grained control over resources and allow for highly optimized executables. As we move upward,
+we encounter languages that offer increasingly human-friendly abstractions, such as functions, data
+types, or even graphical models like block diagrams.
+%
+Programming languages tend to evolve by building on prior ones, gradually introducing higher-level
+abstractions. As a result, boundaries become blurry, and opinions differ on whether \Ci is
+best described as low-level or high-level~\footnote{%
+    The classification of \Ci as low-level or high-level varies depending on context; it provides
+    abstractions above assembly but also allows fine-grained control close to
+    hardware (\eg its description in \href{https://en.wikipedia.org/wiki/C_(programming_language)}
+    {\textsc{Wikipedia}}).%
+}.
+
+However, programming directly in low-level languages is challenging and increases the likelihood of
+subtle bugs. Such bugs can have severe consequences. The infamous case of the \emph{Therac-25}
+radiation therapy machine exemplifies the risks involved~\cite{journals/computer/LevesonT93}:
+several patients received lethal overdoses of radiation due to software errors in a system
+programmed directly in assembly language.
+%
+The use of low-level code made the software difficult to understand, test, and maintain. Critical
+failures arose from issues like race conditions---where different parts of the program accessed
+shared memory at the same time without proper coordination---and undetected overflows in memory.
+Because the system lacked basic safety checks, small timing errors could lead to dangerous
+configurations going unnoticed.
+%
+This tragic example highlights how low-level programming in critical systems can lead to
+errors that are hard to detect, with life-threatening consequences.
+
+\subsection{Domain-Specific Languages as a Solution}
+\label{sec:intro:dsl:solution}
+
+Given these challenges, there is a strong need for correctness and reliability in critical reactive
+systems. Relying solely on low-level programming is often insufficient to guarantee safety.
+\emph{Domain-Specific Languages} (\dsl{}s) address this challenge by providing specialized,
+high-level abstractions tailored to a specific problem domain.
+%
+For instance, \href{https://en.wikipedia.org/wiki/SQL}{SQL} is a well-known DSL used for managing
+and querying relational databases. Rather than requiring low-level loops or memory access, SQL
+allows to express data operations declaratively: for example, the query
+\texttt{SELECT name FROM users WHERE active = TRUE;} returns the name of users that are active.
+
+By offering a readable and concise syntax with domain-specific semantics, a \dsl helps developers
+specify behavior more clearly. This clarity not only reduces the risk of errors but also improves
+maintainability, since a program that is easy to understand is also easier to modify correctly.
+Furthermore, a \dsl facilitates automated verification, as analysis tools can be tailored to its
+specific constructs. For safety-critical systems, this simplifies certification: if the compiler for
+the \dsl is certified, validation efforts can focus on the high-level source code.
+
+\subsection{Dataflow Models for Reactive Systems}
+\label{sec:intro:dsl:dataflow}
+
+In the context of \dsl{}s for reactive systems, a common foundation is the \emph{dataflow model},
+where systems are described as networks of components that process flows of data over time. This
+model is especially well-suited to reactive systems because their inputs---such as sensor readings,
+user interactions, or communication messages---naturally arrive as flows of information, one value
+at a time, in a temporal sequence. The dataflow model offers an expressive way to describe reactive
+behavior by emphasizing how data moves through the system, rather than dictating the precise
+sequence of operations for the computer to perform.
+
+\paragraph{Kahn Process Network}
+\label{sec:intro:dsl:dataflow:kpn}
+
+One well-known formalization of dataflow is the \emph{Kahn Process Network} (KPN)
+model~\cite{DBLP:conf/ifip/Kahn74}, in which independent concurrent processes communicate through
+unbounded FIFO (First-In, First-Out) channels. Channel reads are blocking (a process waits if no
+data is available), while writes are non-blocking thanks to the assumption of infinite channel
+capacity. Processes cannot test whether a channel is empty, enforcing strict data dependency. If all
+processes are deterministic, then the entire network is deterministic as well: output dataflows
+depend only on input dataflows, not on the execution order or communication timing.
+
+A major drawback of KPNs is the lack of guarantees on deadlock-freedom (processes may wait
+indefinitely for input from each other) and bounded memory usage (unbounded channels may grow
+without limit if data production outpaces consumption, making memory usage unmanageable in embedded
+systems).
+
+\paragraph{Synchronous Dataflow Models}
+\label{sec:intro:dsl:dataflow:sdf}
+
+To address these drawbacks, one approach is to restrict models to a subset of KPNs that can be
+statically analyzed for memory boundedness. This is the case with \emph{Synchronous Dataflow} (SDF)
+models~\cite{DBLP:journals/tc/LeeM87}, which allow compile-time scheduling of process execution and
+bounded buffer sizes. These properties make SDF particularly well-suited for digital signal
+processing (DSP) applications. As a result, SDF has been adopted in industrial DSP tools such as
+COSSAP and the Signal Processing WorkSystem~\cite{books/kap/BattacharyyaLM96}.
+
+\paragraph{Synchronous Dataflow Languages}
+\label{sec:intro:dsl:dataflow:synchronous_languages}
+
+\Lustre~\cite{DBLP:conf/popl/CaspiPHP87} and its industrial implementation
+\Scade~\cite{DBLP:conf/tase/ColacoPP17} were developed to program critical embedded systems using
+a declarative style. In these \emph{synchronous dataflow languages}, KPNs are restricted
+to eliminate communication buffers entirely: each process is associated with a clock that defines
+when computations occur. Flows can be filtered and combined using clock operators, and all
+timing dependencies are made explicit in the program structure. The \emph{synchrony hypothesis} is
+assumed: outputs are produced instantaneously with respect to inputs, simplifying concurrency
+modeling. A synchronous program reacts at discrete logical instants governed by its \emph
+{base-clock}, and compilation ensures bounded memory usage and bounded reaction time. The latter can
+be measured as the \emph{Worst Case Execution Time} (\wcet), which is checked to be smaller than the
+base-clock period to verify the synchronous hypothesis and guarantee real-time correctness.
+
+Other synchronous languages include \Signal~\cite{DBLP:journals/scp/BenvenisteGJ91} and
+\Esterel~\cite{DBLP:journals/scp/BerryG92}. While \Lustre is strictly functional, \Signal is
+relational and emphasizes a fine-grained control over timing by allowing multiple clocks and
+explicit equations over their relations. This clock calculus allows for modeling distributed
+and multi-rate systems, but requires solving logical constraints at compile time, making
+compilation more complex. In contrast, \Esterel follows an imperative style and offers much richer
+expressivity, including complex control structures such as preemption and exception handling.
+Its semantics are compiled into boolean circuits~\cite{DBLP:books/daglib/0023221}, making it
+suitable for hardware synthesis and time-critical control logic.
+
+\paragraph{Functional Reactive Programming}
+\label{sec:intro:dsl:dataflow:frp}
+
+Another family of dataflow-based \dsl{}s is \emph{Functional Reactive Programming}
+(\frp)~\cite{DBLP:conf/icfp/ElliottH97}, initially introduced to describe interactive animations and
+graphical user interfaces (GUIs) in a declarative and composable way. In \frp, programs manipulate
+time-varying values, such as user input or sensor data, using high-level functional abstractions.
+These values are represented as \emph{signals} (continuous or discrete over time) and \emph{events}
+(discrete occurrences), allowing the programmer to define reactive behavior as pure functions over
+dataflows. Unlike synchronous languages like \Lustre, which assume a single base-clock and bounded
+reaction times, \frp embraces a more flexible and often asynchronous notion of time. It prioritizes
+expressivity and composability over predictability and timing guarantees.
+%
+Because of this focus, \frp languages are typically used in non-critical domains, such as user
+interfaces, multimedia systems, or robotics. Popular \frp implementations include
+\Yampa~\cite{DBLP:conf/haskell/CourtneyNP03} in \Haskell, \Elm~\cite{DBLP:conf/pldi/CzaplickiC13}
+in \JavaScript, and \ReactiveX libraries~\cite{reactivex} for multiple languages. Although \frp
+shares the dataflow spirit with synchronous languages, its execution model is generally based on
+dynamic data propagation and lazy evaluation, rather than statically scheduled computations. This
+makes formal timing analysis and resource prediction more difficult, but enables elegant and highly
+modular code for reactive applications.
+
+Early \frp systems lacked formal guarantees, particularly regarding \emph{causality}---ensuring that
+outputs depend only on past and present inputs---and bounded use of memory and time. These
+limitations made them difficult to apply in real-time or resource-constrained environments. To
+address this, several \frp variants have been proposed with stronger guarantees. Real-Time
+\frp~\cite{DBLP:conf/icfp/WanTH01} introduces restrictions to ensure that computations consume
+bounded memory and execute within a predictable time. Event-Driven
+\frp~\cite{DBLP:conf/padl/WanTH02} addresses causality by making all updates explicitly triggered by
+discrete events, which ensures deterministic and well-defined signal propagation. Other variants,
+such as Modal \frp, use a modal type theory to formally prevent issues like memory leaks, as
+demonstrated by \textsc{Rattus}~\cite{DBLP:journals/pacmpl/BahrGM19}, which enforces a clock-based
+execution model, and its asynchronous extension
+\textsc{Async RaTT}~\cite{DBLP:journals/pacmpl/BahrM23}. These
+refinements make \frp more suitable for embedded and reactive systems while preserving its
+declarative and compositional nature.
+
+\paragraph{Execution Strategies in Reactive Systems}
+\label{sec:intro:dsl:dataflow:push_pull}
+
+Execution in reactive systems can follow two main strategies: \emph{push}-based or
+\emph{pull}-based~\cite{DBLP:conf/haskell/Elliott09}. In push-based systems, also called
+\emph{event-driven}, updates are propagated eagerly whenever inputs change. This makes them
+responsive to external stimuli, but can be inefficient when inputs change frequently and the
+results are not always needed. In contrast, pull-based or \emph{demand-driven} systems compute
+outputs only when they are explicitly requested. This avoids unnecessary work and provides
+predictable computation, but may introduce latency due to on-demand evaluation (if the outputs had
+been updated eagerly, they would already be available) and redundant computations (if inputs have
+not changed).
+%
+This distinction influences how data dependencies propagate and how resources are managed. Most
+synchronous language compilers adopt a pull-based approach: computations occur at each tick of the
+system's base-clock, independently of input changes. This supports static scheduling and
+predictable resource usage. In contrast, many \frp implementations support push-based or hybrid
+strategies~\cite{reactivex,DBLP:conf/pldi/CzaplickiC13,DBLP:conf/ppdp/MandelPP15}. Push-based
+execution suits input-driven systems like GUIs or sensor networks, while pull-based evaluation
+enables on-demand computation. Hybrid models aim to combine both advantages by avoiding unnecessary
+updates and improving efficiency~\cite{DBLP:conf/haskell/Elliott09}.
+
+\subsection{Summary}
+\label{sec:intro:dsl:summary}
+
+This section showed how critical reactive systems require specialized languages to handle
+complexity and strict constraints. Domain-specific languages provide high-level abstractions
+tailored for these needs, often based on dataflow models and synchronous execution semantics.
+With foundations in place, we now examine how these languages are applied in the automotive
+industry, where safety and timing demands are paramount.
+
+\section{Programming Cars}
+\label{sec:intro:cars}
+
+Modern vehicles rely on a large number of embedded software components to implement their
+functionalities, from engine control and braking systems to infotainment and driver assistance.
+These components are inherently reactive: they continuously interact with the physical world,
+respond to sensor inputs, issue actuator commands, while operating concurrently under strict timing
+and resource constraints.
+
+\subsection{Standards and Architectures}
+\label{sec:intro:cars:standards}
+
+To guarantee functional safety, most automotive manufacturers adhere to the \iso standard,
+which provides a systematic framework for identifying and mitigating risks in road vehicles.
+It introduces the notion of \emph{Automotive Safety Integrity Levels} (\Asil), ranging from A
+(least critical) to D (most critical), based on the severity, exposure, and controllability
+of potential hazards. For example, direction indicators may be assigned \Asil~A, while an
+engine controller is typically classified as \Asil~D. Higher \Asil levels impose stricter
+requirements on testing, traceability, determinism, and tool qualification.
+
+The \ausar (\emph{AUTomotive Open System ARchitecture}) standard was introduced by major
+automotive manufacturers and suppliers to define a common interface between software and hardware
+components. It provides a modular architecture for \emph{Electronic Control Units} (\ecus)---small
+embedded computers responsible for specific vehicle functions such as engine management, braking,
+or lighting. \ausar structures software into standardized layers to promote reuse and hardware
+independence. At its core is the \emph{Runtime Environment} (RTE), a middleware layer that
+abstracts communication between application components and the lower-level infrastructure. Above
+the RTE are the \emph{Application Software Components}, which implement functional logic, while
+below it lies the \emph{Basic Software}, responsible for hardware interaction, communication,
+and diagnostics. This layered design enables independent development, testing, and integration of
+software modules, improving interoperability across suppliers and vehicle platforms.
+
+In typical deployments, automotive software is distributed across multiple \ecus, which interact
+\via communication buses such as CAN, LIN, or Ethernet. Each \ecu operates under a periodic
+schedule: it samples its inputs at regular intervals, computes outputs, and sends results to other
+components. This execution model aligns well with synchronous programming languages.
+
+\subsection{Model-Based Development}
+\label{sec:intro:cars:mbd}
+
+To manage complexity and ensure correctness, automotive software is often developed using
+\emph{Model-Based Development} techniques. In this approach, engineers describe component behavior
+using graphical or textual models in high-level \dsl{}s. These models are used to simulate behavior,
+verify safety properties, and generate \Ci code automatically.
+
+One of the most widely used tools in industry is \emph{\Simulink}~\cite{simulink}, a graphical
+dataflow-based environment for modeling systems. \Simulink allows engineers to connect blocks
+representing signals, operators, or state machines. Its integration with \Stateflow enables control
+flow modeling, while code generation toolchains produce production-grade \Ci code. \Simulink models
+can be configured to comply with \iso and integrate with \ausar through dedicated toolboxes.
+
+While \Simulink shares similarities with synchronous dataflow languages (such as its use of discrete
+time steps and block diagrams) it does not follow a formally defined synchronous semantics. Instead,
+its behavior depends on block sample times, solver settings, and execution order, which must be
+carefully configured to ensure predictable and deterministic execution.
+
+\subsection{Integration of Synchronous \dsl{}s}
+\label{sec:intro:cars:synchronous}
+
+For safety-critical components, synchronous languages such as \Lustre and its industrial
+derivative \Scade offer strong formal guarantees. These \dsl{}s ensure deterministic behavior,
+bounded memory usage, and analyzable timing, which are essential for high-integrity real-time
+systems. Their compilation process produces statically scheduled code with a guaranteed
+\emph{Worst-Case Execution Time} (\wcet), enabling formal verification against timing constraints
+imposed by \iso and \ausar models.
+
+\Scade has been widely adopted in avionics and nuclear industries, where the highest certification
+levels (\eg \textsc{DO-178C} Level A for aerospace) are required. It is also qualified under the
+\iso standard up to \Asil~D, and although its use in the automotive domain is more limited,
+it is applicable to the most critical software components. In practice, however, automotive systems
+more commonly rely on \Simulink or other modeling tools, which offer greater flexibility and are
+tightly integrated with the \ausar ecosystem. These tools often trade some formal rigor for
+ease of use and broader industry support, making them suitable for less critical functionality such
+as driver assistance or infotainment.
+
+\subsection{Summary}
+\label{sec:intro:cars:summary}
+
+Developing embedded software for modern vehicles requires balancing safety, reliability, and
+engineering complexity. Standards such as \iso and \ausar establish structured foundations for
+designing, validating, and integrating automotive software components. Model-based development tools
+like \Simulink facilitate rapid prototyping and integration within the \ausar ecosystem, while
+formally defined synchronous \dsl{}s such as \Lustre and \Scade provide stronger guarantees for
+the most critical subsystems. Together, these technologies support the scalable and safe development
+of increasingly complex automotive software.
+
+\section{Architectural Shift to Software-Defined Vehicles}
+\label{sec:intro:gap}
+
+Advanced Driver Assistance Systems, computer vision, sensor fusion, and AI-based features are
+becoming central to modern vehicle functionality. These capabilities significantly increase the
+complexity and computational demands of in-vehicle software. To address these challenges, \ampere is
+moving away from traditional distributed electronic architectures and adopting a centralized
+\emph{Software-Defined Vehicle} (\sdv) architecture.
+
+\begin{figure}[ht!]
+    \centering
+    \begin{subfigure}[t]{0.4\textwidth}
+        \centering
+        \includegraphics[height=\linewidth]{ecu_archi.png}
+        \caption[Legacy architecture of automotive software.]%
+        {Legacy architecture, featuring numerous specialized \ecus (grey boxes).}
+        \label{fig:intro:gap:archi:ecus}
+    \end{subfigure}
+    \quad
+    \begin{subfigure}[t]{0.4\textwidth}
+        \centering
+        \includegraphics[height=\linewidth]{central_archi.png}
+        \caption[\emph{Software Defined Vehicle} architecture.]%
+        {\sdv architecture with centralized computers (grey box) connected
+            to sensors and actuators (grey circles).}
+        \label{fig:intro:gap:archi:sdv}
+    \end{subfigure}
+    \caption[Legacy \versus Software Defined Vehicle architecture.]%
+    {A comparison of the legacy \ecu architecture and the modern \sdv architecture.}
+    \label{fig:intro:gap:archi}
+\end{figure}
+
+The legacy architecture, illustrated in \Cref{fig:intro:gap:archi:ecus}, relies on a distributed
+system of specialized Electronic Control Units (\ecus). In this model, introducing new functionality
+often required integrating a dedicated \ecu. This approach made it difficult to add
+computation-intensive features due to physical constraints, such as finding space for new hardware,
+managing complex wiring, and scheduling inter-\ecu communication. Moreover, this design lacks
+support for software updates, a critical limitation for rapidly evolving AI-based features.
+
+In contrast, the \sdv architecture centralizes core functionalities on high-performance computers,
+as shown in \Cref{fig:intro:gap:archi:sdv}. In this model, functionalities are implemented as
+software that can be updated continuously, often remotely. This architectural shift away from
+numerous individual \ecus reduces physical complexity, cabling, and overall vehicle weight. The
+resulting design is more efficient, since computation is consolidated on powerful hardware, and more
+maintainable, as updates no longer require physical component replacement. This approach provides
+lower manufacturing costs, reduced energy consumption, and a foundation for continuous software
+innovation.
+
+However, this shift exposes limitations in the traditional embedded software development toolchain.
+A common approach in the automotive domain involves model-based development with tools such as
+\Simulink and \Stateflow, which typically generate standard-compliant \Ci code based on a periodic
+execution model. While effective for safety-critical systems in traditional architectures, this
+approach presents several challenges in the context of \sdv.
+%
+\begin{description}
+    \item[Inefficient execution:] Periodic scheduling allocates fixed time slices for task
+          execution, regardless of whether new data is available. This leads to redundant
+          computations and unnecessary data transfers, wasting CPU cycles and saturating
+          communication buses.
+
+    \item[Manual optimization burden:] The generated \Ci code typically requires hand-tuning to meet
+          the timing and resource constraints. These manual adjustments jeopardize maintainability
+          and scalability, especially as systems grow in complexity.
+
+    \item[Costly safety verification:] Verifying safety properties at the \Ci code level is
+          time-consuming and costly. The lack of high-level semantic information in generated code
+          complicates formal analyses, particularly for large systems.
+
+    \item[Limited expressiveness:] Traditional tools offer limited support for modeling event-driven
+          behavior, which is increasingly common in \sdv software. Capturing such behavior with
+          periodic models often results in complex implementations.
+\end{description}
+
+\subsection{The Interest in \Rust}
+\label{sec:intro:gap:rust}
+
+The shift to centralized computing platforms significantly affects the software development
+lifecycle. Integration becomes more complex as functionalities that were once isolated on separate
+\ecus now share common hardware resources. This increases the need for advanced resource
+management strategies and strong fault isolation to ensure safety and system robustness.
+
+To address these challenges, there is growing interest in general-purpose programming languages that
+offer strong memory safety, concurrency control, and low-level performance. \ampere, along with
+other automotive industry players~\cite{ferrocene,veecle}, is progressively adopting the \Rust
+programming language. This choice represents a strategic shift away from traditional \Ci code. While
+performant, \Ci provides no memory safety guarantees. Ensuring the correctness of \Ci code requires
+extensive verification through tool qualification, static analysis, or formal proofs---a process
+that is both tedious and fragile.
+
+In contrast, \Rust provides safety \emph{by construction}, embedding formal-methods principles
+directly into the language design. Its compiler enforces memory and thread safety at compile time
+through a powerful system of \emph{ownership}, \emph{borrowing}, and \emph{lifetimes}. The
+\emph{ownership} model ensures that every value has a unique owner, preventing memory leaks and
+premature deallocations. The \emph{borrow checker} statically guarantees that references never
+outlive the data they point to and enforces a key rule: data can have either multiple immutable
+references or one mutable reference, but not both. This rule eliminates entire classes of
+bugs---such as memory corruption, buffer overflows, and data races---without the runtime overhead of
+a garbage collector.
+
+For low-level operations that are inherently unsafe, such as direct hardware interaction, \Rust
+provides the \texttt{unsafe} keyword. This feature allows programmers to bypass certain compiler
+checks in a delimited block, explicitly marking where the responsibility for upholding safety
+invariants falls on them. The \RustBelt project~\cite{DBLP:journals/pacmpl/0002JKD18} provides a
+formal foundation for verifying such code, enabling the development of proven-safe abstractions over
+low-level primitives.
+
+\subsection{Bus Overload at \ampere}
+\label{sec:intro:gap:bus_overload}
+
+The transition to an \sdv architecture, with its reliance on high-bandwidth buses like Automotive
+Ethernet, introduces challenges not present in legacy architectures. A primary issue is
+\emph{protocol overhead}: the extra data required to format, address, and transmit a message, beyond
+the useful data---called \emph{payload}.
+
+The CAN bus, designed for automotive use, is extremely lightweight. A CAN message contains a short
+payload (up to 8 bytes, 64 bytes with CAN-FD), a message identifier, and a few bits for control and
+error-checking. The protocol uses a clever mechanism called non-destructive bitwise arbitration to
+manage message priority without a central coordinator. This is possible due to a physical layer
+convention: a \texttt{0} bit (dominant) actively drives the bus to a specific voltage, while a
+\texttt{1} bit (recessive) is a passive, high-impedance state. If a controller, while sending a
+recessive bit, detects a dominant bit on the bus, it knows a higher-priority message is being
+transmitted, immediately stops, and becomes a receiver. Since the dominant bit is logically
+\texttt{0}, the message with the numerically lowest identifier always wins arbitration without being
+corrupted, guaranteeing that critical data (\eg from the brake controller) is never delayed by less
+important traffic (\eg from the radio). This makes CAN highly efficient and deterministic
+for small, frequent messages.
+
+In contrast, Automotive Ethernet typically uses protocol stacks like \texttt{TCP/IP}, designed for
+general-purpose networking. This layered approach introduces significant overhead. To send data, the
+system must construct a packet by encapsulating the payload within multiple layers, each adding its
+own header:
+\begin{itemize}
+    \item The \emph{Ethernet frame}, which uses hardware (MAC) addresses to deliver data between
+          devices on the same local network segment.
+    \item The \emph{IP packet}, which uses logical (IP) addresses to route data across different
+          interconnected networks within the vehicle.
+    \item The \emph{TCP or UDP segment}, which uses port numbers to direct the data to the correct
+          application (\eg the infotainment system or a sensor fusion) on the destination device.
+\end{itemize}
+As a result, sending just a few bytes of data requires a packet with at least 40-50 bytes of
+overhead. This high cost manifested as a critical problem during an experiment at \ampere.
+
+
+% \begin{table}
+%     \newcommand{\rot}[1]{\rotatebox{60}{#1}}
+%     \begin{subtable}{0.45\textwidth}
+%         \centering
+%         \begin{tabular}{rcccccc}
+%             \rot{ECU Name}  & \rot{Received Rx Events/s} & \rot{Consumed Rx Events/s} & \rot{Consumed/Received} & \rot{Rx Packets/s} & \rot{Tx Events/s} & \rot{Tx Packets/s} \\\hline
+%             \texttt{PCU\_1} & 3123                       & 2259                       & 72\%                    & 3123               & 2451              & 4831               \\
+%             \texttt{PCU\_2} & 3052                       & 208                        & 7\%                     & 3052               & 20                & 20                 \\
+%             \texttt{PCU\_3} & 785                        & 785                        & 100\%                   & 785                & 2325              & 2385               \\
+%             \texttt{PCU\_4} & 805                        & 25                         & 3\%                     & 805                & 20                & 20                 \\
+%             \texttt{PCU\_5} & 2849                       & 1915                       & 67\%                    & 2849               & 0                 & 0                  \\
+%             \texttt{PCU\_6} & 2849                       & 215                        & 8\%                     & 2849               & 20                & 20                 \\
+%             \texttt{PCU\_7} & 2849                       & 835                        & 29\%                    & 2849               & 240               & 9330               \\
+%             \texttt{PCU\_8} & 4330                       & 4030                       & 93\%                    & 17620              & 20                & 20                 \\
+%             \texttt{PCU\_9} & 2849                       & 709                        & 25\%                    & 2849               & 100               & 2280               \\
+%             \texttt{CDC\_1} & 815                        & 40                         & 5\%                     & 815                & 0                 & 0                  \\
+%             \texttt{CDC\_2} & 1995                       & 1740                       & 87\%                    & 2055               & 0                 & 0                  \\
+%             \texttt{CDC\_3} & 990                        & 990                        & 100\%                   & 990                & 0                 & 0                  \\
+%             \texttt{CDC\_4} & 935                        & 675                        & 72\%                    & 935                & 0                 & 0                  \\
+%             \texttt{PIU\_1} & 2849                       & 264                        & 9\%                     & 2849               & 104               & 104                \\
+%             \texttt{PIU\_2} & 3376                       & 2926                       & 87\%                    & 3376               & 2005              & 2105               \\
+%             \texttt{PIU\_3} & 2979                       & 140                        & 5\%                     & 2979               & 30                & 30                 \\\hline
+%         \end{tabular}
+%     \end{subtable}
+%     \hfill
+%     \begin{subtable}{0.45\textwidth}
+%         \centering
+%         \begin{tabular}{rccccc}
+%             \rot{ECU Name}  & \rot{Received Rx Events/s} & \rot{Consumed/Received} & \rot{Rx Packets/s} & \rot{Tx Events/s} & \rot{Tx Packets/s} \\\hline
+%             \texttt{PCU\_1} & 165                        & 100\%                   & 165                & 3498              & 3498               \\
+%             \texttt{PCU\_2} & 20                         & 100\%                   & 20                 & 10                & 10                 \\
+%             \texttt{PCU\_3} & 19                         & 100\%                   & 19                 & 1740              & 1740               \\
+%             \texttt{PCU\_4} & 2                          & 100\%                   & 2                  & 10                & 10                 \\
+%             \texttt{PCU\_5} & 725                        & 100\%                   & 725                & 19                & 19                 \\
+%             \texttt{PCU\_6} & 0                          & 100\%                   & 0                  & 10                & 10                 \\
+%             \texttt{PCU\_7} & 100                        & 100\%                   & 100                & 211               & 3331               \\
+%             \texttt{PCU\_8} & 4744                       & 85\%                    & 8824               & 229               & 229                \\
+%             \texttt{PCU\_9} & 0                          & 100\%                   & 0                  & 101               & 1061               \\
+%             \texttt{CDC\_1} & 303                        & 13\%                    & 303                & 20                & 20                 \\
+%             \texttt{CDC\_2} & 173                        & 100\%                   & 173                & 3                 & 3                  \\
+%             \texttt{CDC\_3} & 10                         & 100\%                   & 10                 & 0                 & 0                  \\
+%             \texttt{CDC\_4} & 400                        & 100\%                   & 400                & 18                & 18                 \\
+%             \texttt{PIU\_1} & 342                        & 77\%                    & 342                & 884               & 884                \\
+%             \texttt{PIU\_2} & 1528                       & 100\%                   & 1528               & 3615              & 3615               \\
+%             \texttt{PIU\_3} & 845                        & 17\%                    & 845                & 626               & 626                \\\hline
+%         \end{tabular}
+%     \end{subtable}
+% \end{table}
+
+\begin{figure}[ht!]
+    \centering
+    \begin{subfigure}{0.51\textwidth}
+        \centering
+        \includegraphics[height=0.24\textheight]{overload/bus_2023.png}
+        \caption{Bus traffic with periodic transmission (experimented in 2023).}
+        \label{fig:intro:gap:bus_overload:exp:2023}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[height=0.24\textheight]{overload/bus_reduction_2025.png}
+        \caption{Traffic reduction with on-change transmission (experimented in 2025).}
+        \label{fig:intro:gap:bus_overload:exp:2025}
+    \end{subfigure}
+    \caption[Comparison of bus load on a prototype vehicle board at \ampere.]%
+    {Comparison of bus load on a prototype vehicle board at \ampere, showing the
+        inefficiency of periodic data transmission and the effectiveness of an on-change model.}
+    \label{fig:intro:gap:bus_overload:exp}
+\end{figure}
+
+During full-scale tests on a vehicle board prototype, engineers observed that the main communication
+bus was becoming overloaded. The system, following a traditional periodic model, was configured to
+transmit every signal at a fixed 10\,ms interval. This approach, inherited from the predictable
+world of CAN, is proved unsustainable. A detailed analysis, summarized in
+\Cref{fig:intro:gap:bus_overload:exp:2023}, revealed a critical inefficiency. For some elements, as
+few as 3\% of received messages contained information that was effectively used. The remaining 97\%
+were redundant, and the high traffic volume led to dropped packets, consuming valuable network
+bandwidth and CPU cycles while causing data loss.
+
+To address this, engineers shifted to a hybrid \emph{on-change} communication paradigm. This model
+was implemented by applying a filtering algorithm on the receiving end. The receiver's application
+is only notified when the value of the data actually changes. To meet safety requirements, this
+model is augmented with two temporal constraints:
+\begin{itemize}
+    \item A \emph{debounce time}, which sets a maximum notification frequency to prevent the
+          application from being flooded by rapid signal fluctuations.
+    \item A \emph{refresh time}, which enforces a minimum transmission frequency, acting as a
+          heartbeat to confirm that a component is still live even if its data has not changed.
+\end{itemize}
+As shown in \Cref{fig:intro:gap:bus_overload:exp:2025}, this strategy is proved highly effective. By
+filtering redundant data at the receiver, engineers reduced the number of events processed by the
+application by an average of 75\%, with projections indicating a corresponding 50\% reduction in CPU
+load from packet processing.
+
+The experiment thus demonstrated that a purely periodic model is ill-suited for the dynamic,
+data-intensive workloads of \sdv architectures, highlighting the need for an event-driven execution
+model to manage resources efficiently.
+
+\subsection{The Choice for Asynchronous \Rust}
+\label{sec:intro:gap:async_rust}
+
+As demonstrated by the bus overload at \ampere, the traditional periodic execution model is
+ill-suited for \sdv architecture. This model wastes CPU cycles and network bandwidth by executing
+tasks at fixed intervals, regardless of need. This inefficiency becomes a critical bottleneck when
+integrating data-intensive but non-critical (non \Asil~D) functions, such as infotainment and ADAS.
+
+Asynchronous programming presents an attractive solution. By adopting an event-driven model, tasks
+can give-back control of the processor when they are idle (\eg waiting for inputs), freeing the CPU
+to handle other tasks. This approach is a good fit for the dynamic nature of modern automotive
+software, improving overall resource management. Choosing to implement this model in \Rust adds a
+crucial benefit: the language memory safety guarantees help isolate components, preventing
+less-critical functions from interfering with safety-critical ones. For these reasons, \ampere
+selected the \texttt{tokio} runtime~\cite{tokio} to build its next-generation software, leveraging a
+mature, high-performance foundation for managing concurrent, event-driven tasks.
+
+However, this decision introduces downsides. First, asynchronous programming is known to be complex
+and error-prone. Reasoning about program flow becomes more difficult, and it introduces new classes
+of potential bugs, such as deadlocks or incorrect state management across await points. Second, the
+approach also creates a strong dependency on the runtime; the correctness and performance of the
+system hinge on the implementation of \texttt{tokio}, which uses internal \texttt{unsafe} code for
+its operation. Finally, runtimes like \texttt{tokio} are optimized for high throughput, not for the
+predictable, low-latency execution required for hard real-time tasks. This makes them unsuitable for
+the most critical (\Asil~D) components, creating a fundamental tension between efficiency and
+temporal predictability in a mixed-criticality system.
+
+\subsection{The Abstraction Gap}
+\label{sec:intro:gap:abstraction}
+
+Despite its strengths, the low-level nature and unfamiliar programming model of \Rust present a
+steep learning curve, especially for engineers accustomed to model-based design. Engineers must
+adapt to a paradigm that emphasizes fine-grained memory control, ownership semantics, and explicit
+concurrency. While the strong compile-time guarantees of \Rust improve memory and thread safety,
+they can also make development more difficult, particularly in early stages of adoption. Although
+some abstractions are emerging, there remains a lack of high-level modeling tools tailored to
+control systems and real-time dataflow. This gap complicates the transition from traditional
+development environments.
+%
+Reactive \Rust libraries such as \texttt{tokio}\footnote{While best known for its runtime,
+    the \texttt{tokio} project also provides a rich library of asynchronous primitives.} and
+\texttt{futures}~\cite{tokio,futures} provide powerful concurrency primitives, but they operate at a
+low abstraction level and are not intended for control system modeling.
+%
+\textsc{Veecle}~\cite{veecle} provides a modular runtime and high-level \textsc{API}s designed for
+\sdv architectures, abstracting middleware and enabling asynchronous execution.
+However, it primarily focuses on runtime infrastructure rather than providing modeling abstractions
+familiar to control engineers.
+%
+\textsc{Pictorus}~\cite{pictorus}, in contrast, offers a modeling environment with block diagrams
+that generates \Rust code and supports real-time collaboration. Yet, the scheduling model
+remains sequential, lacking native support for the event-driven behaviors essential for
+modern \sdv systems.
+
+These gaps motivate the development of new modeling tools that bring the rigor and usability of
+traditional approaches to the modern \sdv context. By bridging the abstraction gap, such tools can
+facilitate a smoother transition to \Rust-based development and support the unique requirements of
+centralized automotive computing platforms.
+
+\section{Contribution}
+\label{sec:intro:contrib}
+
+To address these challenges, we introduce \GRust, a \emph{Domain-Specific Language} (\dsl) tailored
+for automotive system modeling in the context of \sdv architectures. \GRust bridges the gap between
+the high-level abstractions of model-based design and the safety, performance, and concurrency
+features of \Rust. It provides the following:
+%
+\begin{itemize}
+    \item A declarative syntax based on the \emph{Synchronous} paradigm, underlying tools like
+          \Simulink and \Scade, and academic languages such as \Lustre. This model is familiar to
+          control engineers and ensures deterministic, step-based computation.
+    \item Constructs inspired by \emph{Functional Reactive Programming} (\frp), particularly the
+          \textsc{ReactiveX} library, enabling the explicit modeling of asynchronous and
+          event-driven behavior with clear data and temporal dependencies.
+    \item A compiler that translates \GRust into safe and asynchronous \Rust code, suitable for
+          integration with modern, performance-critical \Rust-based \sdv software stacks. This
+          automated generation is critical, as writing asynchronous code by hand is notoriously
+          complex and error-prone. The compiler shields developers from these low-level details,
+          ensuring the generated code is correct by construction, thereby reducing the risk of
+          subtle bugs like deadlocks or incorrect state management.
+    \item A formal foundation comprising both an \emph{operational semantics}, which models the
+          step-by-step execution, and a \emph{denotational semantics}, which provides a mathematical
+          interpretation of programs. These semantics, proved to be equivalent, are used to prove
+          key safety properties, such as productivity and determinism.
+\end{itemize}
+
+Traditional synchronous languages offer deterministic semantics and compile-time
+guarantees well suited for embedded systems, and have seen industrial adoption through tools like
+\Scade. However, features such as fine-grained clock control often demand deep familiarity with
+their formal semantics, limiting their accessibility. These languages also lack native support for
+event-driven behavior and do not integrate with the \Rust ecosystem, reducing their applicability to
+\sdv platforms.
+
+Conversely, \frp enables high-level modeling of asynchronous dataflows. Research efforts have made
+\frp more predictable and resource-efficient by incorporating ideas from synchronous languages,
+such as static scheduling~\cite{DBLP:conf/haskell/NilssonCP02,DBLP:conf/ppdp/ChupinN19} and
+memory-safe stream processing~\cite{DBLP:conf/icfp/Krishnaswami13}. \GRust adopts the reverse
+strategy: it starts from the deterministic structure of synchronous models familiar to control
+engineers, and augments it with reactive constructs inspired by \textsc{ReactiveX} to support
+event-driven behavior.
+
+\subsection{Short Presentation of \GRust}
+\label{sec:intro:contrib:grust}
+
+The \GRust language consists of two sub-languages: the service-modeling kernel \GRFRP and the
+component-modeling kernel \GRSync.
+
+\paragraph{Services in \GRFRP}
+\label{sec:intro:contrib:grust:grfrp}
+
+\GRFRP defines the system's high-level structure through \emph{services}, which compute dataflows
+and interface with the rest of the system \via declared \emph{imports} and \emph{exports}. Inspired
+by the \frp paradigm, \GRFRP allows developers to specify flow computations declaratively.
+%
+In \GRFRP, flows are classified as either \emph{signals}, which represent values that persist and may
+change over time, or \emph{events}, which represent punctual values emitted at discrete moments.
+These flows are asynchronous: services do not receive all inputs simultaneously, but rather in
+independent and possibly irregular drops---each representing a new input value or event occurrence.
+%
+Each service declares an \emph{interface} by importing flows produced by external entities (\eg
+sensors or other services) and exporting computed flows for use elsewhere in the system (\eg
+actuators or other services). The behavior of exported flows is defined using operations on imported
+ones.
+%
+Flow operations use either built-in combinators provided by the \GReact library or custom components
+defined in the \GRSync sub-language. This separation of concerns supports modular design and reuse.
+
+In essence, a \GRFRP service acts as a bridge between the system's asynchronous dataflows and the
+computational logic encapsulated in reusable components.
+
+\paragraph{Components in \GRSync}
+\label{sec:intro:contrib:grust:grsync}
+
+\GRSync is a specification language for defining user-defined flow operators, known as
+\emph{components}. A component describes the computation of output flows at each logical instant,
+based on the current and past values of its input flows.
+%
+From a conceptual standpoint, \GRSync components are similar to those in
+\Lustre~\cite{DBLP:journals/pieee/HalbwachsCRP91}, but without explicit user-defined clocks. For
+engineers in industry, \GRSync resembles \Simulink block diagrams~\cite{simulink},
+where graphical blocks define operations and wires represent data dependencies. In hardware terms,
+components can be thought of as logical chips, with inputs and outputs corresponding to the chip's
+pins.
+%
+Components are reusable building blocks that can be instantiated either within services or other
+components. Each instance maintains its own internal state and executes independently, ensuring
+isolated behavior. This modularity allows different input flows to be processed concurrently,
+producing separate and predictable outputs.
+
+In essence, a \GRSync component captures a deterministic, synchronous computation unit that can be
+composed and reused to implement the reactive logic of \GRFRP services.
+
+\paragraph{Globally Asynchronous, Locally Synchronous}
+\label{sec:intro:contrib:grust:gals}
+
+The synchronicity of components in \GRSync is not in conflict with the asynchrony of services in
+\GRFRP; rather, they reflect a well-established architectural principle known as \emph{Globally
+    Asynchronous, Locally Synchronous} (GALS)~\cite{DBLP:phd/us/Chapiro85}. In GALS systems,
+individual components operate under their own local synchronous clocks, while communication between
+them occurs asynchronously. This design mirrors the physical reality of embedded systems, where
+different process operate at varying rates and must communicate reliably despite temporal
+mismatches.
+%
+In \GRust, services act as the asynchronous boundary between the system's external dataflows and the
+locally synchronous logic encapsulated in components. They provide a unified abstraction for
+handling asynchronous inputs (\eg from sensors or other services) and exposing them to
+deterministic, step-based computation models. This integration supports formal analysis, predictable
+execution, and safe embedding in event-driven architectures.
+
+\subsection{Prototype Compiler}
+\label{sec:intro:contrib:proto}
+
+The documentation for the language is available at:
+\begin{center}
+    \URLgrbook .
+\end{center}
+%
+The source code of the \GRust compiler can be found at:
+\begin{center}
+    \URLgrust .
+\end{center}
+It is implemented as a \Rust procedural macro, enabling seamless integration with the \Rust
+environment.
+%
+% Additionally, the compiler is published as a \Rust library on \texttt{crates.io}:
+% \begin{center}
+%     \url{https://crates.io/crates/grust} .
+% \end{center}
+
+\subsection{Formal Semantics and Safety Guarantees}
+\label{sec:intro:contrib:semantics}
+
+Our contribution includes a formalization of \GRust through two complementary semantic models
+(operational and denotational), along with theorems that ensure correctness, determinism, and
+semantic consistency. Together, these results form a sound theoretical foundation that reinforces
+\GRust's suitability for high-assurance embedded software.
+
+\paragraph{Operational Semantics}
+\label{sec:intro:contrib:semantics:opsem}
+
+We provide an operational semantics that models the push-based execution of \GRust services, which
+react to the arrival of inputs from the system's communication bus. This semantics describes how
+changes in flows are propagated within services and their constituent components.
+
+\paragraph{Denotational Semantics}
+\label{sec:intro:contrib:semantics:denot}
+
+We complement this with a denotational semantics in which flows are interpreted as infinite
+sequences of timestamped values, called \emph{timestamped streams}. For signals, the stream contains
+all value changes; for events, it captures the individual occurrences. Flow operators are
+interpreted as stream functions. This model is inspired by the theory of synchronous
+programming~\cite{DBLP:journals/tecs/BourkePP23} and closely resembles the Tagged Signal
+Model~\cite{DBLP:journals/tcad/LeeS98}.
+
+\paragraph{Safety Theorems}
+\label{sec:intro:contrib:semantics:thms}
+
+We establish key semantic guarantees that validate the soundness of the language design:
+%
+\begin{itemize}
+    \item \emph{Productivity \Cref{thm:semantics:grfrp:theorems:productivity}.} The step function of
+          a service is total, it produces a valid output and new state for every possible state and
+          input.
+    \item \emph{Determinism \Cref{thm:semantics:grfrp:theorems:determinism}.} The output behavior of
+          a service is uniquely determined by its input history.
+    \item \emph{Equivalence \Cref{thm:semantics:grfrp:theorems:equivalence}.} The operational and
+          denotational semantics are provably consistent: an infinite execution of the operational
+          semantics over input streams produces outputs that satisfy the denotational semantics, and
+          vice versa.
+    \item \emph{Oversampling \Cref{thm:semantics:grfrp:theorems:oversampling}.} The outputs of a
+          reactive service are unaffected by evaluations that occur when no new inputs have arrived,
+          which justifies using an event-driven execution model instead of a periodic one without
+          changing the behavior of the system.
+\end{itemize}
+%
+These results have been proven by hand and are included in this manuscript. Unlike
+\Velus~\cite{DBLP:conf/pldi/BourkeBDLPR17}, which formalizes correctness in \textsc{Roq}, our approach does not aim to
+produce computer-formalized and verified proofs. Such formalization, while valuable, is known to be
+labor-intensive and highly sensitive to implementation details, making it difficult to maintain
+alongside evolving compiler code.
+
+\subsection{Verification of \GRust Programs}
+\label{sec:intro:contrib:greusot}
+
+The \iso specification encourages the formal verification of \Asil system implementations. Typical
+objectives include proving the absence of division-by-zero errors, avoiding overflows, and ensuring
+critical boolean properties.
+
+At \ampere, the current process is as follows: the system team models the system in \Simulink from
+requirements; the safety team models the property in \textsc{Matlab} using the same requirements;
+and the model checker \sldv verifies the property. \sldv also detects overflows, dead logic, and
+possible division-by-zero errors.
+%
+These proofs apply to the high-level model, which aids comprehension, but the semantics of the
+generated \Ci code are not verified. While full end-to-end proofs from source to binary are
+unrealistic, \Ci does offer verification tools such as \textsc{Frama-C}~\cite{framac} that could be
+used for code-level checks.
+
+In contrast, the \Rust language benefits from the program verifier
+\Creusot~\cite{DBLP:conf/icfem/DenisJM22}.
+It leverages \Rust's compile-time memory safety checks (borrow checker) to simplify proof efforts.
+For example, in \textsc{Frama-C}, the programmer must explicitly prove that pointers refer to
+disjoint memory before writes, whereas in \Rust, the compiler enforces this by design, allowing
+\Creusot proofs to focus solely on the program's logical correctness.
+
+However, \Creusot operates at the level of plain \Rust code, making it non-trivial to express and
+verify properties written for higher-level abstractions such as those in \GRust. To bridge this gap
+and extend \GRust's applicability in the automotive domain, we developed \GReusot, a wrapper for
+\Creusot.
+%
+\GReusot enables developers to state safety properties for \GRSync functions and components directly
+in \GRust programs.
+The prototype compiler automatically translates these specifications into \Rust-compatible
+\Creusot annotations, integrating verification seamlessly into the development workflow.
+%
+This approach preserves the abstraction level of \GRust while ensuring that critical properties can
+be formally checked on the generated code, contributing to \iso-compliant verification processes.
+
+\section{Organization}
+\label{sec:intro:orga}
+
+This manuscript presents \GRust, from its practical design to its theoretical foundations. The
+chapters are structured to guide the reader through the language specification, its formal
+semantics, and a summary of the contributions.
+
+\paragraph*{\Cref{cha:grust}} provides a technical guide to the \GRust language, written for
+practitioners and system developers. It begins with a practical example, an Adaptive Cruise Control
+(ACC) system, to introduce the syntax and core concepts. The chapter then delves into the language
+specification, detailing the grammar in EBNF, the type system, and identifier rules. It also covers
+key aspects of the compiler implementation and the structure of the generated code. The chapter
+concludes with a set of benchmarks that assess the practical efficiency of \GRust generated code,
+comparing its performance against both state-of-the-art academic synchronous languages and
+handwritten industrial \Rust code.
+
+\paragraph*{\Cref{cha:semantics}} establishes the theoretical foundations of \GRust, and is aimed at
+readers with an interest in formal methods and language design. We develop two complementary
+semantic models: an operational semantics specifying the step-by-step execution of programs, and a
+denotational semantics defining their mathematical meaning as streams that capture the history of
+values over infinite executions. We formally prove the equivalence of these models and establish
+key properties such as productivity and determinism. Furthermore, this chapter introduces a novel
+oversampling theorem that guarantees the correctness of the execution strategy, a theoretical result
+validated by the benchmarks in~\Cref{cha:grust}.
+
+\paragraph*{\Cref{cha:conclusion}} concludes the manuscript by summarizing the contributions of this
+thesis. It reflects on the current limitations of \GRust, and outlines promising directions for
+future research. These include potential language extensions, enhanced verification capabilities,
+and strategies for promoting industrial adoption.

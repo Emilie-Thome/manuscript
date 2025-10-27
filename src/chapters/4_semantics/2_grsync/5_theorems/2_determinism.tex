@@ -1,0 +1,900 @@
+\subsubsection{Determinism}
+\label{sec:semantics:grsync:theorems:determinism}
+
+A deterministic component produces a unique output history from a given input history. In other
+words, given the same input, the component will always produce the same output.
+
+This property is formally modeled by \Cref{thm:semantics:grsync:theorems:determinism}: the
+denotational semantics of a component, \ie its associated stream function, ensures that two output
+streams mapped to one input stream are identical.
+%
+Proving the equality of such infinite streams requires a coinductive argument, which we structure as
+an induction on the length of the stream prefixes.
+
+To this end, we introduce an intermediate equivalence relation, denoted by $\equiv_n$ and defined in
+\Cref{def:semantics:grsync:theorems:determinism:equiv_upto_n}, which captures the equality of two
+streams up to their first $n$ elements.
+
+\begin{definition}[Equivalence up-to-$n$]
+    \label{def:semantics:grsync:theorems:determinism:equiv_upto_n}
+    Let $n \in \N$.
+    The relation $\equiv_n$ denotes the equality of two streams up-to-$n$ elements and is defined
+    by induction on $n$:
+    \begin{align}
+        \equiv_0 & = \Stream{\ValBot} \times \Stream{\ValBot} \label{def:semantics:grsync:theorems:determinism:equiv0} \\
+        \equiv_n & = \{ (v_{\bot1} \step s_1, v_{\bot2} \step s_2) \mid s_1 \equiv_{n-1} s_2,
+        v_{\bot1}, v_{\bot2} \in V + \bot, v_{\bot1} = v_{\bot2} \} \label{def:semantics:grsync:theorems:determinism:equivn}
+    \end{align}
+\end{definition}
+
+\begin{lemma}
+    Let $n \in \N$.
+    The relation $\equiv_n$ is an equivalence relation.
+\end{lemma}
+\begin{skippableproof}
+    We reason by induction on $n$.
+    \begin{itemize}
+        \item Reflexive: \Cref{def:semantics:grsync:theorems:determinism:equiv0} implies for all stream $s$ we
+              have $s \equiv_0 s$.
+
+              Let $n \in \N$ and suppose that for all stream $s$ we have $s \equiv_n s$.
+              Let $s = v_\bot \step s'$ be a stream. The induction hypothesis implies that
+              $s' \equiv_n s'$, and \Cref{def:semantics:grsync:theorems:determinism:equivn} ensures
+              $v_\bot \step s' \equiv_{n+1} v_\bot \step s'$, so that we have $s \equiv_{n+1} s$.
+
+        \item Symmetrical: \Cref{def:semantics:grsync:theorems:determinism:equiv0} implies for all streams
+              $s_1$ and $s_2$ we have $s_1 \equiv_0 s_2$ and $s_2 \equiv_0 s_1$.
+
+              Let $n \in \N$ and suppose that for all streams $s_1$ and $s_2$ such that
+              $s_1 \equiv_n s_2$ we have $s_2 \equiv_n s_1$.
+              Let $s_1 = v_{\bot1} \step s'_1$ and $s_2 = v_{\bot2} \step s'_2$ be two streams such
+              that $s_1 \equiv_{n+1} s_2$. \Cref{def:semantics:grsync:theorems:determinism:equivn} ensures
+              that $v_{\bot1} = v_{\bot2}$ and $s'_1 \equiv_n s'_2$. The induction hypothesis
+              implies $s'_2 \equiv_n s'_1$. Because the equality on values is symmetrical, we can
+              reuse \Cref{def:semantics:grsync:theorems:determinism:equivn} to state $s_2 \equiv_{n+1} s_1$.
+
+        \item Transitive: \Cref{def:semantics:grsync:theorems:determinism:equiv0} implies for all streams
+              $s_1$, $s_2$ and $s_3$ we have $s_1 \equiv_0 s_2$, $s_2 \equiv_0 s_3$ and
+              $s_1 \equiv_0 s_3$.
+
+              Let $n \in \N$ and suppose that for all streams $s_1$, $s_2$ and $s_3$ such
+              that $s_1 \equiv_n s_2$ and $s_2 \equiv_n s_3$ we have $s_1 \equiv_n s_3$.
+              Let $s_1 = v_{\bot1} \step s'_1$, $s_2 = v_{\bot2} \step s'_2$ and
+              $s_3 = v_{\bot3} \step s'_3$ be streams such that $s_1 \equiv_{n+1} s_2$ and
+              $s_2 \equiv_{n+1} s_3$. \Cref{def:semantics:grsync:theorems:determinism:equivn} ensures
+              that $v_{\bot1} = v_{\bot2}$, $v_{\bot2} = v_{\bot3}$, $s'_1 \equiv_n s'_2$, and
+              $s'_2 \equiv_n s'_3$. The induction hypothesis implies $s'_1 \equiv_n s'_3$. Because
+              the equality on values is transitive, we can reuse
+              \Cref{def:semantics:grsync:theorems:determinism:equivn} to state $s_1 \equiv_{n+1} s_3$.
+    \end{itemize}
+\end{skippableproof}
+
+The proof of component determinism (\Cref{thm:semantics:grsync:theorems:determinism}) proceeds by
+induction on $n$, the length of the stream prefixes being compared. The inductive step, in turn
+requires a structural induction on the syntax of \GRSync. The
+intermediate \Crefrange{lem:semantics:grsync:theorems:determinism:e}
+{lem:semantics:grsync:theorems:determinism:eq} establish equivalent determinism properties
+for each syntactic construct (expressions, patterns,
+event patterns, and equations).
+%
+This nested proof structure leads to a mutual recursion, similar to the proof of productivity
+(\Cref{sec:semantics:grsync:theorems:productivity}). The mutual recursion arises because the
+structural induction on an expression may encounter a component call, which requires invoking the
+main determinism theorem itself. This recursion is well-founded, however, because \GRSync
+components are not mutually recursive, which guarantees that the inductive argument terminates.
+
+\begin{lemma}[Determinism of \GRSync expressions]
+    \label{lem:semantics:grsync:theorems:determinism:e}
+    Let $e$ be a well-typed expression in a well-typed and causal program \G
+    and a typing context \tyCtx. If $H_1$ and $H_2$ are stream contexts on clock $ck$, then for
+    all $n \in \N$, and lists of streams $s_1^+$ and $s_2^+$:
+    \begin{equation*}
+        \wedge\begin{array}{l}
+            \exprDenot{H_1}{ck}{e}{s_1^+} \\
+            \exprDenot{H_2}{ck}{e}{s_2^+}
+        \end{array}
+        \; \Rightarrow \;
+        \left(\forall y \in \deps{e}, \, H_1[y] \equiv_n H_2[y]\right)
+        \; \Rightarrow \;
+        (s_1 \equiv_n s_2)^+.
+    \end{equation*}
+\end{lemma}
+\begin{skippableproof}
+    Let $n \in \N$.
+    The proof is done by structural induction on \GRSync expressions, and by
+    induction on components (recursive component definitions are not allowed).
+
+    \paragraph{Constants}
+    Let $c$ be a constant expression. For all stream contexts $H_1$ and $H_2$ on clock $ck$ and
+    list of streams $s_1^+$ and $s_2^+$ such that:
+    \begin{align*}
+         & \exprDenot{H_1}{ck}{c}{s_1^+}  \\
+         & \exprDenot{H_2}{ck}{c}{s_2^+}.
+    \end{align*}
+    The rule \nameref{rule:semantics:grsync:denot:e:const} implies $[s_1^+] \equiv
+        [\const{c}{ck}]$ and $[s_2^+] \equiv [\const{c}{ck}]$. By symmetry and
+    transitivity we have $(s_1 \equiv_n s_2)^+$.
+
+    \paragraph{Identifiers}
+
+    Let $x$ be an identifier expression. The only dependency of the expression $x$ is the identifier
+    $x$ (\Cref{rule:semantics:grsync:causality:dependencies:deps:e:ident}).
+    %
+    Let $H_1$ and $H_2$ denote stream contexts on clock $ck$ such that $H_1[x] \equiv_n H_2[x]$, and
+    list of streams $s_1^+$ and $s_2^+$ such that:
+    \begin{align*}
+         & \exprDenot{H_1}{ck}{x}{s_1^+}  \\
+         & \exprDenot{H_2}{ck}{x}{s_2^+}.
+    \end{align*}
+    The rule \nameref{rule:semantics:grsync:denot:e:ident} implies $[s_1^+] \equiv [H_1[x]]$ and
+    $[s_2^+] \equiv [H_2[x]]$. By symmetry and transitivity we have $(s_1 \equiv_n s_2)^+$.
+
+    \paragraph{Last memories}
+
+    Let \last{x} be the memory of identifier $x$. The only dependency of the expression \last{x} is
+    the identifier \last{x} (\Cref{rule:semantics:grsync:causality:dependencies:deps:e:last}).
+    %
+    Let $H_1$ and $H_2$ denote stream contexts on clock $ck$ such that $H_1[\last{x}] \equiv_n
+        H_2[\last{x}]$, and list of streams $s_1^+$ and $s_2^+$ such that:
+    \begin{align*}
+         & \exprDenot{H_1}{ck}{\last{x}}{s_1^+}  \\
+         & \exprDenot{H_2}{ck}{\last{x}}{s_2^+}.
+    \end{align*}
+    The rule \nameref{rule:semantics:grsync:denot:e:last} implies $[s_1^+] \equiv [H_1[\last{x}]]$
+    and $[s_2^+] \equiv [H_2[\last{x}]]$. By symmetry and transitivity we have
+    $(s_1 \equiv_n s_2)^+$.
+
+    \paragraph{Event emission}
+
+    Let \emit{e} be the emission of the well-typed expression $e$. Let $\{y^+\} = \deps{\emit{e}}$
+    the set of dependencies of \emit{e}. Let $H_1$ and $H_2$ denote stream contexts on clock $ck$
+    such that $(H_1[y] \equiv_n H_2[y])^+$, and list of streams $s_1^+$ and $s_2^+$ such that:
+    \begin{align*}
+         & \exprDenot{H_1}{ck}{\emit{e}}{s_1^+}  \\
+         & \exprDenot{H_2}{ck}{\emit{e}}{s_2^+}.
+    \end{align*}
+    Because $\deps{\emit{e}} = \deps{e}$ (\Cref{rule:semantics:grsync:causality:dependencies:deps:e%
+        :emit}), the structural induction hypothesis applied to $e$ with $H_1$ and $H_2$ on $ck$
+    defines streams $s'_1$ and $s'_2$ such that:
+    \begin{align*}
+         & \exprDenot{H_1}{ck}{e}{s_1^+} \\
+         & \exprDenot{H_2}{ck}{e}{s_2^+} \\
+         & s'_1 \equiv_n s'_2.
+    \end{align*}
+    The rule \nameref{rule:semantics:grsync:denot:e:emit} implies $[s_1^+] \equiv
+        [\some{s'_1}]$ and $[s_2^+] \equiv [\some{s'_2}]$, and we have $\some{s'_1}
+        \equiv \some{s'_2}$. By symmetry and transitivity we have $(s_1 \equiv_n s_2)^+$.
+
+    \paragraph{Operations}
+
+    Let $op(e^+)$ be the well-typed application of operation $op$ on the well-typed expressions
+    $e^+$. Let $\{y^+\} = \deps{op(e^+)}$ the set of dependencies of $op(e^+)$. Let $H_1$ and $H_2$
+    denote stream contexts on clock $ck$ such that $(H_1[y] \equiv_n H_2[y])^+$, and list of streams
+    $s_1^+$ and $s_2^+$ such that:
+    \begin{align*}
+         & \exprDenot{H_1}{ck}{op(e^+)}{s_1^+}  \\
+         & \exprDenot{H_2}{ck}{op(e^+)}{s_2^+}.
+    \end{align*}
+    Because $\deps{op(e^+)} = \bigcup \deps{e}^+$ (\Cref{rule:semantics:grsync:causality:%
+        dependencies:deps:e:op}), for all expression $e$ of $e^+$ and all $z \in \deps{e}$, we have
+    $H_1[z] \equiv_n H_2[z]$. The structural induction hypothesis applied to $e^+$ defines streams
+    $s^{\prime+}_1$ and $s^{\prime+}_2$ such that:
+    \begin{align*}
+         & (\exprDenot{H_1}{ck}{e}{s'_1})^+ \\
+         & (\exprDenot{H_2}{ck}{e}{s'_2})^+ \\
+         & (s'_1 \equiv_n s'_2)^+.
+    \end{align*}
+    The rule \nameref{rule:semantics:grsync:denot:e:op} implies $[s_1^+] \equiv [op(s^{\prime+}_1)]$
+    and $[s_2^+] \equiv [op(s^{\prime+}_2)]$, and we have $op(s^{\prime+}_1) \equiv
+        op(s^{\prime+}_2)$. By symmetry and transitivity we have $(s_1 \equiv_n s_2)^+$.
+
+    \paragraph{Component calls}
+
+    Let $f(e^+)$ be the call of the well-typed and causal component $f$ with the well-typed
+    expressions $e^+$. Let $\{y^+\} = \deps{f(e^+)}$ the set of dependencies of $f(e^+)$. Let $H_1$
+    and $H_2$ denote stream contexts on clock $ck$ such that $(H_1[y] \equiv_n H_2[y])^+$, and list
+    of streams $s_1^+$ and $s_2^+$ such that:
+    \begin{align*}
+         & \exprDenot{H_1}{ck}{f(e^+)}{s_1^+}  \\
+         & \exprDenot{H_2}{ck}{f(e^+)}{s_2^+}.
+    \end{align*}
+    Because $\deps{f(e^+)} = \bigcup \deps{e}^+$ (\Cref{rule:semantics:grsync:causality:%
+        dependencies:deps:e:app}), for all expression $e$ of $e^+$ and all $z \in \deps{e}$, we have
+    $H_1[z] \equiv_n H_2[z]$. The structural induction hypothesis applied to $e^+$ defines streams
+    $s^{\prime+}_1$ and $s^{\prime+}_2$ such that:
+    \begin{align*}
+         & (\exprDenot{H_1}{ck}{e}{s'_1})^+ \\
+         & (\exprDenot{H_2}{ck}{e}{s'_2})^+ \\
+         & (s'_1 \equiv_n s'_2)^+.
+    \end{align*}
+    The induction on component calls, using the rule \nameref{rule:semantics:grsync:denot:e:app} and
+    \Cref{thm:semantics:grsync:theorems:determinism}, states:
+    $$
+        \wedge \begin{array}{l}
+            \compDenot{ck}{f}{s_1^{\prime+}}{s_{1}^+} \\
+            \compDenot{ck}{f}{s_2^{\prime+}}{s_{2}^+}
+        \end{array}
+        \; \Rightarrow \;
+        \left[(s'_1 \equiv_n s'_2)^+ \Rightarrow (s_1 \equiv_n s_2)^+\right],
+    $$
+    which implies $(s_1 \equiv_n s_2)^+$.
+
+    \setcounter{paragraph}{0}
+\end{skippableproof}
+
+\begin{lemma}[Determinism of \GRSync patterns]
+    \label{lem:semantics:grsync:theorems:determinism:pat}
+    Let \guarded{pat^+ = s^+}{e_g} be a well-typed guarded pattern matching the streams $s^+$ in a
+    program \G and a typing context \tyCtx. If $H_1$ and $H_2$ are stream contexts on clock $ck$,
+    then for all $n \in \N$, and clocks $ck_1$ and $ck_2$:
+    \begin{multline*}
+       \patDenot{H_1}{ck}{\guarded{pat^+ = s^+}{e_g}}{ck_1} \quad \wedge \quad  \patDenot{H_2}{ck}{\guarded{pat^+ = s^+}{e_g}}{ck_2} \\
+        \qquad \Rightarrow \;
+        \left[\forall y \in \deps{e_g} \backslash \defs{pat^+}, \, H_1[y] \equiv_n H_2[y]\right] \hfill
+        \\ \Rightarrow \;
+        \left[
+            ck_1 \equiv_n ck_2 \, \wedge \, \forall x \in \defs{pat^+}, \, \whenT{H_1}{ck_1}[x]
+            \equiv_n \whenT{H_2}{ck_2}[x]
+            \right].
+    \end{multline*}
+\end{lemma}
+\begin{skippableproof}
+    Let $n \in \N$. The proof is done by structural induction on \GRSync patterns, and
+    relies on \Cref{lem:semantics:grsync:theorems:determinism:e} that states the determinism of \GRSync
+    expressions.
+
+    \paragraph{Guarded patterns}
+
+    Let $\guarded{pat^+ = s^+}{e_g}$ be a well-typed pattern matching the streams $s^+$ and guarded
+    by the expression $e_g$ in a program \G and a typing context \tyCtx. The pattern
+    being well-typed, it ensures that each individual pattern $pat$ corresponds to a stream $s$, and
+    that the expression $e_g$ is a boolean. The second point implies that any stream associated with
+    $e_g$ is a clock.
+    %
+    Let $H_1$ and $H_2$ denote stream contexts on $ck$, and let clocks $ck_1$ and $ck_2$ such that:
+    \begin{align*}
+         & \patDenot{H_1}{ck}{\guarded{pat^+ = s^+}{e_g}}{ck_1}                         \\
+         & \patDenot{H_2}{ck}{\guarded{pat^+ = s^+}{e_g}}{ck_2}                         \\
+         & \forall y \in \deps{e_g} \backslash \defs{pat^+}, \, H_1[y] \equiv_n H_2[y].
+    \end{align*}
+    %
+    The rule \nameref{rule:semantics:grsync:denot:pats} implies there exist clocks $ck^{\prime+}_1$,
+    $ck^{\prime+}_2$, $ck^{pat}_1$, and $ck^{pat}_2$ such that:
+    \begin{align*}
+         & \left(\patDenot{H}{ck}{pat = s}{ck'_1}\right)^+                                            \\
+         & \left(\patDenot{H}{ck}{pat = s}{ck'_2}\right)^+                                            \\
+         & ck^{pat}_1 \equiv \kwf{\&\&}(ck^{\prime+}_1)                                               \\
+         & ck^{pat}_2 \equiv \kwf{\&\&}(ck^{\prime+}_2)                                               \\
+         & \exprDenot{\whenT{H_1}{ck^{pat}_1}}{\whenT{ck}{ck^{pat}_1}}{e_g}{\whenT{ck_1}{ck^{pat}_1}} \\
+         & \exprDenot{\whenT{H_2}{ck^{pat}_2}}{\whenT{ck}{ck^{pat}_2}}{e_g}{\whenT{ck_2}{ck^{pat}_2}} \\
+         & \whenF{ck_1}{ck^{pat}_1} \equiv \const{\false}{\whenF{ck}{ck^{pat}_1}}                     \\
+         & \whenF{ck_2}{ck^{pat}_2} \equiv \const{\false}{\whenF{ck}{ck^{pat}_2}}
+    \end{align*}
+    %
+    The induction hypothesis on patterns ensures $(ck'_1 \equiv_n ck'_2)^+$ which implies, by the
+    determinism of functional applications on streams, that $\kwf{\&\&}(ck^{\prime+}_1) \equiv_n
+        \kwf{\&\&}(ck^{\prime+}_2)$, thus $ck^{pat}_1 \equiv_n ck^{pat}_2$. The induction hypothesis
+    also implies that for all pattern $pat$ and all $x$ in $\defs{pat}$, we have $\whenT{H_1}{ck'_1}
+        [x] \equiv_n \whenT{H_2}{ck'_2}[x]$, so $\whenT{H_1}{ck^{pat}_1}[x]
+        \equiv_n \whenT{H_2}{ck^{pat}_2}[x]$.
+    %
+    \Cref{rule:semantics:grsync:causality:defs:pat} ensures that $\defs{pat^+} = \bigcup
+        \defs{pat}^+$, then for all $x$ in \defs{pat^+} we have $\whenT{H_1}{ck^{pat}_1}[x]
+        \equiv_n \whenT{H_2}{ck^{pat}_2}[x]$. Therefore, for all $y \in \deps{e_g}$, we have
+    $\whenT{H_1}{ck^{pat}_1}[y] \equiv_n \whenT{H_2}{ck^{pat}_2}[y]$.
+    %
+    \Cref{lem:semantics:grsync:theorems:determinism:e} with the contexts \whenT{H_{1,2}}{ck^{pat}_{1,2}} and
+    with the clocks $\whenT{ck}{ck^{pat}_{1,2}}$ states:
+    \begin{equation*}
+        \whenT{ck_1}{ck^{pat}_1} \equiv_n \whenT{ck_2}{ck^{pat}_2}.
+    \end{equation*}
+    %
+    Because $ck^{pat}_1 \equiv_n ck^{pat}_2$, the constant streams \const{\false}{\whenF{ck}
+        {ck^{pat}_{1,2}}} are equivalent up-to-$n$. By symmetry and transitivity
+    we have: $$\whenF{ck_1}{ck^{pat}_1} \equiv_n \whenF{ck_2}{ck^{pat}_2}.$$
+    %
+    The merge of both filtering on $ck$ implies $ck_1 \equiv_n ck_2$.
+
+    \paragraph{Constants}
+
+    Let $c = s$ be a constant pattern matching the stream $s$. It has no dependency.
+    %
+    Let $H_1$ and $H_2$ denote stream contexts on $ck$, and let clocks $ck_1$ and $ck_2$ such that:
+    \begin{align*}
+         & \patDenot{H_1}{ck}{c = s}{ck_1}  \\
+         & \patDenot{H_2}{ck}{c = s}{ck_2}.
+    \end{align*}
+    %
+    The rule \nameref{rule:semantics:grsync:denot:pat:const} implies $ck_1 \equiv
+        (\cdot \kwf{==} c)(s)$ and $ck_2 \equiv (\cdot \kwf{==} c)(s)$. \Cref{rule:semantics:grsync%
+        :causality:defs:pat:const} ensures that $\defs{c} = \emptyset$. By symmetry and transitivity
+    we have $ck_1 \equiv_n ck_2$.
+
+    \paragraph{Identifiers}
+
+    Let $x = s$ be an identifier pattern matching the stream $s$. It has no dependency.
+    %
+    Let $H_1$ and $H_2$ denote stream contexts on $ck$, and let clocks $ck_1$ and $ck_2$ such that:
+    \begin{align*}
+         & \patDenot{H_1}{ck}{x = s}{ck_1}  \\
+         & \patDenot{H_2}{ck}{x = s}{ck_2}.
+    \end{align*}
+    %
+    The rule \nameref{rule:semantics:grsync:denot:pat:ident} implies $ck_1 \equiv\const{\true}{ck}$,
+    $ck_2 \equiv \const{\true}{ck}$, $H_1[x] \equiv s$, and
+    $H_2[x] \equiv s$. \Cref{rule:semantics:grsync:causality:defs:pat:ident} ensures that $\defs{x}
+        = \{x\}$. By symmetry and transitivity we have $ck_1 \equiv_n ck_2$ and $H_1[x] \equiv_n
+        H_2[x]$, which implies $\whenT{H_1}{ck_1}[x] \equiv_n \whenT{H_2}{ck_2}[x]$.
+
+    \paragraph{Wildcards}
+
+    Let $\_ = s$ be a wildcard pattern matching the stream $s$. It has no dependency.
+    %
+    Let $H_1$ and $H_2$ denote stream contexts on $ck$, and let clocks $ck_1$ and $ck_2$ such that:
+    \begin{align*}
+         & \patDenot{H_1}{ck}{\_ = s}{ck_1}  \\
+         & \patDenot{H_2}{ck}{\_ = s}{ck_2}.
+    \end{align*}
+    %
+    The rule \nameref{rule:semantics:grsync:denot:pat:wild} implies $ck_1 \equiv \const{\true}{ck}$
+    and $ck_2 \equiv \const{\true}{ck}$. \Cref{rule:semantics:%
+        grsync:causality:defs:pat:ident} ensures that $\defs{\_} = \emptyset$. By symmetry and
+    transitivity we have $ck_1 \equiv_n ck_2$.
+
+    \setcounter{paragraph}{0}
+\end{skippableproof}
+
+\begin{lemma}[Determinism of \GRSync event patterns]
+    \label{lem:semantics:grsync:theorems:determinism:epat}
+    Let \guarded{epat^+}{e_g} be a well-typed guarded event pattern in a program \G and a typing
+    context \tyCtx. If $H_1$ and $H_2$ are stream contexts on clock $ck$, then for all
+    $n \in \N$, and clocks $ck_1$ and $ck_2$:
+    \begin{multline*}
+        \wedge \begin{array}{l}
+            \epatDenot{H_1}{ck}{\guarded{epat^+}{e_g}}{ck_1} \\
+            \epatDenot{H_2}{ck}{\guarded{epat^+}{e_g}}{ck_2}
+        \end{array}
+        \; \Rightarrow \\
+        \left[
+        \forall y \in \deps{epat^+} \cup (\deps{e_g} \backslash \defs{epat^+}), \, H_1[y] \equiv_n H_2[y]
+        \right]
+        \; \Rightarrow \\
+        \left[
+            ck_1 \equiv_n ck_2 \, \wedge \, \forall x \in \defs{epat^+}, \, \whenT{H_1}{ck_1}
+            [x] \equiv_n \whenT{H_2}{ck_2}[x]
+            \right].
+    \end{multline*}
+\end{lemma}
+\begin{skippableproof}
+    Let $n \in \N$. The proof is done by structural induction on \GRSync event patterns, and
+    relies on \Cref{lem:semantics:grsync:theorems:determinism:e} that states the determinism of \GRSync
+    expressions.
+
+    \paragraph{Guarded event patterns}
+
+    Let \guarded{epat^+}{e_g} be a well-typed event pattern guarded by the expression $e_g$ in a
+    program \G and a typing context \tyCtx. The event pattern being well-typed, it ensures that
+    the expression $e_g$ is a boolean, thus any stream associated with $e_g$ is a clock.
+    %
+    Let $H_1$ and $H_2$ denote stream contexts on $ck$, and let clocks $ck_1$ and $ck_2$ such that:
+    \begin{align*}
+         & \epatDenot{H_1}{ck}{\guarded{epat^+}{e_g}}{ck_1}                                                   \\
+         & \epatDenot{H_2}{ck}{\guarded{epat^+}{e_g}}{ck_2}                                                   \\
+         & \forall y \in \deps{epat^+} \cup (\deps{e_g} \backslash \defs{epat^+}), \, H_1[y] \equiv_n H_2[y].
+    \end{align*}
+    %
+    The rule \nameref{rule:semantics:grsync:denot:epats} implies there exist clocks $ck^{\prime+}_1$,
+    $ck^{\prime+}_2$, $ck^{epat}_1$, and $ck^{epat}_2$ such that:
+    \begin{align*}
+         & \left(\patDenot{H}{ck}{epat}{ck'_1}\right)^+                                                  \\
+         & \left(\patDenot{H}{ck}{epat}{ck'_2}\right)^+                                                  \\
+         & ck^{epat}_1 \equiv \kwf{\&\&}(ck^{\prime+}_1)                                                 \\
+         & ck^{epat}_2 \equiv \kwf{\&\&}(ck^{\prime+}_2)                                                 \\
+         & \exprDenot{\whenT{H_1}{ck^{epat}_1}}{\whenT{ck}{ck^{epat}_1}}{e_g}{\whenT{ck_1}{ck^{epat}_1}} \\
+         & \exprDenot{\whenT{H_2}{ck^{epat}_2}}{\whenT{ck}{ck^{epat}_2}}{e_g}{\whenT{ck_2}{ck^{epat}_2}} \\
+         & \whenF{ck_1}{ck^{epat}_1} \equiv \const{\false}{\whenF{ck}{ck^{epat}_1}}                      \\
+         & \whenF{ck_2}{ck^{epat}_2} \equiv \const{\false}{\whenF{ck}{ck^{epat}_2}}
+    \end{align*}
+    %
+    \Cref{rule:semantics:grsync:causality:dependencies:deps:epat} states that $\deps{epat^+} =
+        \bigcup \deps{epat}^+$, so we can apply the induction hypothesis on event patterns, ensuring
+    $(ck'_1 \equiv_n ck'_2)^+$ and, by the determinism of functional applications on streams,
+    $\kwf{\&\&}(ck^{\prime+}_1) \equiv_n \kwf{\&\&}(ck^{\prime+}_2)$, thus $ck^{epat}_1 \equiv_n
+        ck^{epat}_2$. The induction hypothesis on event patterns also implies that for all event
+    pattern $epat$ and all $x$ in \defs{epat}, $\whenT{H_1}{ck'_1}[x] \equiv_n \whenT{H_2}{ck'_2}
+        [x]$, so $\whenT{H_1}{ck^{epat}_1}[x] \equiv_n \whenT{H_2}{ck^{epat}_2}[x]$.
+    %
+    \Cref{rule:semantics:grsync:causality:defs:epat} ensures that $\defs{epat^+} = \bigcup
+        \defs{epat}^+$, then for all $x$ in \defs{epat^+}, $\whenT{H_1}{ck^{epat}_1}[x]
+        \equiv_n \whenT{H_2}{ck^{epat}_2}[x]$. Therefore, for all identifier $y$ in
+    $\deps{e_g}$, we have $\whenT{H_1}{ck^{epat}_1}[y] \equiv_n \whenT{H_2}{ck^{epat}_2}[y]$.
+    We can apply \Cref{lem:semantics:grsync:theorems:determinism:e} with the contexts
+    $\whenT{H_{1,2}}{ck^{epat}_{1,2}}$ and the clocks $\whenT{ck}{ck^{epat}_{1,2}}$ to
+    state:
+    \begin{equation*}
+        \whenT{ck_1}{ck^{epat}_1} \equiv_n \whenT{ck_2}{ck^{epat}_2}.
+    \end{equation*}
+    %
+    Because $ck^{epat}_1 \equiv_n ck^{epat}_2$, the constant streams \const{\false}{\whenF{ck}
+        {ck^{epat}_{1,2}}} are equivalent up-to-$n$. By symmetry and transitivity
+    we have: $$\whenF{ck_1}{ck^{epat}_1} \equiv_n \whenF{ck_2}{ck^{epat}_2}.$$
+    %
+    The merge of both filtering on $ck$ implies $ck_1 \equiv_n ck_2$.
+
+    \paragraph{Event detection}
+
+    Let $\detect{x}{y}$ be an event detection pattern.
+    %
+    Let $H_1$ and $H_2$ denote stream contexts on $ck$, and let clocks $ck_1$ and $ck_2$ such that:
+    \begin{align*}
+         & \epatDenot{H_1}{ck}{\detect{x}{y}}{ck_1}                       \\
+         & \epatDenot{H_2}{ck}{\detect{x}{y}}{ck_2}                       \\
+         & \forall y \in \deps{\detect{x}{y}}, \, H_1[y] \equiv_n H_2[y].
+    \end{align*}
+    %
+    \Cref{rule:semantics:grsync:causality:dependencies:deps:epat:event} ensures
+    $\deps{\detect{x}{y}}= \{y\}$, so we have $H_1[y] \equiv_n H_2[y]$.
+    %
+    Rule \nameref{rule:semantics:grsync:denot:epat:event} implies $ck_{1,2} \equiv
+        \isSome{H_{1,2}[y]}$, and $\whenT{H_{1,2}[y]}{ck_{1,2}} \equiv
+        \whenT{\some{H_{1,2}[x]}}{ck_{1,2}}$.
+    %
+    By symmetry and transitivity of the equivalence up-to-$n$, we have the equivalence of the
+    associated clocks $ck_1 \equiv_n ck_2$, and $\whenT{\some{H_1[x]}}{ck_1} \equiv_n
+        \whenT{\some{H_2[x]}}{ck_2}$.
+    %
+    \Cref{rule:semantics:grsync:causality:defs:epat:event} ensures that $\defs{\detect{x}{y}} =
+        \{x\}$.
+
+    \paragraph{Rising edges}
+
+    Let $e$ be a rising edge pattern.
+    %
+    Let $H_1$ and $H_2$ denote stream contexts on $ck$, and let clocks $ck_1$ and $ck_2$ such that:
+    \begin{align*}
+         & \epatDenot{H_1}{ck}{e}{ck_1}                       \\
+         & \epatDenot{H_2}{ck}{e}{ck_2}                       \\
+         & \forall y \in \deps{e}, \, H_1[y] \equiv_n H_2[y].
+    \end{align*}
+    %
+    The rule \nameref{rule:semantics:grsync:denot:epat:edge} implies there exist $ck'_1$ and $ck'_2$
+    such that:
+    \begin{align*}
+         & \exprDenot{H_1}{ck}{e}{ck'_1}                               \\
+         & \exprDenot{H_2}{ck}{e}{ck'_2}                               \\
+         & ck_1 \equiv ck'_1 \kwf{\&\&} \kwf{!} \buffer{\false}{ck'_1} \\
+         & ck_2 \equiv ck'_2 \kwf{\&\&} \kwf{!} \buffer{\false}{ck'_2}
+    \end{align*}
+    %
+    \Cref{rule:semantics:grsync:causality:dependencies:deps:epat:edge} ensures
+    $\deps{e}= \deps{e}$ (the dependencies of the expression), so we can apply \Cref{lem:semantics:grsync:%
+        theorems:determinism:e} that states $ck'_1 \equiv_n ck'_2$.
+    %
+    By symmetry and transitivity we have $ck_1 \equiv_n ck_2$.
+    %
+    \Cref{rule:semantics:grsync:causality:defs:epat:edge} ensures that $\defs{\detect{x}{y}} =
+        \emptyset$.
+
+    \setcounter{paragraph}{0}
+\end{skippableproof}
+
+\begin{lemma}[Determinism of \GRSync equations]
+    \label{lem:semantics:grsync:theorems:determinism:eq}
+    Let $eq^+$ be a well-typed equation in a well-typed and causal program \G and a typing context
+    \tyCtx. If $H_1$ and $H_2$ are stream contexts on clock $ck$, then for all $n \in \N$:
+    \begin{multline*}
+        \eqDenot{H_1}{ck}{eq^+} \, \wedge \, \eqDenot{H_2}{ck}{eq^+}
+        \; \Rightarrow \\
+        \left[\forall y \in \deps{eq^+}, \, H_1[y] \equiv_n H_2[y]\right]
+        \; \Rightarrow \\
+        \left[\forall x \in \defs{eq^+}, \, H_1[x] \equiv_n H_2[x]\right].
+    \end{multline*}
+\end{lemma}
+\begin{skippableproof}
+    Let $n \in \N$. The proof is done by structural induction on \GRSync equations, and
+    relies on \Cref{lem:semantics:grsync:theorems:determinism:e,lem:semantics:grsync:theorems:determinism:pat,lem:%
+        semantics:grsync:theorems:determinism:epat} that states the determinism of \GRSync expressions,
+    patterns, and event patterns.
+
+    \paragraph{Overview of the proof strategy}
+    The difficult points of the proof are the following.
+    \begin{itemize}
+        \item For \kwf{match} equations, the exhaustiveness of patterns (verified by the \Rust
+              compiler on the generated code) ensures that the clock filtering induced by each
+              pattern matching is merged so that the entire match equation remains on the base clock.
+        \item For \kwf{when} equations, it is a similar clock-branch filtering, but on which the
+              stream of signals not updated in a branch is equivalent to their \kwf{last} stream, and
+              the stream of events not emitted are stream repeating \none.
+        \item For blocks of mutually recursive equations, we use rank induction
+              (\Cref{def:semantics:grsync:causality:induction:rank}) to prove iteratively the
+              equivalence of identifiers following the rank (\Cref{def:semantics:grsync:causality:rank}).
+    \end{itemize}
+
+
+    \paragraph{Declarations}
+    Let $x^+ = e$ be a well-typed declaration in a well-typed and causal program \G and a typing
+    context \tyCtx. Let $H_1$ and $H_2$ be stream contexts on a clock $ck$ such that:
+    \begin{align*}
+         & \eqDenot{H_1}{ck}{x^+ = e}                               \\
+         & \eqDenot{H_2}{ck}{x^+ = e}                               \\
+         & \forall y \in \deps{x^+ = e}, \, H_1[y] \equiv_n H_2[y].
+    \end{align*}
+
+    \nameref{rule:semantics:grsync:denot:eq:decl} ensures there exist streams $s_1^+$ and $s_2^+$
+    such that:
+    \begin{align*}
+         & \exprDenot{H_1}{ck}{e}{s_1^+}  \\
+         & \exprDenot{H_2}{ck}{e}{s_2^+}  \\
+         & \left(H[x] \equiv s_1\right)^+ \\
+         & \left(H[x] \equiv s_2\right)^+
+    \end{align*}
+    The declaration being well-typed, it ensures that for every $x$ corresponds a stream $s_1$ and
+    $s_2$.
+
+    \Cref{rule:semantics:grsync:causality:dependencies:deps:eq:decl} ensures that $\deps{x^+ = e} =
+        \deps{e}$ so that we can apply \Cref{lem:semantics:grsync:theorems:determinism:e} on $e$ to state that
+    we have $(s_1 \equiv_n s_2)^+$.
+
+    \Cref{rule:semantics:grsync:causality:defs:eq:decl} ensures that $\defs{x^+ = e} = \{x^+\}$, and
+    by symmetry and transitivity we have $(H_1[x] \equiv_n H_2[x])^+$.
+
+    \paragraph{Match}
+    Let \match{e}{x^+}{(\branch{pat_i^+}{e_i}{eq_i^+})^+} be a well-typed \kwf{match} equation in a
+    well-typed and causal program \G under a typing context \tyCtx. Let $H_1$ and $H_2$ be stream
+    contexts over a clock $ck$ such that:
+    \begin{align*}
+         & \eqDenot{H_1}{ck}{\match{e}{x^+}{(\branch{pat_i^+}{e_i}{eq_i^+})^+}}                               \\
+         & \eqDenot{H_2}{ck}{\match{e}{x^+}{(\branch{pat_i^+}{e_i}{eq_i^+})^+}}                               \\
+         & \forall y \in \deps{\match{e}{x^+}{(\branch{pat_i^+}{e_i}{eq_i^+})^+}}, \, H_1[y] \equiv_n H_2[y].
+    \end{align*}
+
+    \nameref{rule:semantics:grsync:denot:eq:match} ensures there exist streams $s_1^+$ and $s_2^+$,
+    clocks $ck_{i, 1}^+$, $ck_{i, 2}^+$, $ck_{i, 1}^{\prime+}$ and $ck_{i, 2}^{\prime+}$, and stream
+    contexts $H^\T_{i, 1}$ and $H^\T_{i, 2}$ such that:
+    \begin{align*}
+         & \exprDenot{H_1}{ck}{e}{s_1^+}                                                                \\
+         & \exprDenot{H_2}{ck}{e}{s_2^+}                                                                \\
+         & \left(\patDenot{H_1}{ck}{\guarded{pat_i^+ = s_1^+}{e_i}}{ck_{i, 1}}\right)^+                 \\
+         & \left(\patDenot{H_2}{ck}{\guarded{pat_i^+ = s_2^+}{e_i}}{ck_{i, 2}}\right)^+                 \\
+         & ck \equiv \kwf{\Vert}(ck_{i, 1}^+)                                                           \\
+         & ck \equiv \kwf{\Vert}(ck_{i, 2}^+)                                                           \\
+         & \left(ck'_{i, 1} \equiv ck_{i, 1} \kwf{\&\&} (\kwf{\&\&}(\kwf{!}ck_{j, 1})^{j < i})\right)^+ \\
+         & \left(ck'_{i, 2} \equiv ck_{i, 2} \kwf{\&\&} (\kwf{\&\&}(\kwf{!}ck_{j, 2})^{j < i})\right)^+ \\
+         & \left(H^\T_{i, 1} \equiv \whenT{H_1}{ck'_{i, 1}}\right)^+                                    \\
+         & \left(H^\T_{i, 2} \equiv \whenT{H_2}{ck'_{i, 2}}\right)^+                                    \\
+         & \left(\eqDenot{H^\T_{i, 1}}{ck'_{i, 1}}{eq_i^+}\right)^+                                     \\
+         & \left(\eqDenot{H^\T_{i, 2}}{ck'_{i, 2}}{eq_i^+}\right)^+
+    \end{align*}
+
+    \Cref{rule:semantics:grsync:causality:dependencies:deps:eq:match} ensures that: $$\deps{\kwf
+            {match}\{\dots\}} = \deps{e} \cup \bigcup \left(\deps{e_i} \cup \deps{eq_i^+} \backslash
+        \defs{pat_i^+}\right)^+,$$ so that we can apply \Cref{lem:semantics:grsync:theorems:determinism:e} on
+    $e$ to state that we have $(s_1 \equiv_n s_2)^+$.
+
+    For all branch $i$ and all $y$ in $\deps{e_i} \backslash \defs{pat_i^+}$ we have $H_1[y]
+        \equiv_n H_2[y]$, so \Cref{lem:semantics:grsync:theorems:determinism:pat} ensures that for all $i$:
+    \begin{align*}
+         & ck_{i, 1} \equiv_n ck_{i, 2}                                                                   \\
+         & \forall x \in \defs{pat_i^+}, \, \whenT{H_1}{ck_{i, 1}}[x] \equiv_n \whenT{H_2}{ck_{i, 2}}[x].
+    \end{align*}
+    It implies that for all branch $i$, we have
+    $ck_{i, 1} \kwf{\&\&} (\kwf{\&\&}(\kwf{!}ck_{j, 1})^{j < i}) \equiv_n
+        ck_{i, 2} \kwf{\&\&} (\kwf{\&\&}(\kwf{!}ck_{j, 2})^{j < i})$ which ensures by symmetry and
+    transitivity that $ck'_{i, 1} \equiv_n ck'_{i, 2}$, and that for all $x \in \defs{pat_i^+}$ we
+    have $\whenT{H_1}{ck'_{i, 1}}[x] \equiv_n \whenT{H_2}{ck'_{i, 2}}[x]$ and thus
+    $H^\T_{i, 1}[x] \equiv_n H^\T_{i, 2}[x]$.
+
+    It follows that for all branch $i$ and $y$ in \deps{eq_i^+} we have $H^\T_{i, 1}[y] \equiv_n
+        H^\T_{i, 2}[y]$, so we can apply the induction hypothesis on equations to state that for all
+    $x$ in \defs{eq_i^+} we have $H^\T_{i, 1}[x] \equiv_n H^\T_{i, 2}[x]$.
+
+    Since patterns are exhaustive, we have $ck \equiv \Vert(ck_{i, 1}^+)$ and $ck \equiv \Vert
+        (ck_{i, 2}^+)$, meaning that for every time step, some pattern is active. And because this
+    \kwf{match} equation is well-typed, all equation blocks defines the same identifiers. This
+    ensures that for all $x$ in \defs{\kwf{match}\{\dots\}} we have $H_1[x] \equiv_n H_2[x]$.
+
+    \paragraph{When}
+    Let \when{x^+}{x_m^+ = c^+}{(\branch{epat_i^+}{e_i}{eq_i^+})^+} well-typed, in a\\well-typed and
+    causal program \G under a typing context \tyCtx.
+
+    Since the equations $eq_i^+$ may depend on memories of signals defined by the \kwf{when}
+    equation $(\last{x_m})^+$, we prove by induction on $n$ that for all $x$ in \defs{\kwf{when}\{
+        \dots \}} we have $H_1[x] \equiv_n H_2[x]$.
+
+    \begin{itemize}
+        \item \textit{Base case:} At $n = 0$, all pairs of streams are in $\equiv_0$, by definition
+              of $\equiv_0$. In particular, we have $H_1[x] \equiv_0 H_2[x]$ for all contexts
+              $H_1$ and $H_2$ and all $x$ in \defs{\kwf{when}\{ \dots \}}
+
+        \item \textit{Inductive step:} Let $H_1$ and $H_2$ be stream contexts over
+              a clock $ck$, such that:
+              \begin{align*}
+                   & \eqDenot{H_1}{ck}{\when{x^+}{x_m^+ = c^+}{(\branch{epat_i^+}{e_i}{eq_i^+})^+}} \\
+                   & \eqDenot{H_2}{ck}{\when{x^+}{x_m^+ = c^+}{(\branch{epat_i^+}{e_i}{eq_i^+})^+}} \\
+                   & \forall y \in \deps{\kwf{when}\{ \dots \}}, \, H_1[y] \equiv_{n+1} H_2[y].
+              \end{align*}
+              It implies:
+              \begin{equation*}
+                  \forall y \in \deps{\kwf{when}\{ \dots \}}, \, H_1[y] \equiv_n H_2[y],
+              \end{equation*}
+              so we suppose, as induction hypothesis, that:
+              \begin{equation*}
+                  \forall x \in \defs{\kwf{when}\{ \dots \}}, \, H_1[x] \equiv_n H_2[x].
+              \end{equation*}
+
+              \nameref{rule:semantics:grsync:denot:eq:when} ensures there exist clocks $ck_{i, 1}^+$,
+              $ck_{i, 2}^+$, $ck_{i, 1}^{\prime+}$ and $ck_{i, 2}^{\prime+}$, and stream contexts
+              $H^\T_{i, 1}$, $H^\T_{i, 2}$,$H^\F_1$ and $H^\F_2$ such that:
+              \begin{align*}
+                   & \left(\patDenot{H_1}{ck}{\guarded{epat_i^+ = s_1^+}{e_i}}{ck_{i, 1}}\right)^+                                                           \\
+                   & \left(\patDenot{H_2}{ck}{\guarded{epat_i^+ = s_2^+}{e_i}}{ck_{i, 2}}\right)^+                                                           \\
+                   & \left(ck'_{i, 1} \equiv ck_{i, 1} \kwf{\&\&} (\kwf{\&\&}(\kwf{!}ck_{j, 1})^{j < i})\right)^+                                            \\
+                   & \left(ck'_{i, 2} \equiv ck_{i, 2} \kwf{\&\&} (\kwf{\&\&}(\kwf{!}ck_{j, 2})^{j < i})\right)^+                                            \\
+                   & \left(H^\T_{i, 1} \equiv \whenT{H_1}{ck'_{i, 1}}\right)^+                                                                               \\
+                   & \left(H^\T_{i, 2} \equiv \whenT{H_2}{ck'_{i, 2}}\right)^+                                                                               \\
+                   & \left(\forall x_s \in \{x_m^+\} \backslash \defs{eq_i^+}, H^\T_{i, 1}[x_s] \equiv H^\T_{i, 1}[\last{x_s}]\right)^+                      \\
+                   & \left(\forall x_s \in \{x_m^+\} \backslash \defs{eq_i^+}, H^\T_{i, 2}[x_s] \equiv H^\T_{i, 2}[\last{x_s}]\right)^+                      \\
+                   & \left(\forall x_e \in \{x^+\} \backslash \{x_m^+\} \backslash \defs{eq_i^+}, H^\T_{i, 1}[x_e] \equiv \const{\none}{ck'_{i, 1}}\right)^+ \\
+                   & \left(\forall x_e \in \{x^+\} \backslash \{x_m^+\} \backslash \defs{eq_i^+}, H^\T_{i, 2}[x_e] \equiv \const{\none}{ck'_{i, 2}}\right)^+ \\
+                   & \left(\eqDenot{H^\T_{i, 1}}{ck'_{i, 1}}{eq_i^+}\right)^+                                                                                \\
+                   & \left(\eqDenot{H^\T_{i, 2}}{ck'_{i, 2}}{eq_i^+}\right)^+                                                                                \\
+                   & ck^\F_1 \equiv \whenF{ck}{\kwf{\Vert}(ck_{i, 1}^+)}                                                                                     \\
+                   & ck^\F_2 \equiv \whenF{ck}{\kwf{\Vert}(ck_{i, 2}^+)}                                                                                     \\
+                   & H^\F_1 \equiv \whenF{H}{\kwf{\Vert}(ck_{i, 1}^+)}                                                                                       \\
+                   & H^\F_2 \equiv \whenF{H}{\kwf{\Vert}(ck_{i, 2}^+)}                                                                                       \\
+                   & \forall x_s \in \{x_m^+\}, H^\F_1[x_s] \equiv H^\F_1[\last{x_s}]                                                                        \\
+                   & \forall x_s \in \{x_m^+\}, H^\F_2[x_s] \equiv H^\F_2[\last{x_s}]                                                                        \\
+                   & \forall x_e \in \{x^+\} \backslash \{x_m^+\}, H^\F_1[x_e] \equiv \const{\none}{ck^\F_1}                                                 \\
+                   & \forall x_e \in \{x^+\} \backslash \{x_m^+\}, H^\F_2[x_e] \equiv \const{\none}{ck^\F_2}                                                 \\
+                   & \left(H_1[\last{x_m}] \equiv \buffer{c}{H_1[x_m]} \right)^+                                                                             \\
+                   & \left(H_2[\last{x_m}] \equiv \buffer{c}{H_2[x_m]} \right)^+
+              \end{align*}
+
+              \Cref{rule:semantics:grsync:causality:dependencies:deps:eq:when} ensures that $$\deps{
+                      \kwf{when}\{\dots\}} = \begin{array}{l}
+                      \bigcup \left(\deps{epat_i^+} \cup \deps{e_i} \cup \deps{eq_i^+} \backslash \defs{epat_i^+}\right)^+ \\
+                      \qquad \backslash (\{x^+\} \cup \{\last{x_m}^+\})
+                  \end{array}.$$
+
+              For all branch $i$ and all $y$ in $\deps{e_i} \backslash \defs{epat_i^+}$ we have
+              $H_1[y] \equiv_{n+1} H_2[y]$, so \Cref{lem:semantics:grsync:theorems:determinism:epat} ensures
+              that for all $i$:
+              \begin{align*}
+                   & ck_{i, 1} \equiv_{n+1} ck_{i, 2}                                         \\
+                   & \forall x \in \defs{epat_i^+}, \, \whenT{H_1}{ck_{i, 1}}[x] \equiv_{n+1}
+                  \whenT{H_2}{ck_{i, 2}}[x].
+              \end{align*}
+
+              It implies that for all $i$, we have $ck_{i, 1} \kwf{\&\&} (\kwf{\&\&}(\kwf{!}ck_{j,
+                      1})^{j < i}) \equiv_{n+1} ck_{i, 2} \kwf{\&\&} (\kwf{\&\&}(\kwf{!}ck_{j, 2}
+                  )^{j < i})$ which ensures that $ck'_{i, 1} \equiv_{n+1} ck'_{i, 2}$, and that for
+              all $x$ in $\defs{epat_i^+}$ we have
+              $\whenT{H_1}{ck'_{i, 1}}[x]$ equivalent to $\whenT{H_2}{ck'_{i, 2}}[x]$
+              up to $n+1$, and thus $H^\T_{i, 1}[x] \equiv_{n+1} H^\T_{i, 2}[x]$.
+
+              Equivalently, we have $ck^\F_1 \equiv_{n+1} ck^\F_2$.
+
+              The identifiers $x_m^+$ are included in
+              \defs{\kwf{when}\{ \dots \}} (\Cref{rule:semantics:grsync:causality:defs:eq:when}).
+              So for all $x_m$, we have $H_1[x_m] \equiv_n H_2[x_m]$ by the induction hypothesis on
+              $n$. Since for each $j \in \{1,2\}$ we have $H_j[\last{x_m}] \equiv \buffer{c}
+                  {H_j[x_m]}$, it follows that $H_1[\last{x_m}] \equiv_{n+1} H_2[\last{x_m}]$.
+
+              For each $i$, for all $y$ in \deps{eq_i^+}, we have $H^\T_{i, 1}[y] \equiv_{n+1}
+                  H^\T_{i, 2}[y]$. By induction hypothesis over equations, for all $x$ in
+              \defs{eq_i^+}, we have $H^\T_{i, 1}[x] \equiv_{n+1} H^\T_{i, 2}[x]$.
+
+              For each $i$, identifiers defined by the \kwf{when} equation and not updated by
+              $eq_i^+$ ensure the following:
+              \begin{itemize}
+                  \item Signals $x_s$ are associated with their last values, so for each $j \in \{1,
+                            2\}$ we have $H^\T_{i, j}[x_s] \equiv H^\T_{i, j}[\last{x_s}]$, and
+                        because we proved the equivalence of \last{x_s} up to $n+1$ we can state:
+                        $H^\T_{i, 1}[x_s] \equiv_{n+1} H^\T_{i, 2}[x_s]$.
+
+                  \item Events $x_e$ are associated with a constant stream of \none values, so
+                        for each $j \in \{1, 2\}$ we have $H^\T_{i, j}[x_e] \equiv \const{\none}
+                            {ck'_{i, j}}$, and because we proved $ck'_{i, 1} \equiv_{n+1}
+                            ck'_{i, 2}$ we have $H^\T_{i, 1}[x_e] \equiv_{n+1} H^\T_{i, 2}[x_e]$.
+              \end{itemize}
+
+              In the absence of event, the same rules apply:
+              \begin{itemize}
+                  \item Signals $x_s$ are associated with their last values, so for each $j \in \{1,
+                            2\}$ we have $H^\F_j[x_s] \equiv H^\F_j[\last{x_s}]$, and because we
+                        proved the equivalence of \last{x_s} up to $n+1$ we can state:  $H^\F_1[x_s]
+                            \equiv_{n+1} H^\F_2[x_s]$.
+
+                  \item Events $x_e$ are associated with a constant stream of \none values, so
+                        for each $j \in \{1, 2\}$ we have $H^\F_j[x_e]\equiv\const{\none}{ck^\F_j}$,
+                        and because we proved $ck^\F_1 \equiv_{n+1} ck^\F_2$ we have $H^\F_1[x_e]
+                            \equiv_{n+1} H^\F_2[x_e]$.
+              \end{itemize}
+
+              Therefore, at each time step, whether an event pattern is triggered or not, the
+              streams remain equivalent up to $n+1$: for all $x$ in \defs{\kwf{when} \{\dots\}} we
+              have $H_1[x] \equiv_{n+1} H_2[x]$.
+    \end{itemize}
+
+    \paragraph{Multiple equations}
+    Let $eq^+$ be a set of well-typed equations in a well-typed and causal program \G and a typing
+    context \tyCtx. Let $H_1$ and $H_2$ be stream contexts over a clock $ck$ such that:
+    \begin{align*}
+         & \eqDenot{H_1}{ck}{eq^+}                               \\
+         & \eqDenot{H_2}{ck}{eq^+}                               \\
+         & \forall y \in \deps{eq^+}, \, H_1[y] \equiv_n H_2[y].
+    \end{align*}
+
+    The causality of $eq^+$ allows to use the rank induction
+    (\Cref{def:semantics:grsync:causality:induction:rank}) to
+    determine that for all $x \in \defs{eq^+} \cup \deps{eq^+}$, we have
+    $H_1[x] \equiv_n H_2[x]$.
+
+    \begin{itemize}
+        \item \textit{Base case:} Let $x \in \defs{eq^+} \cup \deps{eq^+}$ such that
+              $\rank{eq^+}{x} = 0$.
+
+              Therefore, there exists an equation $eq_x$ that defines $x$ and
+              that has no dependency with \defs{eq^+}. By induction hypothesis on equations
+              structure, for all $z$ in \defs{eq_x} we have $H_1[z] \equiv_n H_2[z]$, in particular
+              we have $H_1[x] \equiv_n H_2[x]$.
+
+        \item \textit{Inductive step:} Let $k \in \N$.
+              We assume that for all $y \in \defs{eq^+} \cup \deps{eq^+}$ such that
+              $\rank{eq^+}{y} \le k$ we have $H_1[y] \equiv_n H_2[y]$.
+
+              Let $x \in \defs{eq^+}$ such that $\rank{eq^+}{x} = k+1$.
+              For all $y \in \defs{eq^+} \cup \deps{eq^+}$ such that $x$ depends on $y$ (\ie \depOrd{eq^+}{x}{y}),
+              \Cref{lem:semantics:grsync:causality:rank:decrease}
+              states that $\rank{eq^+}{x} > \rank{eq^+}{y}$, which implies that $\rank{eq^+}{y} \le k$.
+              By rank induction hypothesis, for all $y \in \defs{eq^+} \cup \deps{eq^+}$ such that
+              \depOrd{eq^+}{x}{y}, we have $H_1[y] \equiv_n H_2[y]$.
+
+              Let $eq_x$ be the equation that defines $x$. Then for all $y \in \deps{eq_x}$, we have
+              $H_1[y] \equiv_n H_2[y]$. By induction hypothesis on equations, for all $z$
+              in \defs{eq_z} we have $H_1[z] \equiv_n H_2[z]$, in particular we have $H_1[x]
+                  \equiv_n H_2[x]$.
+    \end{itemize}
+
+    \setcounter{paragraph}{0}
+\end{skippableproof}
+
+\begin{theorem}[Determinism]
+    \label{thm:semantics:grsync:theorems:determinism}
+    Let $f$ be a well-typed and causal component in a program \G and a typing
+    context \tyCtx. If $[s_{i, 1}^+]$ and $[s_{i, 2}^+]$ are lists of input streams on clock $ck$,
+    then for all $n \in \N$, lists of streams $[s_{o, 1}^+]$ and $[s_{o, 2}^+]$:
+    $$
+        \compDenot{ck}{f}{s_{i, 1}^+}{s_{o, 1}^+}
+        \, \wedge \,
+        \compDenot{ck}{f}{s_{i, 2}^+}{s_{o, 2}^+}
+        \; \Rightarrow \;
+        \left[
+            \left(s_{i, 1} \equiv_n s_{i, 2}\right)^+
+            \, \Rightarrow \,
+            \left(s_{o, 1} \equiv_n s_{o, 2}\right)^+
+            \right].
+    $$
+\end{theorem}
+\begin{skippableproof}
+    Let $f$ be a well-typed and causal component in a program \G and a typing context \tyCtx:
+    $$\component{f}{x_i^+}{x_o^+}{eq^+}{x_m^+ = c^+}.$$
+    Let $[s_{i, 1}^+]$, $[s_{i, 2}^+]$, $[s_{o, 1}^+]$, and $[s_{o, 2}^+]$ be lists of input streams
+    on  clock $ck$ such that:
+    \begin{align*}
+         & \compDenot{ck}{f}{s_{i, 1}^+}{s_{o, 1}^+}  \\
+         & \compDenot{ck}{f}{s_{i, 2}^+}{s_{o, 2}^+}.
+    \end{align*}
+
+    By application of the rule for components \nameref{rule:semantics:grsync:denot:comp}, it implies
+    the existence of contexts $H_1$ and $H_2$ such that:
+    \begin{align*}
+         & \left(H_1[x_i] \equiv s_{i, 1}\right)^+                     \\
+         & \left(H_2[x_i] \equiv s_{i, 2}\right)^+                     \\
+         & \left(H_1[x_o] \equiv s_{o, 1}\right)^+                     \\
+         & \left(H_2[x_o] \equiv s_{o, 2}\right)^+                     \\
+         & \left(H_1[\last{x_m}] \equiv \buffer{c}{H_1[x_m]} \right)^+ \\
+         & \left(H_2[\last{x_m}] \equiv \buffer{c}{H_2[x_m]} \right)^+ \\
+         & \left(\eqDenot{H_1}{ck}{eq}\right)^+                        \\
+         & \left(\eqDenot{H_2}{ck}{eq}\right)^+
+    \end{align*}
+
+    It is then sufficient to prove that, for all $n \in \N$, contexts $H_1$ and $H_2$ are
+    equivalent up-to-$n$ on the domain of component's identifiers $\{x_i^+\} \cup \{\last{x_m}^+\}
+        \cup \defs{eq^+}$:
+    \begin{equation*}
+        \P{n}:
+        \left[\left(s_{i, 1} \equiv_n s_{i, 2}\right)^+ \Rightarrow [\forall x \in \{x_i^+\}
+        \cup \{\last{x_m}^+\} \cup \defs{eq^+}, \, H_1[x] \equiv_n H_2[x]]\right].
+    \end{equation*}
+    The proof of \P{n} is done by induction on $n \in \N$ and relies on \Cref{lem%
+        :semantics:grsync:theorems:determinism:eq} that states the determinism up-to-$n$ of \GRSync
+    equations when their dependencies are determined.
+
+    \begin{itemize}
+        \item \textit{Base case:} At $n = 0$, all pairs of streams are in $\equiv_0$ (\Cref{def:%
+                  semantics:grsync:theorems:determinism:equiv0}). In particular, for all $x$ in
+              \defs{eq^+}, we have $H_1[x] \equiv_0 H_2[x]$. The property \P{0} holds.
+
+        \item \textit{Inductive step:} Assuming \P{n} holds for $n \in \N$.
+              Suppose $\left(s_{i, 1} \equiv_{n+1} s_{i, 2}\right)^+$. By definition of
+              $\equiv_{n+1}$ (\Cref{def:semantics:grsync:theorems:determinism:equivn}), we have
+              $\left(s_{i, 1} \equiv_n s_{i, 2}\right)^+$. The application of \P{n} with
+              $[s_{i, 1}^+]$ and $[s_{i, 2}^+]$ states that, for all identifier $x$ in \defs{eq^+},
+              we have $H_1[x] \equiv_n H_2[x]$.
+
+              %% Inputs
+              For $j \in \{1,2\}$, the streams associated with the inputs $(x_i^+)$ in $H_j$ are
+              equivalent to $(s_{i, j}^+)$.
+              We supposed $\left(s_{i, 1} \equiv_{n+1} s_{i, 2}\right)^+$, therefore for all input
+              $x_i$, we have $H_1[x_i] \equiv_{n+1} H_2[x_i]$.
+
+              %% Memories
+              For $j \in \{1,2\}$, the stream associated with \last{x_m} in $H_j$ is equivalent to 
+              the stream \buffer{c}{H_j[x_m]} (\cf rules \nameref{rule:semantics:grsync:denot:comp}
+              and \nameref{rule:semantics:grsync:denot:eq:when}). The induction hypothesis
+              \P{n} gives $H_1[x_m] \equiv_n H_2[x_m]$, which implies $\buffer{c}
+                  {H_1[x_m]} \equiv_{n+1} \buffer{c}{H_2[x_m]}$. Therefore, for all memory
+              $\last{x_m}$, we have $H_1[\last{x_m}] \equiv_{n+1} H_2[\last{x_m}]$.
+
+              %% Others: by causality
+              The causality of $f$ allows to use the rank induction
+              (\Cref{def:semantics:grsync:causality:induction:rank}) to
+              determine that for all $x \in \defs{eq^+} \cup \deps{eq^+}$, we have
+              $H_1[x] \equiv_n H_2[x]$.
+
+              \begin{itemize}
+                  \item \textit{Base case:} Let $x \in \defs{eq^+} \cup \deps{eq^+}$ such that
+                        $\rank{eq^+}{x} = 0$.
+
+                        Therefore, there exists an equation $eq_x$ that defines $x$ and
+                        that has no dependency with \defs{eq^+}.
+                        \Cref{lem:semantics:grsync:theorems:determinism:eq} ensures that
+                        for all $z$ in \defs{eq_x} we have $H_1[z] \equiv_n H_2[z]$, in particular
+                        we have $H_1[x] \equiv_n H_2[x]$.
+
+                  \item \textit{Inductive step:} Let $k \in \N$.
+                        We assume that for all $y \in \defs{eq^+} \cup \deps{eq^+}$ such that
+                        $\rank{eq^+}{y} \le k$ we have $H_1[y] \equiv_n H_2[y]$.
+
+                        Let $x \in \defs{eq^+}$ such that $\rank{eq^+}{x} = k+1$.
+                        For all $y \in \defs{eq^+} \cup \deps{eq^+}$ such that $x$ depends on $y$ (\ie \depOrd{eq^+}{x}{y}),
+                        \Cref{lem:semantics:grsync:causality:rank:decrease}
+                        states that $\rank{eq^+}{x} > \rank{eq^+}{y}$, which implies that $\rank{eq^+}{y} \le k$.
+                        By rank induction hypothesis, for all $y \in \defs{eq^+} \cup \deps{eq^+}$ such that
+                        \depOrd{eq^+}{x}{y}, we have $H_1[y] \equiv_n H_2[y]$.
+
+                        Let $eq_x$ be the equation that defines $x$. Then for all $y \in \deps{eq_x}$, we have
+                        $H_1[y] \equiv_n H_2[y]$. \Cref{lem:semantics:grsync:theorems:determinism:eq}
+                        ensures that for all $z$ in \defs{eq_z} we have $H_1[z] \equiv_n H_2[z]$, in
+                        particular we have $H_1[x] \equiv_n H_2[x]$.
+              \end{itemize}
+
+              %% Conclusion
+              It follows that \P{{n+1}} holds.
+    \end{itemize}
+
+    Because $f$ is well-typed, the identifiers $\{x_o^+\}$ are included in \defs{eq^+}. Therefore,
+    for all $n \in \N$ the property \P{n} implies that we have:
+    \begin{equation*}
+        \left(s_{i, 1} \equiv_n s_{i, 2}\right)^+ \Rightarrow \left(H_1[x_o] \equiv_n H_2[x_o]\right)^+
+    \end{equation*}
+    The rule for component semantics \nameref{rule:semantics:grsync:denot:comp} ensures for all
+    $x_o$ that $H_1[x_o] \equiv s_{o, 1}$ and $H_2[x_o] \equiv s_{o, 2}$. By symmetry and
+    transitivity, we have $\left(s_{o, 1} \equiv_n s_{o, 2}\right)^+$.
+\end{skippableproof}
+
+\paragraph{Summary}
+In conclusion, this section formally established the determinism of \GRSync components. The main
+result, presented in \Cref{thm:semantics:grsync:theorems:determinism}, proves that the output
+streams of a component are uniquely determined by its input streams.
+%
+The proof was conducted using a coinductive argument, framed as an induction on the length of stream
+prefixes. This approach was supported by a larger induction on the language constructs.
+%
+Similar to the productivity proof, the challenge of mutually recursive equations was addressed using
+rank induction (\Cref{def:semantics:grsync:causality:induction:rank}), which leverages the causality
+of the program to resolve dependencies in a well-defined order.
+%
+This guarantee of determinism is fundamental, ensuring that component behavior is predictable and
+repeatable, which is a critical requirement for reliable reactive systems.

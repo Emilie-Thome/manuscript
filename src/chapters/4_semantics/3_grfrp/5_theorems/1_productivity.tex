@@ -1,0 +1,815 @@
+\subsubsection{Productivity}
+\label{sec:semantics:grfrp:theorems:productivity}
+
+\newcommand{\obsServName}[1]{\ensuremath{\llbracket #1 \rrbracket^\textit{obs}_{\tyCtx, G}}}
+\newcommand{\obsServ}[3]{\ensuremath{\obsServName{#1}(#2, #3)}}
+\newcommand{\getMess}[2]{\ensuremath{\smf{get\_message}(#1, #2)}}
+\newcommand{\nextList}[2]{\ensuremath{\smf{next\_list}(#1, #2)}}
+
+The observation of a service $F$ at the $n^\text{th}$ message resulting from the inputs list $L$
+of length at least $n$, denoted by \obsServ{F}{L}{n} and defined by the rule \nameref{rule:%
+    semantics:grfrp:theorems:productivity:observe:service}, is the execution of $n$ steps of the
+operational semantics of \service{F}{stmt^+} on successive messages combining the inputs from $L$
+plus the timer resets resulting from the previous steps, starting from the initial state and timer
+queue of $F$.
+\begin{mathpar}
+    \myinfer
+    {
+        s_0 = \initstate{F} \\
+        \tau_0 = \inittimer{F} \\
+        L_0 = L \\\\
+        \forall k \in [0, n-1], \, {
+                \left\{
+                \begin{array}{l}
+                    (\mess_k, t_k) = \getMess{L_k}{\tau_k}                                         \\
+                    \serviceOpSem{s_k}{\tau_k}{F}{\mess_k}{t_k}{s_{k+1}}{\tau_{k+1}}{(x_k, v_k)^+} \\
+                    L_{k+1} = \nextList{L_k}{\tau_k}
+                \end{array}
+                \right.
+            }
+    }
+    { \obsServ{F}{L}{n} = [(x_{n-1}, v_{n-1})^+] }
+    {{\tiny Observe}Serv}
+    \label{rule:semantics:grfrp:theorems:productivity:observe:service}
+\end{mathpar}
+
+The rule relies on the auxiliary functions \getMess{L}{\tau}, that is defined in \Cref{def:semantic%
+    s:grfrp:theorems:productivity:observe:aux:getMess} and that returns the input or timer that has
+the smallest timestamp, and \nextList{L}{\tau}, that is defined in \Cref{def:semantics:grfrp:theore%
+    ms:productivity:observe:aux:nextList} and that returns the next inputs list (if the next message
+is an input from the list $L$, the next inputs list is the remaining list, otherwise it is
+unchanged).
+
+\begin{definition}[Get message]
+    \label{def:semantics:grfrp:theorems:productivity:observe:aux:getMess}
+    The earliest message from a list of timestamped input messages $L$ and a timer queue $\tau$ is
+    denoted by \getMess{L}{\tau} and corresponds to the one with the smallest timestamp. It is
+    defined as follows.
+    \begin{align}
+        \getMess{(\inputMess{i}{v_i}, t_i) :: L}{\emptytimer}              & = (\inputMess{i}{v_i}, t_i)
+        \label{eq:semantics:grfrp:theorems:productivity:observe:aux:getMess:empty}                                                     \\
+        \getMess{(\inputMess{i}{v_i}, t_i) :: L}{(i_T, t_T) \diamond \tau} & = (\inputMess{i}{v_i}, t_i) &  & \text{if} \, t_i \le t_T
+        \label{eq:semantics:grfrp:theorems:productivity:observe:aux:getMess:input}                                                     \\
+        \getMess{(\inputMess{i}{v_i}, t_i) :: L}{(i_T, t_T) \diamond \tau} & = (\timerMess{i_T}, t_T)    &  & \text{if} \, t_i > t_T
+        \label{eq:semantics:grfrp:theorems:productivity:observe:aux:getMess:timer}
+    \end{align}
+\end{definition}
+
+\begin{definition}[Remaining list of inputs]
+    \label{def:semantics:grfrp:theorems:productivity:observe:aux:nextList}
+    The remaining list of inputs, after getting the earliest message from a list of inputs $L$ and a
+    timer queue $\tau$, is denoted by \nextList{L}{\tau}. It is defined as follows.
+    \begin{align}
+        \nextList{(\inputMess{i}{v_i}, t_i) :: L}{\emptytimer}              & = L
+        \label{eq:semantics:grfrp:theorems:productivity:observe:aux:nextList:empty}                                                          \\
+        \nextList{(\inputMess{i}{v_i}, t_i) :: L}{(i_T, t_T) \diamond \tau} & = L                              &  & \text{if} \, t_i \le t_T
+        \label{eq:semantics:grfrp:theorems:productivity:observe:aux:nextList:input}                                                          \\
+        \nextList{(\inputMess{i}{v_i}, t_i) :: L}{(i_T, t_T) \diamond \tau} & = (\inputMess{i}{v_i}, t_i) :: L &  & \text{if} \, t_i > t_T
+        \label{eq:semantics:grfrp:theorems:productivity:observe:aux:nextList:timer}
+    \end{align}
+\end{definition}
+
+A service is productive if it can react to every inputs list without blocking. \Cref{thm:semantics:%
+    grfrp:theorems:productivity} ensures that the operational semantics of a well-defined service
+(\ie well-typed, in a causal program) is productive by guaranteeing that its observation function
+is well-defined.
+%
+Its proof relies on the intermediate \Cref{lem:semantics:grfrp:theorems:productivity:flowop,lem%
+    :semantics:grfrp:theorems:productivity:stmt}, that state equivalent properties on the different
+constructs of \GRFRP (flow operations and flow statement).
+
+\begin{lemma}[Productivity of \GRFRP flow operations]
+    \label{lem:semantics:grfrp:theorems:productivity:flowop}
+    Let $\sigma$ be a well-typed flow operation, in a well-typed and causal program \G with a
+    typing context \tyCtx.
+    If $s$ corresponds to a state for $\sigma$, $\gamma$ is a propagation context, and $t$ is a
+    timestamp, then there exists another state $s'$ corresponding to $\sigma$, bottom values
+    $v_\bot^+$ and timer resets $(i_T, t_T)^+$ such that:
+    \begin{equation*}
+        \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{v_\bot^+}{(i_T, t_T)^+}.
+    \end{equation*}
+\end{lemma}
+\begin{skippableproof}
+    We proceed by structural induction on every flow operation and rely on the productivity of
+    components (\Cref{thm:semantics:grsync:theorems:productivity}).
+
+    \paragraph{Identifiers}
+    Let $x$ be an identifier to a flow, let $s$ be a compatible state, let $\gamma$ be a propagation
+    context, and let $t$ be a timestamp.
+    %
+    \Cref{eq:semantics:grfrp:opsem:init:op:ident} ensures that $s$ equals $()$.
+    %
+    The rule \nameref{rule:semantics:grfrp:opsem:step:op:ident} states that the bottom value produced by
+    the step function of $x$ is equal to $\gamma[x]$, which equals $\bot$ if $x$ has not changed and
+    conversely equals a value if $x$ has changed.
+    It produces no timer reset, and the produced state remains empty.
+
+    \paragraph{Component applications}
+    Let $f(\sigma^+)$ be the application of the component $f$ on the flow operations $\sigma^+$, let
+    $s$ be a compatible state for the operation, let $\gamma$ be a propagation context.
+    %
+    \Cref{eq:semantics:grfrp:opsem:init:op:app:state} ensures there exists a list of states
+    $s_\sigma^+$ compatible with $\sigma^+$, a state $s_f$ compatible with $f$, two lists of values
+    $(v_i^\explast)^+$ and $(v_o^\explast)^+$ corresponding to the inputs and outputs of $f$
+    respectively and such that $s = (s_f, (v_i^\explast)^+, (v_o^\explast)^+, s_\sigma^+)$.
+    %
+    By the induction hypothesis, each $\sigma$ evaluates to a bottom value $v_{i\bot}$, with a new
+    compatible state $s_\sigma'$ and timer resets $(i_\sigma, t_\sigma)^+$.
+
+    \begin{itemize}
+        \item If there exists $v_{i\bot}$ that is different from $\bot$, the rule \nameref{rule:%
+                  semantics:grfrp:opsem:step:op:app:value} applies. It creates a list of non-$\bot$
+              values $v_i^+$ so that the step function of the component $f$ returns a list of non-%
+              $\bot$ values $v_o^+$ and a new state $s'_f$ (\Cref{thm:semantics:grfrp:theorems:productivity}).
+              From those output values are created the bottom values $v_{o\bot}^+$, that are
+              returned along with a new state $(s'_f, v_i^+, v_o^+, s^{\prime+})$ still
+              corresponding to $f(\sigma^+)$, and the concatenation of timer resets $((i_\sigma,
+                  t_\sigma)^+)^+$. The functions \smf{into\_val_{\tyCtx[x_i]}} and \smf{into\_bot_{
+                      \tyCtx[x_o]}}, that create the lists of well-defined and bottom values
+              respectively, are defined by \Crefrange{rule:semantics:grfrp:opsem:aux:intoVal:signal}
+              {rule:semantics:grfrp:opsem:aux:intoBot:event} in a functional manner, except when the
+              type of input and output identifiers are retrieved from \tyCtx. Because the program
+              \G is well-typed, those identifiers are defined in \tyCtx.
+
+        \item If each $v_{i\bot}$ equals $\bot$, the rule \nameref{rule:semantics:grfrp:opsem:step:op:%
+                  app:propag} applies. The step function of $f(\sigma^+)$ returns bottom values, a
+              new state $(s_f, (v_i^\explast)^+, (v_o^\explast)^+, s^{\prime+})$ still corresponding
+              to $f(\sigma^+)$, and the concatenation of timer resets $((i_\sigma, t_\sigma)^+)^+$.
+    \end{itemize}
+
+    \paragraph{Sample}
+    Let \sample{\sigma}{T} be the sample of the event $\sigma$ on the period $T$, let $s$ be a
+    compatible state for the operation, let $\gamma$ be a propagation context, and let $t$ be a
+    timestamp.
+    %
+    \Cref{eq:semantics:grfrp:opsem:init:op:sample:state} ensures there exists a state $s_\sigma$
+    compatible with $\sigma$, and a bottom value $v_\bot$ such that $s = (v_\bot, s_\sigma)$.
+    %
+    By the induction hypothesis, the step function of $\sigma$ on the timestamp $t$ evaluates to a
+    bottom value $v'_\bot$, with a new compatible state $s_\sigma'$ and timer resets $(i_\sigma,
+        t_\sigma)^+$.
+
+    \begin{itemize}
+        \item If $v'_\bot$ is equal to a non-$\bot$ value $v$, the rule \nameref{rule:semantics:%
+                  grfrp:opsem:step:op:sample:value} applies and the step function of \sample{\sigma}{T}
+              returns $\bot$ as output value, a new state $(v, s'_\sigma)$, and the timer resets
+              $(i_\sigma, t_\sigma)^+$.
+
+        \item If $v'_\bot$ is equal to $\bot$ and the propagation context ($\gamma$) maps the
+              identifier of the timer associated with \sample{\sigma}{T} (referred to as $i_T$) to a
+              unit value, the rule \nameref{rule:semantics:grfrp:opsem:step:op:sample:timer} applies and
+              the step function of \sample{\sigma}{T} returns the bottom value $v_\bot$, a new state
+              $(\bot, s'_\sigma)$, and the timer resets $((i_T, t + T), (i_\sigma, t_\sigma)^+)$.
+
+        \item If $v'_\bot$ is equal to $\bot$ and the propagation context ($\gamma$) maps the
+              identifier of the timer associated with \sample{\sigma}{T} (referred to as $i_T$) to
+              $\bot$, the rule \nameref{rule:semantics:grfrp:opsem:step:op:sample:propag} applies and the
+              step function of \sample{\sigma}{T} returns $\bot$ as output value, a new state
+              $(v_\bot, s'_\sigma)$, and the timer resets $(i_\sigma, t_\sigma)^+$.
+    \end{itemize}
+
+    \paragraph{Scan}
+    Let \scan{\sigma}{T} be the scan of the signal $\sigma$ on the period $T$, let $s$ be a
+    compatible state for the operation, let $\gamma$ be a propagation context, and let $t$ be a
+    timestamp.
+    %
+    \Cref{eq:semantics:grfrp:opsem:init:op:scan:state} ensures there exists a state $s_\sigma$
+    compatible with $\sigma$, a value $v^\explast$, and a bottom value $v_\bot$ such that $s =
+        (v_\bot, v^\explast, s_\sigma)$.
+    %
+    By the induction hypothesis, the step function of $\sigma$ on the timestamp $t$ evaluates to a
+    bottom value $v'_\bot$, with a new compatible state $s_\sigma'$ and timer resets $(i_\sigma,
+        t_\sigma)^+$.
+
+    \begin{itemize}
+        \item If $v'_\bot$ is equal to a value $v$ that is different from $v^\explast$ and the
+              propagation context ($\gamma$) maps the identifier of the timer associated with
+              \scan{\sigma}{T} (referred to as $i_T$) to $\bot$, the rule
+              \nameref{rule:semantics:grfrp:opsem:step:op:scan:value} applies and the step function
+              of \scan{\sigma}{T} returns $\bot$ as output value, a new state $(v, v^\explast,
+                  s'_\sigma)$, and the timer resets $(i_\sigma, t_\sigma)^+$.
+
+        \item If $v'_\bot$ is equal to a value $v$ that is equal to $v^\explast$ and $\gamma$ maps
+              $i_T$ to $\bot$, the rule \nameref{rule:semantics:grfrp:opsem:step:op:scan:drop}
+              applies and the step function of \scan{\sigma}{T} returns $\bot$ as output value, a
+              new state $(\bot, v^\explast, s'_\sigma)$, and the timer resets
+              $(i_\sigma, t_\sigma)^+$.
+
+        \item If $v'_\bot$ is equal to $\bot$ and $\gamma$ maps the $i_T$ to $\bot$, the rule
+              \nameref{rule:semantics:grfrp:opsem:step:op:scan:propag} applies and the
+              step function of \scan{\sigma}{T} returns $\bot$ as output value, a new state
+              $(v_\bot, v^\explast, s'_\sigma)$, and the timer resets $(i_\sigma, t_\sigma)^+$.
+
+        \item If $v'_\bot$ is equal to a value $v$ that is different from $v^\explast$ and $\gamma$
+              maps the $i_T$ to a unit value, the rule
+              \nameref{rule:semantics:grfrp:opsem:step:op:scan:valuetimer} applies and the step
+              function of \scan{\sigma}{T} returns the value $v$, a new state
+              $(\bot, v, s'_\sigma)$, and the timer resets $((i_T, t + T), (i_\sigma, t_\sigma)^+)$.
+
+        \item If $v'_\bot$ is equal to a value $v$ that is equal to $v^\explast$ and $\gamma$ maps
+              the $i_T$ to a unit value, the rule
+              \nameref{rule:semantics:grfrp:opsem:step:op:scan:droptimer} applies and the step
+              function of \scan{\sigma}{T} returns the bottom value $\bot$, a new state
+              $(\bot, v^\explast, s'_\sigma)$, and the timer resets $((i_T, t + T),
+                  (i_\sigma, t_\sigma)^+)$.
+
+        \item If $v'_\bot$ is equal to $\bot$, if $\gamma$ maps the $i_T$ to a unit value, and if
+              $v_\bot$ is equal to a value $v$, the rule
+              \nameref{rule:semantics:grfrp:opsem:step:op:scan:timer} applies and the step function
+              of \scan{\sigma}{T} returns the value $v$, a new state $(\bot, v, s'_\sigma)$, and the
+              timer resets $((i_T, t + T), (i_\sigma, t_\sigma)^+)$.
+
+        \item If $v'_\bot$ is equal to $\bot$, if $\gamma$ maps the $i_T$ to a unit value, and if
+              $v_\bot$ equals $\bot$, the rule \nameref{rule:semantics:grfrp:opsem:step:op:scan:bot}
+              applies and the step function of \scan{\sigma}{T} returns the bottom value $\bot$, a
+              new state $(\bot, v^\explast, s'_\sigma)$, and the timer resets $((i_T, t + T),
+                  (i_\sigma, t_\sigma)^+)$.
+    \end{itemize}
+
+    \paragraph{Timeout}
+    Let \timeout{\sigma}{T} be the timeout of the event $\sigma$ on $T$ milliseconds, let $s$ be a
+    compatible state for the operation, let $\gamma$ be a propagation context, and let $t$ be a
+    timestamp.
+    %
+    \Cref{eq:semantics:grfrp:opsem:init:op:timeout:state} ensures there exists a state $s_\sigma$
+    compatible with $\sigma$ such that $s = s_\sigma$.
+    %
+    By the induction hypothesis, the step function of $\sigma$ on the timestamp $t$ evaluates to a
+    bottom value $v'_\bot$, with a new compatible state $s_\sigma'$ and timer resets $(i_\sigma,
+        t_\sigma)^+$.
+
+    \begin{itemize}
+        \item If $v'_\bot$ is equal to a value $v$, the rule \nameref{rule:semantics:grfrp:opsem:%
+                  step:op:timeout:reset} applies and the step function of \timeout{\sigma}{T}
+              returns $\bot$ as output value, a new state $s'_\sigma$, and the timer resets
+              $((i_T, t + T), (i_\sigma, t_\sigma)^+)$.
+
+        \item If $v'_\bot$ is equal to $\bot$, if the propagation context ($\gamma$) maps the
+              identifier of the timer associated with \timeout{\sigma}{T} (referred to as $i_T$) to a
+              unit value, the rule \nameref{rule:semantics:grfrp:opsem:step:op:timeout:timer} applies and
+              the step function of \timeout{\sigma}{T} returns the value $()$, a new state
+              $s'_\sigma$, and the timer resets $((i_T, t + T), (i_\sigma, t_\sigma)^+)$.
+
+        \item If $v'_\bot$ is equal to $\bot$ and the propagation context ($\gamma$) maps the
+              identifier of the timer associated with \timeout{\sigma}{T} (referred to as $i_T$) to
+              $\bot$, the rule \nameref{rule:semantics:grfrp:opsem:step:op:timeout:propag} applies and
+              the step function of \timeout{\sigma}{T} returns $\bot$ as output value, a new state
+              $s'_\sigma$, and the timer resets $(i_\sigma, t_\sigma)^+$.
+    \end{itemize}
+
+    \paragraph{Throttle}
+    Let \throttle{\sigma}{\Delta} be the throttle of the signal $\sigma$ on the distance $\Delta$,
+    let $s$ be a compatible state for the operation, let $\gamma$ be a propagation context, and let
+    $t$ be a timestamp.
+    %
+    \Cref{eq:semantics:grfrp:opsem:init:op:throttle:state} ensures there exists a state $s_\sigma$
+    compatible with $\sigma$, and a value $v^\explast$ such that $s = (v^\explast, s_\sigma)$.
+    %
+    By the induction hypothesis, the step function of $\sigma$ on the timestamp $t$ evaluates to a
+    bottom value $v'_\bot$, with a new compatible state $s_\sigma'$ and timer resets $(i_\sigma,
+        t_\sigma)^+$.
+
+    \begin{itemize}
+        \item If $v'_\bot$ is equal to a value $v$ such that $|v - v^\explast| \ge \Delta$, the rule
+              \nameref{rule:semantics:grfrp:opsem:step:op:throttle:value} applies and the step function
+              of \throttle{\sigma}{\Delta} returns $v$ as output value, a new state $(v, s'_\sigma)
+              $, and the timer resets $(i_\sigma, t_\sigma)^+$.
+
+        \item If $v'_\bot$ is equal to a value $v$ such that $|v - v^\explast| < \Delta$, the rule
+              \nameref{rule:semantics:grfrp:opsem:step:op:throttle:drop} applies and the step function
+              of \throttle{\sigma}{\Delta} returns $\bot$ as output value, a new state $(v^\explast,
+                  s'_\sigma)$, and the timer resets $(i_\sigma, t_\sigma)^+$.
+
+        \item If $v'_\bot$ is equal to $\bot$, the rule \nameref{rule:semantics:grfrp:opsem:step:op:%
+                  throttle:propag} applies and the step function of the operation \throttle{\sigma}
+              {\Delta} returns $\bot$ as output value, a new state $(v^\explast, s'_\sigma)$, and
+              the timer resets $(i_\sigma, t_\sigma)^+$.
+    \end{itemize}
+
+    \paragraph{Onchange}
+    Let \onchange{\sigma} be the event corresponding to the changes of the signal $\sigma$, let $s$
+    be a compatible state for the operation, let $\gamma$ be a propagation context, and let $t$ be a
+    timestamp.
+    %
+    \Cref{eq:semantics:grfrp:opsem:init:op:onchange:state} ensures there exists a state $s_\sigma$
+    compatible with $\sigma$ such that $s = s_\sigma$.
+    %
+    By the induction hypothesis, the step function of $\sigma$ on the timestamp $t$ evaluates to a
+    bottom value $v'_\bot$, with a new compatible state $s_\sigma'$ and timer resets $(i_\sigma,
+        t_\sigma)^+$.
+    %
+    The rule \nameref{rule:semantics:grfrp:opsem:step:op:onchange} applies and the step function of
+    \onchange{\sigma} returns $v'_\bot$ as output value, a new state $s'_\sigma$, and the timer
+    resets $(i_\sigma, t_\sigma)^+$.
+
+    \paragraph{Persist}
+    Let \persist{\sigma} be the signal corresponding to the persistence of the event $\sigma$, let
+    $s$ be a compatible state for the operation, let $\gamma$ be a propagation context, and let $t$
+    be a timestamp.
+    %
+    \Cref{eq:semantics:grfrp:opsem:init:op:persist:state} ensures there exists a state $s_\sigma$
+    compatible with $\sigma$, and a value $v^\explast$ such that $s = (v^\explast, s_\sigma)$.
+    %
+    By the induction hypothesis, the step function of $\sigma$ on the timestamp $t$ evaluates to a
+    bottom value $v'_\bot$, with a new compatible state $s_\sigma'$ and timer resets $(i_\sigma,
+        t_\sigma)^+$.
+
+    \begin{itemize}
+        \item If $v'_\bot$ is equal to a value $v$ different from $v^\explast$, the rule
+              \nameref{rule:semantics:grfrp:opsem:step:op:persist:value} applies and the step function of
+              \persist{\sigma} returns $v$ as output value, a new state $(v, s'_\sigma)$, and the
+              timer resets $(i_\sigma, t_\sigma)^+$.
+
+        \item If $v'_\bot$ is equal to a value $v$ that equals $v^\explast$, the rule \nameref{rule%
+                  :semantics:grfrp:opsem:step:op:persist:drop} applies and the step function of \persist
+              {\sigma} returns $\bot$ as output value, a new state $(v^\explast, s'_\sigma)$, and
+              the timer resets $(i_\sigma, t_\sigma)^+$.
+
+        \item If $v'_\bot$ is equal to $\bot$, the rule \nameref{rule:semantics:grfrp:opsem:step:op:%
+                  persist:propag} applies and the step function of the operation \persist{\sigma}
+              returns $\bot$ as output value, a new state $(v^\explast, s'_\sigma)$, and
+              the timer resets $(i_\sigma, t_\sigma)^+$.
+    \end{itemize}
+
+    \paragraph{Merge}
+    Let \mergeop{\sigma_1}{\sigma_2} be the merge of the events $\sigma_1$ and $\sigma_2$, let $s$
+    be a compatible state for the operation, let $\gamma$ be a propagation context, and let $t$ be a
+    timestamp.
+    %
+    \Cref{eq:semantics:grfrp:opsem:init:op:merge:state} ensures there exists two states
+    $s_{\sigma_1}$ and $s_{\sigma_2}$ compatible with $\sigma_1$ and $\sigma_2$ respectively such
+    that $s = (s_{\sigma_1}, s_{\sigma_2})$.
+    %
+    By the induction hypothesis, the step function of $\sigma_1$ on the timestamp $t$ evaluates to a
+    bottom value $v'_{1\bot}$ with a new compatible state $s_{\sigma_1}'$ and timer resets
+    $(i_{\sigma_1}, t_{\sigma_1})^+$, and the step function of $\sigma_2$ on the timestamp $t$
+    evaluates to a bottom value $v'_{2\bot}$ with a new compatible state $s_{\sigma_2}'$ and timer
+    resets $(i_{\sigma_2}, t_{\sigma_2})^+$.
+
+    \begin{itemize}
+        \item If $v'_{1\bot}$ is equal to $v_1$, then the rule \nameref{rule:semantics:grfrp:opsem:step:op:%
+                  merge:1} applies and the step function of \mergeop{\sigma_1}{\sigma_2} returns
+              $v_1$ as output value, a new state $(s_{\sigma_1}', s_{\sigma_2}')$, and the timer
+              resets $((i_{\sigma_1}, t_{\sigma_2})^+, (i_{\sigma_2}, t_{\sigma_2})^+)$.
+
+        \item If $v'_{1\bot}$ and $v'_{2\bot}$ are equal to $\bot$ and $v_2$ respectively, the rule
+              \nameref{rule:semantics:grfrp:opsem:step:op:merge:2} applies and the step function of
+              \mergeop{\sigma_1}{\sigma_2} returns $v_2$ as output value, a new state
+              $(s_{\sigma_1}', s_{\sigma_2}')$, and the timer resets $((i_{\sigma_1},
+                  t_{\sigma_2})^+, (i_{\sigma_2}, t_{\sigma_2})^+)$.
+
+        \item If $v'_{1\bot}$ and $v'_{2\bot}$ are both equal to $\bot$, the rule \nameref{rule:%
+                  semantics:grfrp:opsem:step:op:merge:propag} applies and the step function of \mergeop
+              {\sigma_1}{\sigma_2} returns $\bot$ as output value, a new state $(s_{\sigma_1}',
+                  s_{\sigma_2}')$, and the timer resets $((i_{\sigma_1}, t_{\sigma_2})^+,
+                  (i_{\sigma_2}, t_{\sigma_2})^+)$.
+    \end{itemize}
+
+    \paragraph{Time}
+    Let \timeop be the time signal, let $s$ be a compatible state, let $\gamma$ be a propagation
+    context, and let $t$ be a timestamp.
+    %
+    \Cref{eq:semantics:grfrp:opsem:init:op:time:state} ensures that $s$ equals $()$.
+    %
+    The rule \nameref{rule:semantics:grfrp:opsem:step:op:time} states that the bottom value produced by
+    the step function of \timeop is equal to the timestamp $t$.
+    It produces no timer reset, and the produced state remains empty.
+
+    \setcounter{paragraph}{0}
+\end{skippableproof}
+
+\begin{lemma}[Productivity of \GRFRP statements]
+    \label{lem:semantics:grfrp:theorems:productivity:stmt}
+    Let $stmt^+$ be a well-typed block of statements, in a well-typed and causal program \G with a
+    typing context \tyCtx.
+    If $s$ corresponds to a state for $stmt^+$, $\gamma$ is a propagation context, and $(i, t, v)$
+    is a tuple of identifier timestamp and value, then there exists another state $s'$ corresponding
+    to $stmt^+$, another context $\gamma'$, a list of outputs $[(x_o, v_o)^+]$ and a list of timer
+    resets $[(i_T, t_T)^+]$ such that:
+    \begin{equation*}
+        \stmtOpSem{\gamma}{s}{stmt^+}{i, t, v}{\gamma'}{s'}{(x_o, v_o)^+}{(i_T, t_T)^+}.
+    \end{equation*}
+\end{lemma}
+\begin{skippableproof}
+    We proceed by structural induction on every block of statements and rely on the productivity of
+    flow operations (\Cref{lem:semantics:grfrp:theorems:productivity:flowop}).
+
+    \paragraph{Skip}
+    Let \skp be the empty block of equation, let $s$ be a compatible state, let $\gamma$ be a
+    propagation context, and let $(i, t, v)$ be a tuple of identifier timestamp and value.
+    %
+    \Cref{eq:semantics:grfrp:opsem:init:stmt:skip} ensures that $s$ equals $()$.
+    %
+    The rule \nameref{rule:semantics:grfrp:opsem:step:stmt:skip} states that the produced lists of
+    output values and timer resets are empty, the new state remains empty, and the new context
+    remains unchanged (\ie it is $\gamma$).
+
+    \paragraph{Imports}
+    Let $\import{x}, stmt^+$ be the \kwf{import} of the identifier $x$ followed by the block
+    of statements $stmt^+$, let $s$ be a compatible state, let $\gamma$ be a propagation context,
+    and let $(i, t, v)$ be a tuple of identifier timestamp and value.
+    %
+    \Cref{eq:semantics:grfrp:opsem:init:stmt:import:state} ensures there exists a state $s_{stmt^+}$
+    compatible with $stmt^+$ such that $s = s_{stmt^+}$.
+
+    \begin{itemize}
+        \item If the identifier $x$ is equal to the identifier $i$, the rule \nameref{rule:%
+                  semantics:grfrp:opsem:step:stmt:import:present} applies.
+              %
+              By the induction hypothesis, the step function of $stmt^+$ on the tuple $(i, t, v)$
+              and the updated context $\gamma \ctxconcat [v/x]$ evaluates to a list of outputs
+              $[(x_o, v_o)^+]$, a list of timer resets $[(i_T, t_T)^+]$, a new compatible state
+              $s'_{stmt^+}$, and a new context $\gamma'$.
+              %
+              The step function of $\import{x}, stmt^+$ then returns the list of outputs
+              $[(x_o, v_o)^+]$, the list of timer resets $[(i_T, t_T)^+]$, the new compatible state
+              $s'_{stmt^+}$, and the new context $\gamma'$.
+
+        \item If the identifier $x$ differs from the identifier $i$, the rule \nameref{rule:%
+                  semantics:grfrp:opsem:step:stmt:import:absent} applies.
+              %
+              By the induction hypothesis, the step function of $stmt^+$ on the tuple $(i, t, v)$
+              and the context $\gamma$ evaluates to a list of outputs
+              $[(x_o, v_o)^+]$, a list of timer resets $[(i_T, t_T)^+]$, a new compatible state
+              $s'_{stmt^+}$, and a new context $\gamma'$.
+              %
+              The step function of $\import{x}, stmt^+$ then returns the list of outputs
+              $[(x_o, v_o)^+]$, the list of timer resets $[(i_T, t_T)^+]$, the new compatible state
+              $s'_{stmt^+}$, and the new context $\gamma'$.
+    \end{itemize}
+
+    \paragraph{Exports}
+    Let $\export{x}, stmt^+$ be the \kwf{export} of the identifier $x$ followed by the block
+    of statements $stmt^+$, let $s$ be a compatible state, let $\gamma$ be a propagation context,
+    and let $(i, t, v)$ be a tuple of identifier timestamp and value.
+    %
+    \Cref{eq:semantics:grfrp:opsem:init:stmt:export:state} ensures there exists a state $s_{stmt^+}$
+    compatible with $stmt^+$ such that $s = s_{stmt^+}$.
+
+    \begin{itemize}
+        \item If the identifier $x$ is associated with the non-$\bot$ value $v$ in the propagation
+              context $\gamma$, the rule \nameref{rule:semantics:grfrp:opsem:step:stmt:export:value}
+              applies.
+              %
+              By the induction hypothesis, the step function of $stmt^+$ on the tuple $(i, t, v)$
+              and the context $\gamma$ evaluates to a list of outputs
+              $[(x_o, v_o)^+]$, a list of timer resets $[(i_T, t_T)^+]$, a new compatible state
+              $s'_{stmt^+}$, and a new context $\gamma'$.
+              %
+              The step function of $\export{x}, stmt^+$ then returns the list of outputs
+              $[(x_o, v_o)^+, (x, v)]$, the list of timer resets $[(i_T, t_T)^+]$, the new
+              compatible state $s'_{stmt^+}$, and the new context $\gamma'$.
+
+        \item If the identifier $x$ is associated with $\bot$ in the propagation context $\gamma$,
+              then the rule \nameref{rule:semantics:grfrp:opsem:step:stmt:export:bottom} applies.
+              %
+              By the induction hypothesis, the step function of $stmt^+$ on the tuple $(i, t, v)$
+              and the context $\gamma$ evaluates to a list of outputs
+              $[(x_o, v_o)^+]$, a list of timer resets $[(i_T, t_T)^+]$, a new compatible state
+              $s'_{stmt^+}$, and a new context $\gamma'$.
+              %
+              The step function of $\export{x}, stmt^+$ then returns the list of outputs
+              $[(x_o, v_o)^+]$, the list of timer resets $[(i_T, t_T)^+]$, the new
+              compatible state $s'_{stmt^+}$, and the new context $\gamma'$.
+    \end{itemize}
+
+    \paragraph{Declarations}
+    Let $\decl{x^+}{\sigma}, stmt^+$ be the declaration of the behavior of the identifiers
+    $x^+$ followed by the block of statements $stmt^+$, let $s$ be a compatible state, let $\gamma$
+    be a propagation context, and let $(i, t, v)$ be a tuple of identifier timestamp and value.
+    %
+    \Cref{eq:semantics:grfrp:opsem:init:stmt:decl:state} ensures there exists a state $s_{stmt^+}$
+    compatible with $stmt^+$, and a state $s_\sigma$ compatible with $\sigma$ such that $s =
+        (s_\sigma, s_{stmt^+})$.
+
+    \Cref{lem:semantics:grfrp:theorems:productivity:flowop} ensures that the step function of $\sigma$ at the
+    timestamp $t$ and state $s_\sigma$ produces a new compatible state $s'_\sigma$, bottom values
+    $v_\bot^+$, and timer resets $(i_\sigma, t_\sigma)^+$.
+    %
+    By the induction hypothesis, the step function of $stmt^+$ on the tuple $(i, t, v)$ and the
+    context $\gamma \ctxconcat [(v_\bot/x)^+]$ evaluates to a list of outputs $[(x_o, v_o)^+]$, a list
+    of timer resets $[(i_T, t_T)^+]$, a new compatible state $s'_{stmt^+}$, and a new context
+    $\gamma'$.
+    %
+    The rule \nameref{rule:semantics:grfrp:opsem:step:stmt:decl} ensures that the step function of
+    $\decl{x^+}{\sigma}, stmt^+$ returns the list of outputs $[(x_o, v_o)^+]$, the list of
+    timer resets $[(i_\sigma, t_\sigma)^+, (i_T, t_T)^+]$, the new compatible state $(s'_\sigma,
+        s'_{stmt^+})$, and the new context $\gamma'$.
+
+    \setcounter{paragraph}{0}
+\end{skippableproof}
+
+\begin{theorem}[Productivity of \GRFRP services]
+    \label{thm:semantics:grfrp:theorems:productivity}
+    Let \service{F}{stmt^+} be a well-typed service, in a well-typed and causal program \G with a
+    typing context \tyCtx, and let $L$ be an inputs list of length $n$ in \Nstar.
+    %
+    There exists a list of outputs $[(x_o, v_o)^+]$ such that:
+    \begin{equation*}
+        \obsServ{F}{L}{n} = [(x_o, v_o)^+].
+    \end{equation*}
+\end{theorem}
+\begin{skippableproof}
+    Let \service{F}{stmt^+} be a well-typed service, in a well-typed and causal program \G with a
+    typing context \tyCtx, let $n$ in \Nstar, and let $L$ be an inputs list of length $n$.
+
+    We prove the property \P{n}: there exist an $n$-sequence of states $(s_k^+)$
+    corresponding to $F$, one of timer queues $(\tau_k^+)$, one of inputs lists $(L_k^+)$, one of
+    messages $(\mess_k^+$), one of timestamps $(t_k^+)$, and one of outputs lists $([(x_k, v_k)^+
+            ]^+)$ such that:
+    %
+    \begin{equation*}
+        \begin{array}{ll}
+                                       & (s_0, \tau_0, L_0) = (\initstate{F}, \inittimer{F}, L) \\
+            \forall k \in [0, n-1], \, &
+            \left\{
+            \begin{array}{l}
+                (\mess_k, t_k) = \getMess{L_k}{\tau_k}                                         \\
+                \serviceOpSem{s_k}{\tau_k}{F}{\mess_k}{t_k}{s_{k+1}}{\tau_{k+1}}{(x_k, v_k)^+} \\
+                L_{k+1} = \nextList{L_k}{\tau_k}.
+            \end{array}
+            \right.
+        \end{array}
+    \end{equation*}
+
+    We proceed by induction on $n$.
+    \begin{itemize}
+        \item \textit{Base case:} Let $n = 1$, let $s_0$ be the state \initstate{F}, let $\tau_0$ be
+              the timer queue \inittimer{F}, and let $L_0$ be the inputs list $L$.
+              %
+              \Cref{eq:semantics:grfrp:opsem:init:service:state} ensures there exists a state
+              $s_{stmt^+}$ compatible with $stmt^+$ such that $s_0 = s_{stmt^+}$.
+              %
+              By case analysis on $L$ and $\tau_0$:
+              \begin{itemize}
+                  \item \textit{Case 1:} $\tau_0$ is empty and there exist an identifier $i$, a
+                        value $v_i$, and a timestamp $t_i$ such that $L_0 = (\inputMess{i}{v_i},
+                            t_i) :: L'$.
+                        %
+                        \Cref{eq:semantics:grfrp:theorems:productivity:observe:aux:getMess:empty,eq%
+                            :semantics:grfrp:theorems:productivity:observe:aux:nextList:empty}
+                        ensure that:
+                        \begin{align*}
+                            \getMess{L_0}{\tau_0}  & = (\inputMess{i}{v_i}, t_i) &
+                            \nextList{L_0}{\tau_0} & = L'.
+                        \end{align*}
+
+                        Let $\mess_0$ be the input message \inputMess{i}{v_i}, let $t_0$ be the
+                        timestamp $t_i$.
+
+                        The productivity of the statements $stmt^+$ (\Cref{lem:semantics:grfrp:%
+                            theorems:productivity:stmt}) ensures that there exist an update context
+                        $\gamma$, a new compatible state $s'_{stmt^+}$, a list of outputs $[(x_o,
+                                    v_o)^+]$, and a list of timer resets $[(i_T, t_T)^+]$ such that:
+                        \begin{equation*}
+                            \stmtOpSem{\emptygamma}{s_{stmt^+}}{stmt^+}{i, t_i, v_i}{\gamma}
+                            {s'_{stmt^+}}{(x_o, v_o)^+}{(i_T, t_T)^+}
+                        \end{equation*}
+
+                        Let $s_1$ be the state $s'_{stmt^+}$ compatible with the service $F$, let
+                        $\tau_1$ be the timer queue \reset{\tau_0}{[(i_T, t_T)^+]}, and let $[(x_0,
+                                    v_0)^+]$ be the outputs list $[(x_o, v_o)^+]$.
+
+                        The rule \nameref{rule:semantics:grfrp:opsem:step:service:input} ensures
+                        that:
+                        \begin{equation*}
+                            \serviceOpSem{s_0}{\tau_0}{F}{\mess_0}{t_0}{s_1}{\tau_1}{(x_0, v_0)^+},
+                        \end{equation*}
+
+                        Let $L_1$ be the remaining list $L'$.
+
+                  \item \textit{Case 2:} There exist an identifier $i$, a value $v_i$, a timestamp
+                        $t_i$, an identifier $i_T$, a timestamp $t_T$ and a timer queue $\tau'$ such
+                        that $L_0 = (\inputMess{i}{v_i}, t_i) :: L'$, $\tau_0 = (i_T, t_T) \diamond
+                            \tau'$, and $t_i \le t_T$.
+                        %
+                        \Cref{eq:semantics:grfrp:theorems:productivity:observe:aux:getMess:input,eq%
+                            :semantics:grfrp:theorems:productivity:observe:aux:nextList:input}
+                        ensure that:
+                        \begin{align*}
+                            \getMess{L_0}{\tau_0}  & = (\inputMess{i}{v_i}, t_i) &
+                            \nextList{L_0}{\tau_0} & = L'.
+                        \end{align*}
+
+                        The rest of this proof case is identical to \textit{Case 1}.
+
+                        Let $\mess_0$ be the input message \inputMess{i}{v_i}, let $t_0$ be the
+                        timestamp $t_i$.
+
+                        The productivity of the statements $stmt^+$ (\Cref{lem:semantics:grfrp:%
+                            theorems:productivity:stmt}) ensures that there exist an update context
+                        $\gamma$, a new compatible state $s'_{stmt^+}$, a list of outputs $[(x_o,
+                                    v_o)^+]$, and a list of timer resets $[(i_T, t_T)^+]$ such that:
+                        \begin{equation*}
+                            \stmtOpSem{\emptygamma}{s_{stmt^+}}{stmt^+}{i, t_i, v_i}{\gamma}
+                            {s'_{stmt^+}}{(x_o, v_o)^+}{(i_T, t_T)^+}
+                        \end{equation*}
+
+                        Let $s_1$ be the state $s'_{stmt^+}$ compatible with the service $F$, let
+                        $\tau_1$ be the timer queue \reset{\tau_0}{[(i_T, t_T)^+]}, and let $[(x_0,
+                                    v_0)^+]$ be the outputs list $[(x_o, v_o)^+]$.
+
+                        The rule \nameref{rule:semantics:grfrp:opsem:step:service:input} ensures
+                        that:
+                        \begin{equation*}
+                            \serviceOpSem{s_0}{\tau_0}{F}{\mess_0}{t_0}{s_1}{\tau_1}{(x_0, v_0)^+},
+                        \end{equation*}
+
+                        Let $L_1$ be the remaining list $L'$.
+
+                  \item \textit{Case 3:} There exist an identifier $i$, a value $v_i$, a timestamp
+                        $t_i$, an identifier $i_T$, a timestamp $t_T$ and a timer queue $\tau'$ such
+                        that $L_0 = (\inputMess{i}{v_i}, t_i) :: L'$, $\tau_0 = (i_T, t_T) \diamond
+                            \tau'$, and $t_i > t_T$.
+                        %
+                        \Cref{eq:semantics:grfrp:theorems:productivity:observe:aux:getMess:timer,eq%
+                            :semantics:grfrp:theorems:productivity:observe:aux:nextList:timer}
+                        ensure that:
+                        \begin{align*}
+                            \getMess{L_0}{\tau_0}  & = (\timerMess{i_T}, t_T) &
+                            \nextList{L_0}{\tau_0} & = L_0.
+                        \end{align*}
+
+                        Let $\mess_0$ be the input message \timerMess{i_T}, let $t_0$ be the
+                        timestamp $t_T$.
+
+                        The productivity of the statements $stmt^+$ (\Cref{lem:semantics:grfrp:%
+                            theorems:productivity:stmt}) ensures that there exist an update context
+                        $\gamma$, a new compatible state $s'_{stmt^+}$, a list of outputs $[(x_o,
+                                    v_o)^+]$, and a list of timer resets $[(i_T, t_T)^+]$ such that:
+                        \begin{equation*}
+                            \stmtOpSem{\emptygamma}{s_{stmt^+}}{stmt^+}{i_T, t_T, ()}{\gamma}
+                            {s'_{stmt^+}}{(x_o, v_o)^+}{(i_T, t_T)^+}
+                        \end{equation*}
+
+                        Let $s_1$ be the state $s'_{stmt^+}$ compatible with the service $F$, let
+                        $\tau_1$ be the timer queue \reset{\tau'}{[(i_T, t_T)^+]}, and let $[(x_0,
+                                    v_0)^+]$ be the outputs list $[(x_o, v_o)^+]$.
+
+                        The rule \nameref{rule:semantics:grfrp:opsem:step:service:timer} ensures
+                        that:
+                        \begin{equation*}
+                            \serviceOpSem{s_0}{\tau_0}{F}{\mess_0}{t_0}{s_1}{\tau_1}{(x_0, v_0)^+},
+                        \end{equation*}
+
+                        Let $L_1$ be the remaining list $L_0$.
+              \end{itemize}
+              Then \P{1} holds.
+
+        \item \textit{Inductive step:} Let $n$ in \Nstar such that \P{n} holds, let $(s_k^+)$ be an
+              $n$-sequence of states corresponding to $F$, let $(\tau_k^+)$ be one of timer queues,
+              let $(L_k^+)$ be one of inputs lists, let $(\mess_k^+$) be one of messages, let
+              $(t_k^+)$ be one of timestamps, and let $([(x_k, v_k)^+]^+)$ be one of outputs lists
+              such that:
+              %
+              \begin{equation*}
+                  \begin{array}{ll}
+                                                 & (s_0, \tau_0, L_0) = (\initstate{F}, \inittimer{F}, L) \\
+                      \forall k \in [0, n-1], \, &
+                      \left\{
+                      \begin{array}{l}
+                          (\mess_k, t_k) = \getMess{L_k}{\tau_k}                                         \\
+                          \serviceOpSem{s_k}{\tau_k}{F}{\mess_k}{t_k}{s_{k+1}}{\tau_{k+1}}{(x_k, v_k)^+} \\
+                          L_{k+1} = \nextList{L_k}{\tau_k}.
+                      \end{array}
+                      \right.
+                  \end{array}
+              \end{equation*}
+
+              The rest of the inductive step is similar to the \textit{Base case}.
+
+              \Cref{eq:semantics:grfrp:opsem:init:service:state} ensures there exists a state
+              $s_{stmt^+}$ compatible with $stmt^+$ such that $s_n = s_{stmt^+}$.
+              %
+              By case analysis on $L$ and $\tau_n$:
+              \begin{itemize}
+                  \item \textit{Case 1:} $\tau_n$ is empty and there exist an identifier $i$, a
+                        value $v_i$, and a timestamp $t_i$ such that $L_n =  (\inputMess{i}{v_i},
+                            t_i) :: L'$.
+                        %
+                        \Cref{eq:semantics:grfrp:theorems:productivity:observe:aux:getMess:empty,eq%
+                            :semantics:grfrp:theorems:productivity:observe:aux:nextList:empty}
+                        ensure that:
+                        \begin{align*}
+                            \getMess{L_n}{\tau_n}  & = (\inputMess{i}{v_i}, t_i) &
+                            \nextList{L_n}{\tau_n} & = L'.
+                        \end{align*}
+
+                        Let $\mess_n$ be the input message \inputMess{i}{v_i}, let $t_n$ be the
+                        timestamp $t_i$.
+
+                        The productivity of the statements $stmt^+$ (\Cref{lem:semantics:grfrp:%
+                            theorems:productivity:stmt}) ensures that there exist an update context
+                        $\gamma$, a new compatible state $s'_{stmt^+}$, a list of outputs $[(x_o,
+                                    v_o)^+]$, and a list of timer resets $[(i_T, t_T)^+]$ such that:
+                        \begin{equation*}
+                            \stmtOpSem{\emptygamma}{s_{stmt^+}}{stmt^+}{i, t_i, v_i}{\gamma}
+                            {s'_{stmt^+}}{(x_o, v_o)^+}{(i_T, t_T)^+}
+                        \end{equation*}
+
+                        Let $s_{n+1}$ be the state $s'_{stmt^+}$ compatible with the service $F$,
+                        let $\tau_{n+1}$ be the timer queue \reset{\tau_n}{[(i_T, t_T)^+]}, and let
+                        $[(x_n, v_n)^+]$ be the outputs list $[(x_o, v_o)^+]$.
+
+                        The rule \nameref{rule:semantics:grfrp:opsem:step:service:input} ensures
+                        that:
+                        \begin{equation*}
+                            \serviceOpSem{s_n}{\tau_n}{F}{\mess_n}{t_n}{s_{n+1}}{\tau_{n+1}}{(x_n, v_n)^+},
+                        \end{equation*}
+
+                        Let $L_{n+1}$ be the remaining list $L'$.
+
+                  \item \textit{Case 2:} There exist an identifier $i$, a value $v_i$, a timestamp
+                        $t_i$, an identifier $i_T$, a timestamp $t_T$ and a timer queue $\tau'$ such
+                        that $L_n = (\inputMess{i}{v_i}, t_i) :: L'$, $\tau_n = (i_T, t_T) \diamond
+                            \tau'$, and $t_i \le t_T$.
+                        %
+                        \Cref{eq:semantics:grfrp:theorems:productivity:observe:aux:getMess:input,eq%
+                            :semantics:grfrp:theorems:productivity:observe:aux:nextList:input}
+                        ensure that:
+                        \begin{align*}
+                            \getMess{L_n}{\tau_n}  & = (\inputMess{i}{v_i}, t_i) &
+                            \nextList{L_n}{\tau_n} & = L'.
+                        \end{align*}
+
+                        The rest of this proof case is identical to \textit{Case 1}.
+
+                        Let $\mess_n$ be the input message \inputMess{i}{v_i}, let $t_n$ be the
+                        timestamp $t_i$.
+
+                        The productivity of the statements $stmt^+$ (\Cref{lem:semantics:grfrp:%
+                            theorems:productivity:stmt}) ensures that there exist an update context
+                        $\gamma$, a new compatible state $s'_{stmt^+}$, a list of outputs $[(x_o,
+                                    v_o)^+]$, and a list of timer resets $[(i_T, t_T)^+]$ such that:
+                        \begin{equation*}
+                            \stmtOpSem{\emptygamma}{s_{stmt^+}}{stmt^+}{i, t_i, v_i}{\gamma}
+                            {s'_{stmt^+}}{(x_o, v_o)^+}{(i_T, t_T)^+}
+                        \end{equation*}
+
+                        Let $s_{n+1}$ be the state $s'_{stmt^+}$ compatible with the service $F$,
+                        let $\tau_{n+1}$ be the timer queue \reset{\tau_n}{[(i_T, t_T)^+]}, and let
+                        $[(x_n, v_n)^+]$ be the outputs list $[(x_o, v_o)^+]$.
+
+                        The rule \nameref{rule:semantics:grfrp:opsem:step:service:input} ensures
+                        that:
+                        \begin{equation*}
+                            \serviceOpSem{s_n}{\tau_n}{F}{\mess_n}{t_n}{s_{n+1}}{\tau_{n+1}}{(x_n, v_n)^+},
+                        \end{equation*}
+
+                        Let $L_{n+1}$ be the remaining list $L'$.
+
+                  \item \textit{Case 3:} There exist an identifier $i$, a value $v_i$, a timestamp
+                        $t_i$, an identifier $i_T$, a timestamp $t_T$ and a timer queue $\tau'$ such
+                        that $L_n = (\inputMess{i}{v_i}, t_i) :: L'$, $\tau_n = (i_T, t_T) \diamond
+                            \tau'$, and $t_i > t_T$.
+                        %
+                        \Cref{eq:semantics:grfrp:theorems:productivity:observe:aux:getMess:timer,eq%
+                            :semantics:grfrp:theorems:productivity:observe:aux:nextList:timer}
+                        ensure that:
+                        \begin{align*}
+                            \getMess{L_n}{\tau_n}  & = (\timerMess{i_T}, t_T) &
+                            \nextList{L_n}{\tau_n} & = L_n.
+                        \end{align*}
+
+                        Let $\mess_n$ be the input message \timerMess{i_T}, let $t_n$ be the
+                        timestamp $t_T$.
+
+                        The productivity of the statements $stmt^+$ (\Cref{lem:semantics:grfrp:%
+                            theorems:productivity:stmt}) ensures that there exist an update context
+                        $\gamma$, a new compatible state $s'_{stmt^+}$, a list of outputs $[(x_o,
+                                    v_o)^+]$, and a list of timer resets $[(i_T, t_T)^+]$ such that:
+                        \begin{equation*}
+                            \stmtOpSem{\emptygamma}{s_{stmt^+}}{stmt^+}{i_T, t_T, ()}{\gamma}
+                            {s'_{stmt^+}}{(x_o, v_o)^+}{(i_T, t_T)^+}
+                        \end{equation*}
+
+                        Let $s_{n+1}$ be the state $s'_{stmt^+}$ compatible with the service $F$,
+                        let $\tau_{n+1}$ be the timer queue \reset{\tau'}{[(i_T, t_T)^+]}, and let
+                        $[(x_n, v_n)^+]$ be the outputs list $[(x_o, v_o)^+]$.
+
+                        The rule \nameref{rule:semantics:grfrp:opsem:step:service:timer} ensures
+                        that:
+                        \begin{equation*}
+                            \serviceOpSem{s_n}{\tau_n}{F}{\mess_n}{t_n}{s_{n+1}}{\tau_{n+1}}{(x_n, v_n)^+},
+                        \end{equation*}
+
+                        Let $L_{n+1}$ be the remaining list $L_n$.
+              \end{itemize}
+              Then \P{n+1} holds.
+    \end{itemize}
+
+    Therefore, the existence of such sequences for the inputs list $L$ ensures that \obsServ{F}{L}
+    {n} is well-defined and is equal to $[(x_{n-1}, v_{n-1})^+]$.
+\end{skippableproof}
+
+\paragraph{Summary}
+In conclusion, this section formally established the productivity of \GRFRP services. The main
+result, presented in \Cref{thm:semantics:grfrp:theorems:productivity}, guarantees that any
+well-defined service is productive, meaning it will always process the next available input or timer
+event without blocking.
+%
+The proof was conducted by induction on the sequence of processed messages, with the inductive step
+relying on lemmas that ensure the productivity of individual flow operations and statements.
+%
+This formal guarantee is fundamental to the reliability of the language, confirming that services
+can handle asynchronous inputs and internal timer events in a predictable and well-defined manner.

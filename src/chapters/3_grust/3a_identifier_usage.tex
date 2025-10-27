@@ -1,0 +1,1239 @@
+\section{Identifiers Usage}
+\label{sec:grust:id_usage}
+
+This section formally defines the rules governing the use of identifiers in \GRust. A precise and
+unambiguous specification of identifier scoping is essential for any programming language, as it
+dictates where an identifier can be used and what it refers to. For a language like \GRust, intended
+for critical systems, these rules are part of the language definition, ensuring predictable and
+verifiable behavior.
+
+The formal system presented here serves as a blueprint for the static analysis performed by the
+compiler. It provides a rigorous foundation for implementing the symbol table, which tracks all
+identifiers and their associated information, such as scope and type. By adhering to these rules,
+the compiler can detect a range of errors at compile-time, including the use of undefined
+identifiers, the redeclaration of an identifier within the same scope, and more subtle violations
+specific to the structure of \GRust. For example, the logic enforces that all branches of a
+\kft{match} equation must define the same set of identifiers, guaranteeing accessible values for
+every execution.
+
+This formalization addresses the two distinct scoping models within \GRust: the sequential, lexical
+scoping of \GRFRP services and functions, and the mutually recursive scoping of \GRSync components.
+The following logic, expressed through a set of inference rules, details how identifiers are
+declared, defined, and used correctly across all language constructs.
+
+\begin{table}[!ht]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}\hline
+        $\ID_s, \: \ID_f, \: \ID_c, \: \ID$                                             & Service, function,
+        component, and variable identifiers respectively.                                                                        \\\hline
+        $\IDs ::= \{\ID^*\}$                                                            & A set of identifiers.                  \\\hline
+        \begin{minipage}{0.37\textwidth}
+            $\scope ::= \importScope \: \vert \: \exportScope \:
+                \vert \:\inputScope$ \\ $\vert \: \outputScope \: \vert
+                \: \localScope \: \vert \: \memoryScope$
+        \end{minipage}                         & The scope of an identifier, such as an import, export,
+        input, output, local, or component memory.                                                                               \\\hline
+        $\G[\ID_s]$, $\G[\ID_f]$, $\G[\ID_c]$                                           & The identifier context maps
+        service, function, or component identifiers to their definitions.                                                        \\\hline
+        $\G[\ID] = \scope$                                                              & The identifier context maps a variable
+        identifier to its scope.                                                                                                 \\\hline
+        \idUsage{\G}{elem}{\texttt{Elem}}                                               & Asserts the correct usage
+        of identifiers in the \GRust construct \texttt{Elem} with respect to the context \G.
+        \\\hline
+        \exports{(\Prog \: \vert \: \Item)}{\IDs}                                       & \IDs is the set of
+        identifiers exported by program \Prog or item \Item.                                                                     \\\hline
+        \declares{(\FlowStmt \: \vert \: \Eq \: \vert \: \Pat \: \vert \: \EPat)}{\IDs} & \IDs is the set of
+        identifiers declared by statement \FlowStmt, equation \Eq or patterns \Pat and \EPat.                                    \\\hline
+        \inits{\Eq}{\IDs}                                                               & \IDs is the set of
+        identifiers initialized by equation \Eq.                                                                                 \\\hline
+        \defines{(\Prog \: \vert \: \Item \: \vert \: \FlowStmt
+        \: \vert \: \Eq)}{\IDs}                                                         & \IDs is the set of
+        identifiers defined by program \Prog, item \Item, statement \FlowStmt, or equation \Eq, including declared ones.         \\\hline
+    \end{tabularx}
+    \caption[Notations for the usage of identifiers in \GRust.]%
+    {Notations for the logic of identifier usage in \GRust.}
+    \label{tab:grust:id_usage:notations}
+\end{table}
+
+We first introduce the notations for this logic, summarized in \Cref{tab:grust:id_usage:notations}.
+The core of our formal system is the judgment \idUsage{\G}{elem}{\texttt{Elem}}, which asserts that
+a \GRust construct \texttt{Elem} uses identifiers correctly with respect to an identifier context
+\G. The context \G acts as a symbol table, mapping identifiers to their \emph{scope}, such as
+\importScope, \outputScope, or \localScope. It also maps service, function, and component
+identifiers ($\ID_s, \ID_f, \ID_c$) to their definitions.
+
+To support this central judgment, we define several helper judgments that extract sets of
+identifiers (\IDs) from various constructs:
+\begin{itemize}
+    \item \exports{\Prog \: \vert \: \Item}{\IDs} retrieves the set of identifiers that a program or
+          item exports to the external environment.
+    \item \declares{(\FlowStmt \: \vert \: \Eq \: \vert \: \Pat \: \vert \: \EPat)}{\IDs} retrieves
+          the set of identifiers newly declared within a statement, an equation, or pattern.
+    \item \inits{\Eq}{\IDs} retrieves the set of memory identifiers initialized in an equation.
+    \item \defines{(\Prog \: \vert \: \Item \: \vert \: \FlowStmt \: \vert \: \Eq)}{\IDs} retrieves
+          the set of identifiers that are given a definition. This includes both newly declared
+          identifiers and existing ones (\eg component outputs).
+\end{itemize}
+The following paragraphs detail the rules for these judgments, explaining the logic of identifier
+usage for each part of the \GRust language.
+
+\subsection{\GRust Programs}
+\label{sec:grust:id_usage:prog}
+
+A \GRust program is well-formed if all its items are well-formed. The rule
+\nameref{rule:grust:id_usage:program} formalizes this by checking each item individually. Crucially,
+it also enforces a key property of a complete program: the set of identifiers it \emph{exports} must
+be identical to the set it \emph{defines}. This ensures that every declared export has a
+corresponding definition within a service, and that there are no definitions for non-exported flows
+at the top level.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Program
+            \inferID
+            {
+                \left(\itemIdUsage{\Item}\right)^* \\
+                \exports{\Item^*}{\IDs} \\
+                \defines{\Item^*}{\IDs}
+            }
+            { \progIdUsage{\Item^*} }
+            {Prog}
+            \label{rule:grust:id_usage:program}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The good usage of an identifier in an item \Item with respect to the identifier context \G is
+denoted by \itemIdUsage{\Item}. For interfaces, rules
+\nameref{rule:grust:id_usage:interface:import} and
+\nameref{rule:grust:id_usage:interface:export} ensure that imported and exported identifiers are
+present in the context with the correct scope (\importScope for imports, and \exportScope for
+exports).
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Interface
+            % Import
+            \inferID
+            { \G[\ID] = \importScope }
+            { \itemIdUsage{\importX{\typed{\FlowKind}{\ID}{\TY}}} }
+            {Import}
+            \label{rule:grust:id_usage:interface:import}
+
+            % Export
+            \inferID
+            { \G[\ID] = \exportScope }
+            { \itemIdUsage{\exportX{\typed{\FlowKind}{\ID}{\TY}}} }
+            {Export}
+            \label{rule:grust:id_usage:interface:export}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+Rule \nameref{rule:grust:id_usage:service} states that for a service to be correct, its definition
+must be in the context and its body must adhere to the identifier usage rules.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Service
+            \inferID
+            {
+                \G[\ID_s] = \servItem{\ID_s}{\interval{\INT}{\INT}}{\many{\FlowStmt}} \\\\
+                \stmtIdUsage{\G}{\many{\FlowStmt}}
+            }
+            { \itemIdUsage{\servItem{\ID_s}{\interval{\INT}{\INT}}{\many{\FlowStmt}}} }
+            {Serv}
+            \label{rule:grust:id_usage:service}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+For functions and components, the logic is similar. The rules ensure the item definition exists in
+the context and that the body is well-formed. For a function, applying rule
+\nameref{rule:grust:id_usage:fun}, the context is extended with its inputs before checking the body.
+For a component, applying rule \nameref{rule:grust:id_usage:comp}, the context is extended with both
+inputs and outputs to support the mutually recursive nature of its body.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Function
+            \inferID
+            {
+                \G[\ID_f] = \funItem{\ID_f}{\many{(\ID_i \: \kft{:} \: \TY_i)}}{\TY_o}{\many{\Decl}} \\\\
+                \G' = \G \ctxconcat [(\inputScope / \ID_i)^*] \\
+                \declIdUsage{\G'}{\many{\Decl} \: \returnStmt{\Expr}}
+            }
+            { \itemIdUsage{\funItem{\ID_f}{\many{(\ID_i \: \kft{:} \: \TY_i)}}{\TY_o}{\many{\Decl}}} }
+            {Fun}
+            \label{rule:grust:id_usage:fun}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Component
+            \inferID
+            {
+                \G[\ID_c] = \compItem{\ID_c}{\many{(\ID_i \: \kft{:} \: \STY_i)}}{\many{(\ID_o \: \kft{:} \: \STY_o)}}{\many{\Eq}} \\\\
+                \G' = \G \ctxconcat [(\inputScope / \ID_i)^*] \ctxconcat [(\outputScope / \ID_o)^*] \\\\
+                \eqIdUsage{\G'}{\setEq} \\
+                \defines{\setEq}{\IDs} \\
+                \left(\ID_o \in \IDs\right)^*
+            }
+            { \itemIdUsage{\compItem{\ID_c}{\many{(\ID_i \: \kft{:} \: \STY_i)}}{\many{(\ID_o \: \kft{:} \: \STY_o)}}{\many{\Eq}}} }
+            {Comp}
+            \label{rule:grust:id_usage:comp}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Exported identifiers}
+\label{sec:grust:id_usage:prog:exported}
+
+The judgment \exports{\Prog}{\IDs} computes the set of identifiers a program makes available
+externally. As shown in rule \nameref{rule:grust:id_usage:prog:exported:program}, this is the union
+of identifiers from all \kft{export} items. The use of the \emph{disjoint union} operator
+($\bigsqcup$) enforces that each exported identifier must have a unique name across the entire
+program, preventing ambiguity at the system level. The subsequent rules show that only \kft{export}
+items contribute to this set.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Program
+            \inferEXP
+            { \left(\exports{\Item}{\IDs}\right)^* }
+            { \exports{\Item^*}{\bigsqcup \IDs^*} }
+            {Prog}
+            \label{rule:grust:id_usage:prog:exported:program}
+        \end{mathpar}
+    \end{minipage}
+
+    \begin{minipage}{0.99\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Interface
+            % Import
+            \inferEXP
+            { }
+            { \exports{\importX{\typed{\FlowKind}{\ID}{\TY}}}{\emptyset} }
+            {Import}
+            \label{rule:grust:id_usage:prog:exported:interface:import}
+
+            % Export
+            \inferEXP
+            { }
+            { \exports{\exportX{\typed{\FlowKind}{\ID}{\TY}}}{\{\ID\}} }
+            {Export}
+            \label{rule:grust:id_usage:prog:exported:interface:export}
+
+            %% Service
+            \inferEXP
+            { }
+            { \exports{\servItem{\ID_s}{\interval{\INT}{\INT}}{\many{\FlowStmt}}}{\emptyset} }
+            {Serv}
+            \label{rule:grust:id_usage:prog:exported:service}
+
+            %% Function
+            \inferEXP
+            { }
+            { \exports{\funItem{\ID_f}{\many{(\ID_i \: \kft{:} \: \TY_i)}}{\TY_o}{\many{\Decl}}}{\emptyset} }
+            {Fun}
+            \label{rule:grust:id_usage:prog:exported:fun}
+
+            %% Component
+            \inferEXP
+            { }
+            { \exports{\compItem{\ID_c}{\many{(\ID_i \: \kft{:} \: \STY_i)}}{\many{(\ID_o \: \kft{:} \: \STY_o)}}{\many{\Eq}}}{\emptyset} }
+            {Comp}
+            \label{rule:grust:id_usage:prog:exported:comp}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Defined identifiers}
+\label{sec:grust:id_usage:prog:defined}
+
+The judgment \defines{\Prog}{\IDs} computes the set of identifiers defined within the services of a
+program. Rule \nameref{rule:grust:id_usage:prog:defined:program} aggregates these identifiers from
+all items, again using a disjoint union ($\bigsqcup$) to ensure that each defined identifier is
+unique. As specified by the rules below, only instantiation statements (for exported flows) inside a
+service contribute to this set.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            \inferDEF
+            { \left(\defines{\Item}{\IDs}\right)^* }
+            { \defines{\Item^*}{\bigsqcup \IDs^*} }
+            {Prog}
+            \label{rule:grust:id_usage:prog:defined:program}
+        \end{mathpar}
+    \end{minipage}
+
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Interface
+            % Import
+            \inferDEF
+            { }
+            { \defines{\importX{\typed{\FlowKind}{\ID}{\TY}}}{\emptyset} }
+            {Import}
+            \label{rule:grust:id_usage:prog:defined:interface:import}
+
+            % Export
+            \inferDEF
+            { }
+            { \defines{\exportX{\typed{\FlowKind}{\ID}{\TY}}}{\emptyset} }
+            {Export}
+            \label{rule:grust:id_usage:prog:defined:interface:export}
+        \end{mathpar}
+    \end{minipage}
+
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Service
+            \inferDEF
+            {
+                \declares{\block{\many{\FlowStmt}}}{\IDs_{\texttt{let}}} \\
+                \defines{\block{\many{\FlowStmt}}}{\IDs_{\texttt{let}} \sqcup \IDs_{\texttt{export}}}
+            }
+            { \defines{\servItem{\ID_s}{\interval{\INT}{\INT}}{\many{\FlowStmt}}}{\IDs_{\texttt{export}}} }
+            {Serv}
+            \label{rule:grust:id_usage:prog:defined:service}
+
+        \end{mathpar}
+    \end{minipage}
+
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Function
+            \inferDEF
+            { }
+            { \defines{\funItem{\ID_f}{\many{(\ID_i \: \kft{:} \: \TY_i)}}{\TY_o}{\many{\Decl}}}{\emptyset} }
+            {Fun}
+            \label{rule:grust:id_usage:prog:defined:fun}
+
+        \end{mathpar}
+    \end{minipage}
+
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Component
+            \inferDEF
+            { }
+            { \defines{\compItem{\ID_c}{\many{(\ID_i \: \kft{:} \: \STY_i)}}{\many{(\ID_o \: \kft{:} \: \STY_o)}}{\many{\Eq}}}{\emptyset} }
+            {Comp}
+            \label{rule:grust:id_usage:prog:defined:comp}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subsection{Bodies of \GRFRP Services}
+\label{sec:grust:id_usage:grfrp}
+
+This part describes the correct usage of identifiers in services and all constructs of \GRFRP.
+
+\subsubsection{Flow Statements}
+\label{sec:grust:id_usage:grfrp:flow_stmt}
+
+Flow statements in \GRFRP services follow a sequential, lexical scoping discipline. Identifiers are
+introduced and are only visible to the statements that follow them in the same block. This is
+captured by the judgment \stmtIdUsage{\G}{\FlowStmt^*}, which threads the identifier context \G
+through the list of statements.
+
+An empty block of statements is trivially well-formed, as stated by rule
+\nameref{rule:grust:id_usage:grfrp:flow_stmt:skip}.
+A \kft{let} statement introduces new local identifiers: rule
+\nameref{rule:grust:id_usage:grfrp:flow_stmt:let} checks the right-hand side of the declaration
+before extending the context \G with these new identifiers for the subsequent statements. This
+ensures the new identifiers are available in the rest of the scope but not in their own definition.
+In contrast, a definition statement assigns a flow to an existing, exported identifier: rule
+\nameref{rule:grust:id_usage:grfrp:flow_stmt:def} verifies that the identifier has already been
+declared with \exportScope and then checks the remaining statements with the original context.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Flow Statement
+            % Skip
+            \inferIDFlowStmt
+            { }
+            { \stmtIdUsage{\G}{} }
+            {Skip}
+            \label{rule:grust:id_usage:grfrp:flow_stmt:skip}
+
+            % Let
+            \inferIDFlowStmt
+            {
+                \flowIdUsage{\G}{\FlowOp} \\
+                \G' = \G \ctxconcat [(\localScope / \ID)^*] \\
+                \stmtIdUsage{\G'}{\FlowStmt^*}
+            }
+            { \stmtIdUsage{\G}{\letStmt{\many{(\typed{\FlowKind}{\ID}{\TY})}}{\FlowOp} \: \FlowStmt^*} }
+            {Let}
+            \label{rule:grust:id_usage:grfrp:flow_stmt:let}
+
+            % Definition
+            \inferIDFlowStmt
+            {
+                \left(\G[\ID] = \exportScope\right)^* \\
+                \flowIdUsage{\G}{\FlowOp} \\
+                \stmtIdUsage{\G}{\FlowStmt^*}
+            }
+            { \stmtIdUsage{\G}{\defStmt{\many{\ID}}{\FlowOp} \: \FlowStmt^*} }
+            {Def}
+            \label{rule:grust:id_usage:grfrp:flow_stmt:def}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Declared identifiers}
+\label{sec:grust:id_usage:grfrp:flow_stmt:declared}
+
+The set of declared identifiers in a flow statement is computed by the judgment
+\declares{\FlowStmt}{\IDs}. Rules \nameref{sec:grust:id_usage:grfrp:flow_stmt:declared:let}
+and \nameref{sec:grust:id_usage:grfrp:flow_stmt:declared:def} ensure that only \kft{let}
+statements contribute to the set of declared identifiers at program-level.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            \inferDECLFlowStmt
+            { }
+            { \declares{\letStmt{\many{(\ldots)}}{\ldots} \: \FlowStmt^*}{\{\many{\ID}\}} }
+            {Let}
+            \label{sec:grust:id_usage:grfrp:flow_stmt:declared:let}
+
+            \inferDECLFlowStmt
+            { }
+            { \declares{\defStmt{\many{\ID}}{\ldots} \: \FlowStmt^*}{\emptyset} }
+            {Def}
+            \label{sec:grust:id_usage:grfrp:flow_stmt:declared:def}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Defined identifiers}
+\label{sec:grust:id_usage:grfrp:flow_stmt:defined}
+
+The set of defined identifiers in a flow statement is computed by the judgment
+\defines{\FlowStmt}{\IDs}. Rules \nameref{sec:grust:id_usage:grfrp:flow_stmt:defined:let}
+and \nameref{sec:grust:id_usage:grfrp:flow_stmt:defined:def} specify that all statements contribute
+to the set of defined identifiers for the program-level check.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            \inferDEFFlowStmt
+            { }
+            { \defines{\letStmt{\many{(\typed{\FlowKind}{\ID}{\TY})}}{\FlowOp} \: \FlowStmt^*}{\{\many{\ID}\}} }
+            {Let}
+            \label{sec:grust:id_usage:grfrp:flow_stmt:defined:let}
+
+            \inferDEFFlowStmt
+            { }
+            { \defines{\defStmt{\many{\ID}}{\FlowOp} \: \FlowStmt^*}{\{\many{\ID}\}} }
+            {Def}
+            \label{sec:grust:id_usage:grfrp:flow_stmt:defined:def}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subsubsection{Flow Operations}
+\label{sec:grust:id_usage:grfrp:flow_op}
+
+The judgment \flowIdUsage{\G}{\FlowOp} checks that a flow operation uses identifiers
+correctly. The rules ensure that any used identifier, function, or component is present in
+the context \G and that all sub-expressions are themselves well-formed.
+
+\begin{center}
+    \begin{minipage}{0.99\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Flow Operation
+            % Identifier
+            \inferIDFlow
+            { \G[\ID] = \scope }
+            { \flowIdUsage{\G}{\ID} }
+            {ID}
+            \label{rule:grust:id_usage:grfrp:flow_op:ident}
+
+            %% Application
+            % Function
+            \inferIDFlow
+            {
+                \G[\ID_f] = \funItem{\ID_f}{\many{(\ID_i \: \kft{:} \: \TY_i)}}{\TY_o}{\many{\Decl}} \\\\
+                \left(\flowIdUsage{\G}{\FlowOp}\right)^*
+            }
+            { \flowIdUsage{\G}{\compApp{\ID_f}{\many{\FlowOp}}} }
+            {AppF}
+            \label{rule:grust:id_usage:grfrp:flow_op:funapp}
+
+            % Component
+            \inferIDFlow
+            {
+                \G[\ID_c] = \compItem{\ID_c}{\many{(\ID_i \: \kft{:} \: \STY_i)}}{\many{(\ID_o \: \kft{:} \: \STY_o)}}{\many{\Eq}} \\\\
+                \left(\flowIdUsage{\G}{\FlowOp}\right)^*
+            }
+            { \flowIdUsage{\G}{\compApp{\ID_c}{\many{\FlowOp}}} }
+            {AppC}
+            \label{rule:grust:id_usage:grfrp:flow_op:compapp}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\GReact operations are checked by ensuring their input flow operations are well-formed.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% GReact
+            % OnChange
+            \inferIDFlow
+            { \flowIdUsage{\G}{\FlowOp} }
+            { \flowIdUsage{\G}{\onchangeExpr{\FlowOp}} }
+            {OChg}
+            \label{rule:grust:id_usage:grfrp:flow_op:onchange}
+
+            % Persist
+            \inferIDFlow
+            { \flowIdUsage{\G}{\FlowOp} }
+            { \flowIdUsage{\G}{\persistExpr{\FlowOp}} }
+            {Prst}
+            \label{rule:grust:id_usage:grfrp:flow_op:persist}
+
+            % Scan
+            \inferIDFlow
+            { \flowIdUsage{\G}{\FlowOp} }
+            { \flowIdUsage{\G}{\scanExpr{\FlowOp}{\INT}} }
+            {Scan}
+            \label{rule:grust:id_usage:grfrp:flow_op:scan}
+
+            % Sample
+            \inferIDFlow
+            { \flowIdUsage{\G}{\FlowOp} }
+            { \flowIdUsage{\G}{\scanExpr{\FlowOp}{\INT}} }
+            {Samp}
+            \label{rule:grust:id_usage:grfrp:flow_op:sample}
+
+            % Timeout
+            \inferIDFlow
+            { \flowIdUsage{\G}{\FlowOp} }
+            { \flowIdUsage{\G}{\timeoutExpr{\FlowOp}{\INT}} }
+            {TOut}
+            \label{rule:grust:id_usage:grfrp:flow_op:timeout}
+
+            % Merge
+            \inferIDFlow
+            {
+                \flowIdUsage{\G}{\FlowOp_1} \\
+                \flowIdUsage{\G}{\FlowOp_2}
+            }
+            { \flowIdUsage{\G}{\mergeExpr{\FlowOp_1}{\FlowOp_2}} }
+            {Mrg}
+            \label{rule:grust:id_usage:grfrp:flow_op:merge}
+
+            % Throttle
+            \inferIDFlow
+            { \flowIdUsage{\G}{\FlowOp} }
+            { \flowIdUsage{\G}{\throttleExpr{\FlowOp}{\DELTA}} }
+            {Thrt}
+            \label{rule:grust:id_usage:grfrp:flow_op:throttle}
+
+            % Time
+            \inferIDFlow
+            { }
+            { \flowIdUsage{\G}{\timeExpr} }
+            {Time}
+            \label{rule:grust:id_usage:grfrp:flow_op:time}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subsection{Bodies of \GRSync Functions and Components}
+\label{sec:grust:id_usage:grsync}
+
+This part describes the correct usage of identifiers in functions and components.
+
+\subsubsection{Function Declarations}
+\label{sec:grust:id_usage:grsync:fun_decl}
+
+Declarations in functions, like statements in services, are ordered and lexically scoped. The
+judgment \declIdUsage{\G}{\many{\Decl} \: \returnStmt{\Expr}} checks a block of declarations
+followed by a return statement. Rule \nameref{rule:grust:id_usage:grsync:fun_decl:decl} extends the
+context with newly declared local identifiers before checking the subsequent declarations and the
+final return statement with \nameref{rule:grust:id_usage:grsync:fun_decl:return}.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Return
+            \inferIDDecl
+            { \exprIdUsage{\G}{\Expr} }
+            { \declIdUsage{\G}{\returnStmt{\Expr}} }
+            {Ret}
+            \label{rule:grust:id_usage:grsync:fun_decl:return}
+
+
+            %% Declarations
+            \inferIDDecl
+            {
+                \G' = \G \ctxconcat [(\localScope / \ID)^*] \\
+                \declIdUsage{\G'}{\many{\Decl} \: \returnStmt{\Expr}}
+            }
+            { \declIdUsage{\G}{\declEq{\many{(\ID \: \kft{:} \: \STY)}}{\Expr} \: \many{\Decl} \: \returnStmt{\Expr}} }
+            {Decl}
+            \label{rule:grust:id_usage:grsync:fun_decl:decl}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subsubsection{Component Equations}
+\label{sec:grust:id_usage:grsync:eq}
+
+In contrast to the sequential nature of services and function, equations within \GRSync components
+follow a mutually recursive scoping model. All identifiers declared locally or as state memories
+within a component body are visible throughout that entire body, including in their own definitions.
+This allows for defining interdependent dataflow equations without regard to textual order.
+
+Rule \nameref{rule:grust:id_usage:grsync:eqs} formalizes this by first collecting all locally
+declared identifiers ($\ID_l^*$) and memory identifiers ($\ID_m^*$) from the set of equations
+\setEq. It then extends the context \G with these identifiers to create a new context \G', which is
+subsequently used to check each individual equation in the set. The use of disjoint union in the
+helper judgments ensures that each local and memory identifier is declared at most once.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Set of equations
+            \inferIDEq
+            {
+                \declares{\setEq}{\{\ID_l^*\}} \\
+                \inits{\setEq}{\{\ID_m^*\}} \\
+                \G' = \G \ctxconcat [(\localScope / \ID_l)^*] \ctxconcat [(\memoryScope / \ID_m)^*] \\
+                \left(\eqIdUsage{\G'}{\Eq}\right)^*
+            }
+            { \eqIdUsage{\G}{\setEq} }
+            {Blck}
+            \label{rule:grust:id_usage:grsync:eqs}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+Individual declaration, definition, and initialization equations are checked to ensure they assign
+to identifiers of the correct scope (\localScope, \outputScope, and \memoryScope, respectively), as
+described by the rules \nameref{rule:grust:id_usage:grsync:eq:decl},
+\nameref{rule:grust:id_usage:grsync:eq:def}, and \nameref{rule:grust:id_usage:grsync:eq:init}.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Declarations
+            \inferIDEq
+            {
+                \left(\G[\ID] = \localScope\right)^* \\
+                \exprIdUsage{\G}{\Expr}
+            }
+            { \eqIdUsage{\G}{\declEq{\many{(\ID \: \kft{:} \: \STY)}}{\Expr}} }
+            {Decl}
+            \label{rule:grust:id_usage:grsync:eq:decl}
+
+            %% Definition
+            \inferIDEq
+            {
+                \left(\G[\ID] = \outputScope\right)^* \\
+                \exprIdUsage{\G}{\Expr}
+            }
+            { \eqIdUsage{\G}{\defEq{\many{\ID}}{\Expr}} }
+            {Def}
+            \label{rule:grust:id_usage:grsync:eq:def}
+
+            %% Initialization
+            \inferIDEq
+            { \G[\lastExpr{\ID}] = \memoryScope }
+            { \eqIdUsage{\G}{\initEq{\ID}{\CST}} }
+            {Init}
+            \label{rule:grust:id_usage:grsync:eq:init}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The rule for a \kft{match} equation formalizes how identifiers are scoped within a conditional block
+that branches on the value of an expression. First, it asserts that the expression being matched
+must be valid in the surrounding context. Then, for each branch of the \kft{match}, the rule
+specifies that a new, temporary scope is created. This branch-specific scope contains all the
+identifiers from the outer scope, plus any new local identifiers that are bound by that branch's
+pattern. The guard condition and the equations within the branch body are then validated using this
+temporary scope. This ensures that the logic inside a branch can safely use the variables
+deconstructed from the pattern, while also guaranteeing that these variables are properly isolated
+and do not leak into sibling branches or the surrounding scope.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Match
+            \inferIDEq
+            {
+                \exprIdUsage{\G}{\Expr} \\
+                \left(\declares{\Pat_k}{\{\ID_k^*\}}\right)^* \\
+                \left(\G_k = \G \ctxconcat [(\localScope / \ID_k)^*] \right)^* \\
+                \left(\exprIdUsage{\G_k}{\Expr_k}\right)^* \\
+                \left(\eqIdUsage{\G_k}{\setEq[k]}\right)^*
+            }
+            { \eqIdUsage{\G}{\matchX{\Expr}{\many{(\normBr{\gPat{\Pat_k}{\Expr_k}}{\setEq[k]})}}} }
+            {Mtch}
+            \label{rule:grust:id_usage:grsync:eq:match}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The rule for a \kft{when} equation defines the scoping for event-driven logic, where a block of
+equations is executed in response to an event. The logic proceeds as follows: for each branch, it
+first verifies that the event pattern is valid, meaning it refers to a known event. It then
+identifies any new local variables that are bound by the pattern, which correspond to the data
+payload carried by the event. Similar to a \kft{match} equation, a temporary, branch-specific scope
+is created that includes these new payload variables. Finally, the guard condition and the body of
+equations for that branch are validated within this temporary scope. This formalizes a safe
+mechanism for handling event data, ensuring that the payload of an event is only accessible to the
+code block designated to process it.
+
+\begin{center}
+    \begin{minipage}{0.99\textwidth}
+        \centering
+        \begin{mathpar}
+            %% When
+            \inferIDEq
+            {
+                \left(\epatIdUsage{\G}{\EPat_k}\right)^* \\
+                \left(\declares{\EPat_k}{\{\ID_k^*\}}\right)^* \\\\
+                \left(\G_k = \G \ctxconcat [(\localScope / \ID_k)^*] \right)^* \\
+                \left(\exprIdUsage{\G_k}{\Expr_k}\right)^* \\
+                \left(\eqIdUsage{\G_k}{\setEq[k]}\right)^*
+            }
+            { \eqIdUsage{\G}{\whenEq{\initBr{\many{(\ID \: \kfm{=} \: \CST\kft{;})}}}{\many{(\normBr{\gPat{\EPat_k}{\Expr_k}}{\setEq[k]})}}} }
+            {When}
+            \label{rule:grust:id_usage:grsync:eq:when}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Declared identifiers}
+\label{sec:grust:id_usage:grsync:eq:declared}
+
+The judgment \declares{\Eq}{\IDs} collects newly introduced identifiers. The use of disjoint union
+($\bigsqcup$) in rule \nameref{rule:grust:id_usage:grsync:eq:declared:eqs} ensures that an
+identifier is declared only once in a block of equations.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Set of equations
+            \inferDECLEq
+            { \left(\declares{\Eq}{\IDs}\right)^* }
+            { \declares{\setEq}{\bigsqcup \IDs^*} }
+            {Blck}
+            \label{rule:grust:id_usage:grsync:eq:declared:eqs}
+
+            %% Declarations
+            \inferDECLEq
+            { }
+            { \declares{\declEq{\many{(\ID \: \kft{:} \: \STY)}}{\Expr}}{\{\ID^*\}} }
+            {Decl}
+            \label{rule:grust:id_usage:grsync:eq:declared:decl}
+
+            %% Definition
+            \inferDECLEq
+            { }
+            { \declares{\defEq{\many{\ID}}{\Expr}}{\emptyset} }
+            {Def}
+            \label{rule:grust:id_usage:grsync:eq:declared:def}
+
+            %% Initialization
+            \inferDECLEq
+            { }
+            { \declares{\initEq{\ID}{\CST}}{\emptyset} }
+            {Init}
+            \label{rule:grust:id_usage:grsync:eq:declared:init}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The scoping rules for \kft{match} and \kft{when} equations reflect a fundamental distinction in
+their purpose.
+
+A \kft{match} equation defines flows based on pattern matching. As defined by rule
+\nameref{rule:grust:id_usage:grsync:eq:declared:match}, all branches must declare an identical set
+of identifiers. This ensures that a \kft{match} equation is sound: it always computes a complete and
+consistent set of outputs. Regardless of which branch is executed, dependent computations can rely
+on the same set of identifiers being available, which prevents the possibility of undefined
+behavior.
+
+In contrast, a \kft{when} equation is designed for event-driven \emph{updates}. Rule
+\nameref{rule:grust:id_usage:grsync:eq:declared:when} allows each branch to declare a different set
+of identifiers, enabling partial state changes. If a signal is not declared in a branch, its value
+is not updated when that branch is active and retains its previous value. This persistence model
+explains why signals in a \kft{when} construct must be initialized. Similarly, an event is emitted
+only if it is declared in the active branch.
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Match
+            \inferDECLEq
+            { \left(\declares{\setEq[k]}{\IDs}\right)^* }
+            { \declares{\matchX{\Expr}{\many{(\normBr{\gPat{\Pat_k}{\Expr_k}}{\setEq[k]})}}}{\IDs} }
+            {Mtch}
+            \label{rule:grust:id_usage:grsync:eq:declared:match}
+
+            %% When
+            \inferDECLEq
+            { \left(\declares{\setEq[k]}{\IDs}\right)^* }
+            { \declares{
+                    \whenEq{\initBr{\many{(\ID \: \kfm{=} \: \CST\kft{;})}}}
+                    {\ldots}
+                }{\bigcup \IDs^*} }
+            {When}
+            \label{rule:grust:id_usage:grsync:eq:declared:when}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Initialized identifiers}
+\label{sec:grust:id_usage:grsync:eq:initialized}
+
+The judgment \inits{\Eq}{\IDs} collects the identifiers of signals that require memory. In \GRSync,
+such stateful signals can only be initialized at the top level of a component or within a \kft{when}
+equation, following rule \nameref{rule:grust:id_usage:grsync:eq:initialized:when}. The latter is
+permitted because \kft{when} constructs are specifically designed for event-triggered state updates.
+In contrast, \kft{match} equations describe control flow logic. Consequently, rule
+\nameref{rule:grust:id_usage:grsync:eq:initialized:match} prohibits the initialization of new
+memories within the branches of a \kft{match}.
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Set of equations
+            \inferINITEq
+            { \left(\inits{\Eq}{\IDs}\right)^* }
+            { \inits{\setEq}{\bigsqcup \IDs^*} }
+            {Blck}
+            \label{rule:grust:id_usage:grsync:eq:initialized:eqs}
+
+            %% Declarations
+            \inferINITEq
+            { }
+            { \inits{\declEq{\many{(\ID \: \kft{:} \: \STY)}}{\Expr}}{\emptyset} }
+            {Decl}
+            \label{rule:grust:id_usage:grsync:eq:initialized:decl}
+
+            %% Definition
+            \inferINITEq
+            { }
+            { \inits{\defEq{\many{\ID}}{\Expr}}{\emptyset} }
+            {Def}
+            \label{rule:grust:id_usage:grsync:eq:initialized:def}
+
+            %% Initialization
+            \inferINITEq
+            { }
+            { \inits{\initEq{\ID}{\CST}}{\{\lastExpr{\ID}\}} }
+            {Init}
+            \label{rule:grust:id_usage:grsync:eq:initialized:init}
+        \end{mathpar}
+    \end{minipage}
+
+    \begin{minipage}{0.99\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Match
+            \inferINITEq
+            { \left(\inits{\setEq[k]}{\emptyset}\right)^* }
+            { \inits{\matchX{\Expr}{\many{(\normBr{\gPat{\Pat_k}{\Expr_k}}{\setEq[k]})}}}{\emptyset} }
+            {Mtch}
+            \label{rule:grust:id_usage:grsync:eq:initialized:match}
+
+            %% When
+            \inferINITEq
+            { \IDs = \{(\lastExpr{\ID})^*\} \\ \left(\inits{\setEq[k]}{\emptyset}\right)^* }
+            { \inits{
+                    \whenEq{\initBr{\many{(\ID \: \kfm{=} \: \CST\kft{;})}}}
+                    {\many{(\normBr{\gPat{\EPat_k}{\Expr_k}}{\setEq[k]})}}
+                }{\IDs} }
+            {When}
+            \label{rule:grust:id_usage:grsync:eq:initialized:when}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Defined identifiers}
+\label{sec:grust:id_usage:grsync:eq:defined}
+
+The judgment \defines{\Eq}{\IDs} collects all identifiers assigned a value in an equation \Eq.
+
+For a \kft{match} equation, rule \nameref{rule:grust:id_usage:grsync:eq:defined:match} requires the
+set of defined identifiers to be identical across all branches. This aligns with the role of a
+\kft{match}: it guarantees that a complete and consistent set of outputs is always produced,
+regardless of which branch is executed.
+
+In contrast, a \kft{when} equation enables selective updates. Rule
+\nameref{rule:grust:id_usage:grsync:eq:defined:when} defines its set of identifiers as the union of
+those in its branches. This mechanism allows a branch to specify only the flows it needs to change.
+If a signal is not defined in the active branch, it retains its previous value, while an undefined
+event is not emitted.
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Set of equations
+            \inferDEFEq
+            { \left(\defines{\Eq}{\IDs}\right)^* }
+            { \defines{\setEq}{\bigsqcup \IDs^*} }
+            {Blck}
+            \label{rule:grust:id_usage:grsync:eq:defined:eqs}
+
+            %% Declarations
+            \inferDEFEq
+            { }
+            { \defines{\declEq{\many{(\ID \: \kft{:} \: \STY)}}{\Expr}}{\{\ID^*\}} }
+            {Decl}
+            \label{rule:grust:id_usage:grsync:eq:defined:decl}
+
+            %% Definition
+            \inferDEFEq
+            { }
+            { \defines{\defEq{\many{\ID}}{\Expr}}{\{\ID^*\}} }
+            {Def}
+            \label{rule:grust:id_usage:grsync:eq:defined:def}
+
+            %% Initialization
+            \inferDEFEq
+            { }
+            { \defines{\initEq{\ID}{\CST}}{\emptyset} }
+            {Init}
+            \label{rule:grust:id_usage:grsync:eq:defined:init}
+        \end{mathpar}
+    \end{minipage}
+
+    \begin{minipage}{0.95\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Match
+            \inferDEFEq
+            { \left(\defines{\setEq[k]}{\{\ID^*\}}\right)^* }
+            { \defines{\matchX{\Expr}{\many{(\normBr{\gPat{\Pat_k}{\Expr_k}}{\setEq[k]})}}}{\{\ID^*\}} }
+            {Mtch}
+            \label{rule:grust:id_usage:grsync:eq:defined:match}
+
+            %% When
+            \inferDEFEq
+            { \left(\defines{\setEq[k]}{\IDs}\right)^* }
+            { \defines{
+                    \mathfoot{\whenEq{\initBr{\many{(\ID \: \kfm{=} \: \CST\kft{;})}}}
+                        {\many{(\normBr{\gPat{\EPat_k}{\Expr_k}}{\setEq[k]})}}}
+                }{\bigcup \IDs^*} }
+            {When}
+            \label{rule:grust:id_usage:grsync:eq:defined:when}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subsubsection{Expressions}
+\label{sec:grust:id_usage:grsync:expr}
+
+The judgment \exprIdUsage{\G}{\Expr} verifies that all identifiers in an expression \Expr are used
+correctly according to the context \G.
+
+The simplest expressions involve constants, identifiers, and memory access. Rule
+\nameref{rule:grust:id_usage:grsync:expr:const} states that a constant is always valid. Rule
+\nameref{rule:grust:id_usage:grsync:expr:id} requires that an identifier \ID be present in the
+context. Rule \nameref{rule:grust:id_usage:grsync:expr:last} allows accessing the previous value of
+a signal with \lastExpr{\ID} only if the identifier has \memoryScope, ensuring it is a stateful
+signal.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Constant
+            \inferIDE
+            {  }
+            { \exprIdUsage{\G}{\CST} }
+            {Cst}
+            \label{rule:grust:id_usage:grsync:expr:const}
+
+            %% Identifier
+            \inferIDE
+            { \G[\ID] = \scope }
+            { \exprIdUsage{\G}{\ID} }
+            {ID}
+            \label{rule:grust:id_usage:grsync:expr:id}
+
+            %% Last
+            \inferIDE
+            { \G[\lastExpr{\ID}] = \memoryScope }
+            { \exprIdUsage{\G}{\lastExpr{\ID}} }
+            {Last}
+            \label{rule:grust:id_usage:grsync:expr:last}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+For composite expressions, validation is recursive. Rules
+\nameref{rule:grust:id_usage:grsync:expr:emit} and \nameref{rule:grust:id_usage:grsync:expr:op}
+state that an event emission or an $n$-ary operation is valid if all its sub-expressions are valid.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Emit
+            \inferIDE
+            { \exprIdUsage{\G}{\Expr} }
+            { \exprIdUsage{\G}{\emitExpr{\Expr}} }
+            {Emit}
+            \label{rule:grust:id_usage:grsync:expr:emit}
+
+            %% $n$-ary operation
+            \inferIDE
+            { \left(\exprIdUsage{\G}{\Expr}\right)^* }
+            { \exprIdUsage{\G}{\opExpr{\many{\Expr}}} }
+            {Op}
+            \label{rule:grust:id_usage:grsync:expr:op}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+Function and component applications are handled by rules
+\nameref{rule:grust:id_usage:grsync:expr:funapp} and
+\nameref{rule:grust:id_usage:grsync:expr:compapp}. These rules require that the called function or
+component is defined in the context and that all argument expressions are valid.
+
+\begin{center}
+    \begin{minipage}{0.99\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Application
+            % Function
+            \inferIDE
+            {
+                \G[\ID_f] = \funItem{\ID_f}{\many{(\ID_i \: \kft{:} \: \TY_i)}}{\TY_o}{\many{\Decl}} \\\\
+                \left(\exprIdUsage{\G}{\Expr}\right)^*
+            }
+            { \exprIdUsage{\G}{\appExpr{\ID_f}{\many{\Expr}}} }
+            {AppF}
+            \label{rule:grust:id_usage:grsync:expr:funapp}
+
+            % Component
+            \inferIDE
+            {
+                \G[\ID_c] = \compItem{\ID_c}{\many{(\ID_i \: \kft{:} \: \STY_i)}}{\many{(\ID_o \: \kft{:} \: \STY_o)}}{\many{\Eq}} \\\\
+                \left(\exprIdUsage{\G}{\Expr}\right)^*
+            }
+            { \exprIdUsage{\G}{\appExpr{\ID_c}{\many{\Expr}}} }
+            {AppC}
+            \label{rule:grust:id_usage:grsync:expr:compapp}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+For a \kft{match} expression, rule \nameref{rule:grust:id_usage:grsync:expr:match} imposes several
+conditions. First, the matched expression \Expr must be valid in the current context \G. Then, for
+each branch, the identifiers declared in the pattern $\Pat_k$ are added to the context, creating a
+local context $\G_k$. Both the guard and the body expressions of that branch must be valid in this
+extended local context.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Match
+            \inferIDE
+            {
+                \exprIdUsage{\G}{\Expr} \\
+                \left(\declares{\Pat_k}{\{\ID_k^*\}}\right)^* \\
+                \left(\G_k = \G \ctxconcat [(\localScope / \ID_k)^*] \right) \\
+                \left(\exprIdUsage{\G_k}{\Expr_k^g}\right)^* \\
+                \left(\exprIdUsage{\G_k}{\Expr_k}\right)^*
+            }
+            { \exprIdUsage{\G}{\matchX{\Expr}{\many{(\normBr{\gPat{\Pat_k}{\Expr_k^g}}{\Expr_k})}}} }
+            {Mtch}
+            \label{rule:grust:id_usage:grsync:expr:match}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subsubsection{Patterns}
+\label{sec:grust:id_usage:grsync:pat}
+
+Patterns do not use identifiers from the context; instead, they declare new identifiers that are
+local to the branch where they appear.
+
+\paragraph{Declared identifiers}
+\label{sec:grust:id_usage:grsync:pat:declared}
+
+The judgment \declares{\Pat}{\IDs} collects the set of identifiers \IDs declared by a pattern
+\Pat. The rules show that only identifier patterns contribute to this set. Constants, wildcards, and
+other structural patterns do not declare any identifiers, while tuple patterns aggregate with a
+disjoint union the identifiers from their sub-patterns.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Constant
+            \inferDECLPat
+            { }
+            { \declares{\CST}{\emptyset} }
+            {Cst}
+            \label{rule:grust:id_usage:grsync:pat:declared:const}
+
+            %% Identifier
+            \inferDECLPat
+            { }
+            { \declares{\ID}{\{\ID\}} }
+            {ID}
+            \label{rule:grust:id_usage:grsync:pat:declared:id}
+
+            %% Wildcard
+            \inferDECLPat
+            { }
+            { \declares{\_}{\emptyset} }
+            {Wild}
+            \label{rule:grust:id_usage:grsync:pat:declared:wild}
+
+            %% Tuple
+            \inferDECLPat
+            { \left(\declares{\Pat}{\IDs}\right)^* }
+            { \declares{\tuple{\Pat}}{\bigsqcup \IDs^*} }
+            {Tupl}
+            \label{rule:grust:id_usage:grsync:pat:declared:tuple}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subsubsection{Event Patterns}
+\label{sec:grust:id_usage:grsync:epat}
+
+The judgment \epatIdUsage{\G}{\EPat} validates the use of identifiers within an event pattern \EPat.
+
+Rule \nameref{rule:grust:id_usage:grsync:epat:event} handles event detection, ensuring the source
+event $\ID_e$ is defined in the context. Rule \nameref{rule:grust:id_usage:grsync:epat:edge} handles
+rising edges, requiring the underlying boolean expression \Expr to be valid. A tuple of event
+patterns is valid if each constituent pattern is valid, as specified by rule
+\nameref{rule:grust:id_usage:grsync:epat:tuple}.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Event detection
+            \inferIDEPat
+            { \G[\ID_e] = \scope }
+            { \epatIdUsage{\G}{\ID \: \kfm{=} \: \opt{\ID_e}} }
+            {Dtct}
+            \label{rule:grust:id_usage:grsync:epat:event}
+
+            %% Rising edge
+            \inferIDEPat
+            { \exprIdUsage{\G}{\Expr} }
+            { \epatIdUsage{\G}{\Expr} }
+            {Edge}
+            \label{rule:grust:id_usage:grsync:epat:edge}
+
+            %% Tuple
+            \inferIDEPat
+            { \left(\epatIdUsage{\G}{\EPat}\right)^* }
+            { \epatIdUsage{\G}{\tuple{\EPat}} }
+            {Tupl}
+            \label{rule:grust:id_usage:grsync:epat:tuple}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Declared identifiers}
+\label{sec:grust:id_usage:grsync:epat:declared}
+
+The judgment \declares{\EPat}{\IDs} collects identifiers declared by an event pattern \EPat. As
+shown by the rules, only the event detection pattern declares a new identifier, which captures the
+value carried by the event. Rising edge patterns do not declare identifiers, and tuple patterns
+collect declarations from their sub-patterns using a disjoint union.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %% Event detection
+            \inferDECLEPat
+            { }
+            { \declares{\ID \: \kfm{=} \: \opt{\ID_e}}{\{\ID\}} }
+            {Dtct}
+            \label{rule:grust:id_usage:grsync:epat:declared:event}
+
+            %% Rising edge
+            \inferDECLEPat
+            { }
+            { \declares{\Expr}{\emptyset} }
+            {Edge}
+            \label{rule:grust:id_usage:grsync:epat:declared:edge}
+
+            %% Tuple
+            \inferDECLEPat
+            { \left(\declares{\EPat}{\IDs}\right)^* }
+            { \declares{\tuple{\EPat}}{\bigsqcup \IDs^*} }
+            {Tupl}
+            \label{rule:grust:id_usage:grsync:epat:declared:tuple}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subsection{Summary}
+This section has established the formal rules that govern identifier usage in \GRust. Using a set of
+judgments, it has provided an unambiguous specification for how identifiers are scoped, declared,
+and defined across the language. The logic handles the distinct scoping models of both \GRFRP
+services, which use ordered lexical scoping, and \GRSync components, which employ a mutually
+recursive structure. Key design choices, such as the requirement for \kft{match} branches to define
+identical sets of identifiers, are formally captured by these rules to ensure consistency and
+predictability.
+
+This formal blueprint is essential, providing a sound foundation for the type system and the
+semantic proofs presented in the following chapter. In the compiler prototype, described in
+\Cref{sec:grust:implem:choices:architecture}, this specification is realized through a symbol table
+that enforces these rules at compile time. While the prototype compiler validates these scoping
+rules, it strategically delegates the check for pattern exhaustiveness to the underlying \Rust
+compiler. Ensuring that \kft{match} statements are exhaustive is essential for the correctness of
+the semantics of \GRust, and leveraging the robust analysis of the \Rust compiler is a sound
+engineering choice. Because the structure of a \GRust \kft{match} maps almost directly to its \Rust
+counterpart, any errors reported by the \Rust compiler remain clear and traceable. This approach
+allows the \GRust compiler to focus on domain-specific checks, while guaranteeing that every
+identifier is used correctly and without ambiguity.

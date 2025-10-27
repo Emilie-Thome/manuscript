@@ -1,0 +1,1251 @@
+\subsection{Operational Semantics of \GRFRP}
+\label{sec:semantics:grfrp:opsem}
+
+\GRFRP services interact with the broader system \via an interface to the communication bus,
+through which they import and export flows. To minimize messages on the bus, services employ
+a push-based strategy, inspired by \frp~\cite{DBLP:conf/haskell/Elliott09}, propagating only signal
+updates and event occurrences. When an event occurs or a signal is updated within a service, all
+dependent flows are recomputed to maintain their values up-to-date, initiating a
+deterministic cascade of computations. The operational semantics, described below,
+captures this propagation process.
+
+\begin{table}[!ht]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}\hline
+        $v, \, \some{v}, \, \none \in \Val$                                                        & A value of any type; \ttf{some} and \none represent optional values.                                      \\\hline
+        $v_\bot \in \ValBot ::= v \, \vert \, \bot$                                                & A value that may be present $v$ or absent $\bot$.                                                         \\\hline
+        $v_d$                                                                                      & A default value, predefined unique value for each type.                                                   \\\hline
+        $l ::= v::l \, \vert \, [v^+] \, \vert \, l_1 \lstconcat l_2$                              & An implicitly finite list of values $v^+$.                                                                \\\hline
+        $sty ::= ty \, \vert \, \mayB{ty}$                                                         & A type, where \kwf{?} indicates an event type.                                                            \\\hline
+        $\tyCtx[x] = sty$                                                                          & A typing context \tyCtx mapping flow identifiers to their types.                                          \\\hline
+        \mkcell{$\G[f] = \mathtiny{\component{f}{\mathtiny{x_i^+}}{\mathtiny{x_o^+}}{\mathtiny{eq^+}}{\mathtiny{x_m^+ = c^+}}}$                                                                                \\
+        $\G[F] = \service{F}{stmt^+}$}                                                             & A program context \G mapping component and service names to their definitions.                            \\\hline
+        $i, \, i_T$                                                                                & Identifiers for flows and timers, respectively.                                                           \\\hline
+        $\mess ::= \inputMess{i}{v} \, \vert \, \timerMess{i_T}$                                   & A message from the environment, either a flow input or a timer signal.                                    \\\hline
+        $s$                                                                                        & The internal state of a service, a statement, or a flow operation.                                        \\\hline
+        $\tau ::= (i_T, t) \diamond \tau \, \vert \, \queue{(i_T,t)^+}$                            & A timer queue consisting of pairs of timer identifiers $i_T$ and timestamps $t$.                          \\\hline
+        \mkcell{$\gamma[x] = v_\bot$                                                                                                                                                                           \\
+        $\gamma ::= [(v_\bot/x)^+] \, \vert \, \gamma_1 \ctxconcat \gamma_2$}                      & A propagation context $\gamma$ mapping flow identifiers to their updates or occurrences.                  \\\hline
+        \stateTy{\epsilon}                                                                         & The type of compatible states for the \GRFRP construct $\epsilon$.                                        \\\hline
+        $\initstate{\epsilon} \in \stateTy{\epsilon}$                                              & The initial state of the \GRFRP construct $\epsilon$.                                                     \\\hline
+        \timerTy{\epsilon}                                                                         & The type of compatible list (queue for services) of timers for the \GRFRP construct $\epsilon$.           \\\hline
+        $\inittimer{\epsilon} \in \timerTy{\epsilon}$                                              & The initial list (queue for services) of timers of the \GRFRP construct $\epsilon$.                       \\\hline
+        \mathfoot{\serviceOpSem{s}{\tau}{F}{\mess}{t}{s'}{\tau'}{(x_o, v_o)^+}}                    & The service $F$ reacts to a message at time $t$, updating its state and producing outputs.                \\\hline
+        \mathtiny{\stmtOpSem{\gamma}{s}{stmt^+}{i, t, v}{\gamma'}{s'}{(x_o, v_o)^+}{(i_T, t_T)^+}} & Propagation of an update through flow statements, producing new states, output updates, and timer resets. \\\hline
+        \mathfoot{\sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{v_\bot^+}{(i_T, t_T)^+}}                   & Evaluation of $\sigma$ at time $t$, producing a new state, outputs, and timer resets.                     \\\hline
+    \end{tabularx}
+    \caption[Notations for the operational semantics of \GRFRP.]%
+    {Notations for the operational semantics of \GRFRP.}
+    \label{tab:semantics:grfrp:opsem:notations}
+\end{table}
+
+We first introduce the notations used throughout this semantics, summarized in
+\Cref{tab:semantics:grfrp:opsem:notations}.
+%
+The set of all possible values is denoted by \Val, a value is denoted by $v$, and may be wrapped as
+an optional using \some{v} or \none.
+%
+A bottom value $v_\bot$ can be either a defined value $v$ or the undefined marker $\bot$, used to
+represent the presence or absence of a value. The set of all bottom values is then the addition of
+\Val with the singleton $\{\bot\}$, denoted by \ValBot.
+%
+As signals always have a value, they start with a default value $v_d$, which is a predefined unique
+value for each type (\eg \ttf{0} for integers and \ttf{0.} for floats). This default value
+represents the value of a signal before any explicit updates occur.
+%
+Across the entire semantics, we use the notation $X^+$ to denote a finite sequence of $X$, this sequence can be empty.
+Lists of elements $v^+$ are denoted by $[v^+]$, may be inductively constructed as $v::l$, and
+concatenated as $l_1 \lstconcat l_2$.
+%
+The sampling types $sty$ of flows (\ie the type of the value visible in a flow at any given time)
+are recorded in a typing context \tyCtx. A signal type is denoted by $ty$, while an event type is
+denoted by \mayB{ty}, indicating that an event may have no value. The sampling type of a flow
+identified by $x$ is accessed as $\tyCtx[x] = sty$. These types serve as syntactic labels, but their
+correct usage is governed by a type system, detailed in \Cref{sec:grust:typing}. In the semantics,
+they are used to distinguish the behavior of signals from that of events.
+%
+A program is represented as a mapping \G from component and service names to their definitions.
+The definition of a component $f$ is accessed by $\G[F]$, and the one of a service $F$ by $\G[F]$.
+%
+Identifiers for imported flows and timers are written $i$ and $i_T$, respectively.
+%
+Messages received by a service from the environment are denoted by \mess and are of the form
+\inputMess{i}{v} for a new input value $v$ on flow $i$ (not necessarily imported by the service), or
+\timerMess{i_T} for a timer expiration on timer $i_T$.
+%
+States for services, statements, flow operations are written $s$.
+%
+Timer queues $\tau$ represent scheduled timers, and may be expressed either as a sequence
+\queue{(i_T,t)^+} or inductively using $(i_T, t) \diamond \tau$, indicating that the timer
+$i_T$ is scheduled to trigger at time $t$, followed by the remaining queue $\tau$.
+%
+The propagation context $\gamma$ tracks whether each flow has been updated or triggered. For a
+signal $x_s$, $\gamma[x_s] = \bot$ indicates that the signal has not changed. For an event $x_e$,
+$\gamma[x_e] = \bot$ denotes the absence of an occurrence at the current step. Otherwise,
+$\gamma[x] = v$ represents the newly updated signal value or the emitted event payload.
+%
+The concatenation of two update contexts $\gamma_1$ and $\gamma_2$, is defined as their disjoint
+union, $\gamma_1 \ctxconcat \gamma_2$. An update context mapping bottom values $v_\bot^+$ to
+distinct identifiers $x^+$ is denoted by $[(v_\bot/x)^+]$.
+%
+The constructs of \GRFRP are designed to react to event occurrences, signal updates, and timer
+expirations. Each reaction triggers a computation step that can modify the internal state (\eg, by
+retaining the last value of a signal) and reset timers.
+%
+For all \GRFRP construct $\epsilon$, the set of all states corresponding to $\epsilon$ is denoted by
+\stateTy{\epsilon} and its initial state is denoted by \initstate{\epsilon}; the set of all lists
+(queues for services) of times corresponding to $\epsilon$ is denoted by \timerTy{\epsilon} and its
+initial timers are denoted by \inittimer{\epsilon}. The following paragraphs explain the computation
+steps of the different constructs.
+
+\paragraph{Receive message}
+
+Consider a service $F$ defined in a program \G within a typing context \tyCtx, and let $s$ and
+$\tau$ respectively denote the state and timer queue of $F$. The judgment
+\begin{equation*}
+    \serviceOpSem{s}{\tau}{F}{\mess}{t}{s'}{\tau'}{(x_o, v_o)^+}
+\end{equation*}
+describes the reaction of service $F$ to a message \mess received at time $t$. This transition
+results in a new state $s'$, an updated timer queue $\tau'$, and a list of output updates
+$[(x_o, v_o)^+]$ that are transmitted on the communication bus.
+
+A state corresponding to the service $F$ is a state corresponding to its statements
+(\Cref{eq:semantics:grfrp:opsem:init:service:state}).
+The initial state \initstate{F} and initial timer queue
+\inittimer{F} are computed from the initializations of each statement, as defined
+in \Crefrange{eq:semantics:grfrp:opsem:init:service:state}{eq:semantics:grfrp:opsem:init:service:timer},
+which use the function \smf{reset} defined by \Cref{rule:semantics:grfrp:opsem:aux:reset}.
+\begin{align}
+    \stateTy{F}    & = \stateTy{stmt^+}                                        & \initstate{F} & = \initstate{stmt^+} \label{eq:semantics:grfrp:opsem:init:service:state}                       \\
+    \timerTy{F}    & = \Queue{U \times \Time}                                  & \inittimer{F} & = \reset{\emptytimer}{\inittimer{stmt^+}}  \label{eq:semantics:grfrp:opsem:init:service:timer} \\
+    \text{with} \; & \timerTy{stmt^+} = \List{U \times \Time} \; \text{and} \; & \G[F]         & = \service{F}{stmt^+} \nonumber
+\end{align}
+
+Message handling follows two semantic rules, corresponding to the two kinds of messages a service
+may receive:
+\nameref{rule:semantics:grfrp:opsem:step:service:input} for input messages \inputMess{i}{v} from
+the communication bus;
+and \nameref{rule:semantics:grfrp:opsem:step:service:timer} for internal timer expiration messages
+\timerMess{i_T}.
+%
+In both cases, the message is propagated through the statements of the service ($stmt^+$) using the
+corresponding identifier ($i$ or $i_T$), timestamp $t$, and value ($v$ or $()$). This propagation,
+described in the following paragraph, produces:
+an updated context $\gamma$;
+a new internal state $s'$;
+a list of output updates $[(x_o, v_o)^+]$;
+and a list of timers to be reset $[(i_T, t_T)^+]$.
+%
+The timer queue $\tau$ is updated using the function \smf{reset}, defined in
+\Cref{rule:semantics:grfrp:opsem:aux:reset}, which replaces or inserts the given timers in the
+queue so that the queue remains increasing in timestamp.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Runtime handles input
+            \inferOPSEMMess
+            {
+                \G[F] = \service{F}{stmt^+} \\
+                (\tau = (i_T, t_T) \diamond \tau' \wedge t_i \le t_T) \vee (\tau = \emptytimer) \\
+                \stmtOpSem{\emptygamma}{s}{stmt^+}{i, t_i, v_i}{\gamma}{s'}{(x_o, v_o)^+}{(i_T, t_T)^+}
+            }
+            {
+                \serviceOpSem{s}{\tau}{F}{\inputMess{i}{v_i}}{t_i}{s'}{\reset{\tau}{[(i_T, t_T)^+]}}{(x_o, v_o)^+}
+            }
+            {Input}
+            \label{rule:semantics:grfrp:opsem:step:service:input}
+
+            %%%%% Runtime handles timer
+            \inferOPSEMMess
+            {
+                \G[F] = \service{F}{stmt^+} \\
+                \tau = (i_T, t_T) \diamond \tau' \\
+                \stmtOpSem{[()/i_T]}{s}{stmt^+}{i_T, t_T, ()}{\gamma}{s'}{(x_o, v_o)^+}{(i_T, t_T)^+}
+            }
+            {
+                \serviceOpSem{s}{\tau}{F}{\timerMess{i_T}}{t_T}{s'}{\reset{\tau'}{[(i_T, t_T)^+]}}{(x_o, v_o)^+}
+            }
+            {Timer}
+            \label{rule:semantics:grfrp:opsem:step:service:timer}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\begin{remark}
+    Rule \nameref{rule:semantics:grfrp:opsem:step:service:input} initiates the propagation through
+    the service's statements with an empty context (\emptygamma). This reflects the fact that the
+    communication bus transmits all flows in the system, including those not imported or used by the
+    service. The operational semantics of the import statement (described in the following
+    paragraph) is responsible for selecting the relevant input flows, adding their values to the
+    update context, and propagating them through the service.
+
+    In contrast, timers are managed internally by the service using the timer queues $\tau$. Timer
+    occurrences are always relevant to the service and are therefore directly added to the context
+    and propagated through the service's statements.
+
+    Together, rules \nameref{rule:semantics:grfrp:opsem:step:service:input} and
+    \nameref{rule:semantics:grfrp:opsem:step:service:timer} ensure two key properties: (1) timers
+    are triggered only after all inputs from the communication bus have been processed, and (2)
+    timestamps are handled in ascending order. While this ascending order of timestamps is
+    fundamental to the semantics, access to a global time and its use as a computation timestamp
+    could enable an alternative message prioritization scheme (\eg based on the ASIL level of the
+    message).
+\end{remark}
+
+\begin{align}
+    \reset{\tau}{l}           & = \ttf{fold}(\lambda (\tau_\textit{acc}, \, (i_T, t_T)). \resetAux{\tau_\textit{acc}}{i_T}{t_T}, \, \tau, \, l)  \label{rule:semantics:grfrp:opsem:aux:reset} \\
+    \resetAux{\tau}{i_T}{t_T} & =  \ttf{match} \, \tau \, \{ \label{rule:semantics:grfrp:opsem:aux:reset:aux}                                                                                 \\
+                              & \quad \qquad \begin{array}{lll}
+                                                 \emptytimer                    &                           & \rightarrow \queue{(i_T, t_T)}                                  \\
+                                                 (i_{T'}, t_{T'}) \diamond \tau & \text{if} \, i_{T'} = i_T & \rightarrow \resetAux{\tau}{i_T}{t_T}                           \\
+                                                 (i_{T'}, t_{T'}) \diamond \tau & \text{if} \, t_{T'} < t_T & \rightarrow (i_{T'}, t_{T'}) \diamond \resetAux{\tau}{i_T}{t_T} \\
+                                                 (i_{T'}, t_{T'}) \diamond \tau &                           & \rightarrow (i_T, t_T) \diamond (i_{T'}, t_{T'}) \diamond \tau  \\
+                                             \end{array} \nonumber                     \\
+                              & \; \quad \} \nonumber
+\end{align}
+
+For example, consider the \idf{aeb} service from \Cref{fig:semantics:example:aeb} and the execution
+depicted in the chronogram of \Cref{fig:semantics:example:aeb:chronogram}. We focus on the
+transition step of the service at time $t + 1s$, when it receives the event \idf{pedestrian\_l}.
+%
+Prior to the transition, the service is in the state \No with a timer queue
+\queue{(\idf{t_p}, t_0)}, where \idf{t_p} is the timer associated with the \kwf{timeout} operator
+from \Cref{ex:line:timeout}, and $t_0 > t + 1s$.
+%
+Upon receiving the input message \inputMess{\idf{pedestrian\_l}}{20.} at time $t + 1s$, the service
+transitions to a new timer queue \queue{(\idf{t_p}, t+3s)}, emits the strategy \Soft on the output
+\idf{strat}, and updates its internal state to \Soft.
+%
+This transition step in the semantics is expressed as:
+\begin{equation*}
+    (\No, \queue{(\idf{t_p},t_0)})
+    \xRightarrow[\service{\kwf{aeb}}{stmt^+}]{\inputMess{\idf{pedestrian\_l}}{20.}, \, t+1s}
+    (\Soft, \queue{(\idf{t_p},t+3s)}): [(\idf{strat}, \Soft)].
+\end{equation*}
+%
+This transition follows the rule \nameref{rule:semantics:grfrp:opsem:step:service:input}, which
+requires a transition of the service's statements as follows:
+\begin{equation*}
+    (\emptygamma, \No)
+    \xRightarrow[stmt^+]{\idf{pedestrian\_l}, \, t+1s, \, 20.}
+    (\mathtiny{\left[\begin{array}{l}
+                20./\idf{pedestrian\_l},  \\
+                20./\idf{pedestrian},     \\
+                \bot/\idf{t\_pedestrian}, \\
+                \Soft/\idf{strat}
+            \end{array}\right]}, \Soft):
+    ([(\idf{strat}, \Soft)], \, [(\idf{t_p}, t+3s)]).
+\end{equation*}
+%
+The intermediate steps leading to this transition will be detailed in the following paragraphs.
+
+\paragraph{Propagate information in statements}
+
+Consider a sequence of statements $stmt^+$ defined in a program \G and typing context \tyCtx, and
+let $\gamma$ and $s$ respectively denote the current value context of the propagation and the state
+of $stmt^+$. The judgment
+\begin{equation*}
+    \stmtOpSem{\gamma}{s}{stmt^+}{i, t, v}{\gamma'}{s'}{(x_o, v_o)^+}{(i_T, t_T)^+}
+\end{equation*}
+describes the propagation of a new value $v$ for identifier $i$ at time $t$ through
+$stmt^+$ starting with the context $\gamma$. This propagation results in an updated context
+$\gamma'$, a new state $s'$, a list of output updates $[(x_o, v_o)^+]$, and a list of timer resets
+$[(i_T, t_T)^+]$.
+
+\subparagraph{Imports}
+An import statement contributes nothing to the overall state of the block of statements, nor to the
+initial timer queue, as defined by \Crefrange{eq:semantics:grfrp:opsem:stateTy:stmt:import}
+{eq:semantics:grfrp:opsem:init:stmt:import:timer}.
+\begin{align}
+    \stateTy{\import{x}, stmt^+}   & = \stateTy{stmt^+} \label{eq:semantics:grfrp:opsem:stateTy:stmt:import}      \\
+    \initstate{\import{x}, stmt^+} & = \initstate{stmt^+} \label{eq:semantics:grfrp:opsem:init:stmt:import:state} \\
+    \timerTy{\import{x}, stmt^+}   & = \timerTy{stmt^+} \label{eq:semantics:grfrp:opsem:timerTy:stmt:import}      \\
+    \inittimer{\import{x}, stmt^+} & = \inittimer{stmt^+} \label{eq:semantics:grfrp:opsem:init:stmt:import:timer}
+\end{align}
+
+The rule \nameref{rule:semantics:grfrp:opsem:step:stmt:import:present} handles the import of the
+flow $i$ that triggered the propagation. Its value $v$ is added to the update context $\gamma$, and
+the propagation continues.\footnote{Once the input message has been imported, its value no longer
+    needs to be propagated; only the update context $\gamma \ctxconcat [v/x]$ is required. However,
+    the value is retained for convenience in writing.}
+%
+If the imported identifier $x$ does not correspond to the propagated flow, rule
+\nameref{rule:semantics:grfrp:opsem:step:stmt:import:absent} applies, passing the update context
+$\gamma$ unchanged to the next statements.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            % ImportPresent
+            \inferOPSEMFlowStmt
+            {
+                x = i \\
+                \stmtOpSem{\gamma \ctxconcat [v/x]}{s}{stmt^+}{i, t, v}{\gamma'}{s'}{(x_o, v_o)^+}{(i_T, t_T)^+}
+            }
+            {
+                \stmtOpSem{\gamma}{s}{\import{x}, stmt^+}{i, t, v}{\gamma'}{s'}{(x_o, v_o)^+}{(i_T, t_T)^+}
+            }
+            {Import{\scriptsize pres}}
+            \label{rule:semantics:grfrp:opsem:step:stmt:import:present}
+
+            % ImportAbsent
+            \inferOPSEMFlowStmt
+            {
+                x \neq i \\
+                \stmtOpSem{\gamma}{s}{stmt^+}{i, t, v}{\gamma'}{s'}{(x_o, v_o)^+}{(i_T, t_T)^+}
+            }
+            {
+                \stmtOpSem{\gamma}{s}{\import{x}, stmt^+}{i, t, v}{\gamma'}{s'}{(x_o, v_o)^+}{(i_T, t_T)^+}
+            }
+            {Import{\scriptsize abs}}
+            \label{rule:semantics:grfrp:opsem:step:stmt:import:absent}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+Continuing with the \aeb example from \Cref{fig:semantics:example:aeb}, we again focus on the
+transition step of the \idf{aeb} service at time $t + 1s$, as depicted in the chronogram of
+\Cref{fig:semantics:example:aeb:chronogram}. Here, we detail the handling of the three import
+statements:
+\begin{multline*}
+    (\emptygamma, \No)
+    \xRightarrow[\mathtiny{
+            \import{\idf{speed}},
+            \import{\idf{pedestrian\_l}},
+            \import{\idf{pedestrian\_r}},
+            stmt^+}
+    ]{\idf{pedestrian\_l}, \, t+1s, \, 20.}
+    (\mathtiny{\left[\begin{array}{l}
+                20./\idf{pedestrian\_l},  \\
+                20./\idf{pedestrian},     \\
+                \bot/\idf{t\_pedestrian}, \\
+                \Soft/\idf{strat}
+            \end{array}\right]}, \Soft): \\
+    ([(\idf{strat}, \Soft)], \, [(\idf{t_p}, t+3s)]).
+\end{multline*}
+%
+The first import, \idf{speed}, does not correspond to the identifier of the flow that triggered the
+computation. It follows rule \nameref{rule:semantics:grfrp:opsem:step:stmt:import:absent}, which
+requires a transition of the subsequent statements as follows:
+\begin{multline*}
+    (\emptygamma, \No)
+    \xRightarrow[\mathtiny{
+            \import{\idf{pedestrian\_l}},
+            \import{\idf{pedestrian\_r}},
+            stmt^+
+        }]{\idf{pedestrian\_l}, \, t+1s, \, 20.}
+    (\mathtiny{\left[\begin{array}{l}
+                20./\idf{pedestrian\_l},  \\
+                20./\idf{pedestrian},     \\
+                \bot/\idf{t\_pedestrian}, \\
+                \Soft/\idf{strat}
+            \end{array}\right]}, \Soft): \\
+    ([(\idf{strat}, \Soft)], \, [(\idf{t_p}, t+3s)]).
+\end{multline*}
+%
+Next, the import of \idf{pedestrian\_l}, which is the identifier of the flow that triggered the
+computation, follows rule \nameref{rule:semantics:grfrp:opsem:step:stmt:import:present}. This rule
+requires a transition of the subsequent statements as follows:
+\begin{multline*}
+    ([\mathtiny{20./\idf{pedestrian\_l}}], \No)
+    \xRightarrow[\mathtiny{
+            \import{\idf{pedestrian\_r}},
+            stmt^+
+        }]{\idf{pedestrian\_l}, \, t+1s, \, 20.}
+    (\mathtiny{\left[\begin{array}{l}
+                20./\idf{pedestrian\_l},  \\
+                20./\idf{pedestrian},     \\
+                \bot/\idf{t\_pedestrian}, \\
+                \Soft/\idf{strat}
+            \end{array}\right]}, \Soft): \\
+    ([(\idf{strat}, \Soft)], \, [(\idf{t_p}, t+3s)]).
+\end{multline*}
+%
+Finally, the import of \idf{pedestrian\_r}, which also does not correspond to the identifier of the
+flow that triggered the computation, is similar to the import of \idf{speed}. It follows rule
+\nameref{rule:semantics:grfrp:opsem:step:stmt:import:absent} and requires a transition of the
+subsequent statements as follows:
+\begin{multline*}
+    ([\mathtiny{20./\idf{pedestrian\_l}}], \No)
+    \xRightarrow[stmt^+]{\idf{pedestrian\_l}, \, t+1s, \, 20.}
+    (\mathtiny{\left[\begin{array}{l}
+                20./\idf{pedestrian\_l},  \\
+                20./\idf{pedestrian},     \\
+                \bot/\idf{t\_pedestrian}, \\
+                \Soft/\idf{strat}
+            \end{array}\right]}, \Soft): \\
+    ([(\idf{strat}, \Soft)], \, [(\idf{t_p}, t+3s)]).
+\end{multline*}
+%
+The remaining steps leading to this transition will be described in the following paragraphs.
+
+\subparagraph{Flow declarations}
+The state corresponding to a block of statements $stmt^+$ preceded by a flow declaration
+\decl{x^+}{\sigma}, as defined by \Cref{eq:semantics:grfrp:opsem:stateTy:stmt:decl}, is the
+Cartesian product of the state corresponding to the flow operation $\sigma$ and the state
+corresponding to $stmt^+$.
+%
+The initial state and timer queue of flow declarations include the initial state and timers of their
+flow operations, as defined by \Crefrange{eq:semantics:grfrp:opsem:init:stmt:decl:state}
+{eq:semantics:grfrp:opsem:init:stmt:decl:timer}.\footnote{The Cartesian product for states and
+    concatenation for timers reflect the structure of the implementation: each flow operation state is
+    represented as a distinct field in the global state; initial timers are added successively to the
+    timer queue, and since each timer has a unique identifier, they do not interfere with each other.
+    This ensures that each part of the system maintains its own state and timers independently.}
+\begin{align}
+    \stateTy{\decl{x^+}{\sigma}, stmt^+}   & = \stateTy{\sigma} \times \stateTy{stmt^+} \label{eq:semantics:grfrp:opsem:stateTy:stmt:decl}                    \\
+    \initstate{\decl{x^+}{\sigma}, stmt^+} & = (\initstate{\sigma}, \initstate{stmt^+}) \label{eq:semantics:grfrp:opsem:init:stmt:decl:state}                 \\
+    \timerTy{\decl{x^+}{\sigma}, stmt^+}   & = \List{U_1 \cup U_2 \times \Time} \label{eq:semantics:grfrp:opsem:timerTy:stmt:decl}                            \\
+    \text{with} \;                         & \timerTy{\sigma} = \List{U_1 \times \Time} \; \text{and} \; \timerTy{stmt^+} = \List{U_2 \times \Time} \nonumber \\
+    \inittimer{\decl{x^+}{\sigma}, stmt^+} & = \inittimer{\sigma} \lstconcat \inittimer{stmt^+} \label{eq:semantics:grfrp:opsem:init:stmt:decl:timer}
+\end{align}
+
+The operational semantics for flow declarations are governed by rule
+\nameref{rule:semantics:grfrp:opsem:step:stmt:decl}. This rule first evaluates the declared flow
+operation $\sigma$ at time $t$ under state $s_\sigma$, yielding a new state $s_\sigma'$, output
+values $v_\bot^+$, and timer resets $(i_\sigma, t_\sigma)^+$. The context $\gamma$ is then extended
+with the output values $(v_\bot/x)^+$ to form a new context for the subsequent statements. The timer
+resets produced by the flow operation are combined with any timer resets produced by the subsequent
+statements.
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \centering
+        \begin{mathpar}
+            % Let
+            \inferOPSEMFlowStmt
+            {
+                \sigmaOpSem{\gamma}{s_\sigma}{\sigma}{t}{s'_\sigma}{v_\bot^+}{(i_\sigma, t_\sigma)^+} \\
+                \gamma_\sigma = \gamma \ctxconcat [(v_\bot/x)^+] \\
+                \stmtOpSem{\gamma_\sigma}{s}{stmt^+}{i, t, v}{\gamma'}{s'}{(x_o, v_o)^+}{(i_T, t_T)^+}
+            }
+            {
+                \stmtOpSem{\gamma}{(s_\sigma, s)}{\decl{x^+}{\sigma}, stmt^+}{i, t, v}{\gamma'}{(s'_\sigma, s')}{(x_o, v_o)^+}{(i_\sigma, t_\sigma)^+, (i_T, t_T)^+}
+            }
+            {Let}
+            \label{rule:semantics:grfrp:opsem:step:stmt:decl}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+To illustrate this process, we continue with the transition step of the \idf{aeb} service at time
+$t + 1s$. We now detail the three declaration statements, all of which follow rule
+\nameref{rule:semantics:grfrp:opsem:step:stmt:decl}:
+\begin{multline*}
+    ([\mathtiny{20./\idf{pedestrian\_l}}], \No)
+    \xRightarrow[\mathtiny{
+            \decl{\idf{pedestrian}}{\mergeop{\idf{pedestrian\_l}}{\idf{pedestrian\_r}}},
+            \decl{\idf{t\_pedestrian}}{\dots},
+            \decl{\idf{strat}}{\dots},
+            stmt^+
+        }]{\idf{pedestrian\_l}, \, t+1s, \, 20.} \\
+    (\mathtiny{\left[\begin{array}{l}
+                20./\idf{pedestrian\_l},  \\
+                20./\idf{pedestrian},     \\
+                \bot/\idf{t\_pedestrian}, \\
+                \Soft/\idf{strat}
+            \end{array}\right]}, \Soft):
+    ([(\idf{strat}, \Soft)], \, [(\idf{t_p}, t+3s)]).
+\end{multline*}
+%
+The transitions of the flow operations themselves are detailed in the next paragraph; this example
+focuses on their outcome.
+%
+First, the declaration of \idf{pedestrian} merges the occurrences of \idf{pedestrian\_l} and
+\idf{pedestrian\_r} in the update context. Since \idf{pedestrian\_l} is present, the identifier
+\idf{pedestrian} is mapped to its value in the context for the transition of the subsequent
+statements:
+\begin{multline*}
+    (\mathtiny{\left[\begin{array}{l}
+                20./\idf{pedestrian\_l}, \\
+                20./\idf{pedestrian}
+            \end{array}\right]}, \No)
+    \xRightarrow[\mathtiny{
+            \decl{\idf{t\_pedestrian}}{\timeout{\idf{pedestrian}}{2000}},
+            \decl{\idf{strat}}{\dots},
+            stmt^+
+        }]{\idf{pedestrian\_l}, \, t+1s, \, 20.} \\
+    (\mathtiny{\left[\begin{array}{l}
+                20./\idf{pedestrian\_l},  \\
+                20./\idf{pedestrian},     \\
+                \bot/\idf{t\_pedestrian}, \\
+                \Soft/\idf{strat}
+            \end{array}\right]}, \Soft):
+    ([(\idf{strat}, \Soft)], \, [(\idf{t_p}, t+3s)]).
+\end{multline*}
+%
+Next, the declaration of \idf{t\_pedestrian}, which is the timeout of the event \idf{pedestrian},
+triggers a reset of the timer \idf{t_p} to $t+3s$. According to rule
+\nameref{rule:semantics:grfrp:opsem:step:stmt:decl}, this timer reset is produced solely by the flow
+operation within this declaration and is then combined with any timer resets produced by the next
+statements (here, there are none):
+\begin{multline*}
+    (\mathtiny{\left[\begin{array}{l}
+                20./\idf{pedestrian\_l}, \\
+                20./\idf{pedestrian},    \\
+                \bot/\idf{t\_pedestrian}
+            \end{array}\right]}, \No)
+    \xRightarrow[\mathtiny{
+            \decl{\idf{strat}}{\idf{braking\_strat}(\idf{pedestrian}, \idf{t\_pedestrian}, \idf{speed})},
+            stmt^+
+        }]{\idf{pedestrian\_l}, \, t+1s, \, 20.} \\
+    (\mathtiny{\left[\begin{array}{l}
+                20./\idf{pedestrian\_l},  \\
+                20./\idf{pedestrian},     \\
+                \bot/\idf{t\_pedestrian}, \\
+                \Soft/\idf{strat}
+            \end{array}\right]}, \Soft):
+    ([(\idf{strat}, \Soft)], \, []).
+\end{multline*}
+%
+Finally, the declaration of \idf{strat} results from the application of the component
+\idf{braking\_strat} with the inputs \idf{pedestrian}, \idf{t\_pedestrian}, and \idf{speed}, leading
+to the \Soft braking strategy. The state value transitions from \No to \Soft during this component
+application, but this state change is local to this declaration and is not reflected in the
+subsequent statements:
+\begin{equation*}
+    (\mathtiny{\left[\begin{array}{l}
+                20./\idf{pedestrian\_l},  \\
+                20./\idf{pedestrian},     \\
+                \bot/\idf{t\_pedestrian}, \\
+                \Soft/\idf{strat}
+            \end{array}\right]}, ())
+    \xRightarrow[stmt^+]{\idf{pedestrian\_l}, \, t+1s, \, 20.}
+    (\mathtiny{\left[\begin{array}{l}
+                20./\idf{pedestrian\_l},  \\
+                20./\idf{pedestrian},     \\
+                \bot/\idf{t\_pedestrian}, \\
+                \Soft/\idf{strat}
+            \end{array}\right]}, ()):
+    ([(\idf{strat}, \Soft)], \, []).
+\end{equation*}
+%
+The remaining steps leading to this transition will be described in the following paragraphs.
+
+\subparagraph{Exports}
+An export statement contributes nothing to the overall state of the block of statements, nor to the
+initial timer queue, as defined by \Crefrange{eq:semantics:grfrp:opsem:stateTy:stmt:export}
+{eq:semantics:grfrp:opsem:init:stmt:export:timer}.
+\begin{align}
+    \stateTy{\export{x}, stmt^+}   & = \stateTy{stmt^+} \label{eq:semantics:grfrp:opsem:stateTy:stmt:export}      \\
+    \initstate{\export{x}, stmt^+} & = \initstate{stmt^+} \label{eq:semantics:grfrp:opsem:init:stmt:export:state} \\
+    \timerTy{\export{x}, stmt^+}   & = \timerTy{stmt^+} \label{eq:semantics:grfrp:opsem:timerTy:stmt:export}      \\
+    \inittimer{\export{x}, stmt^+} & = \inittimer{stmt^+} \label{eq:semantics:grfrp:opsem:init:stmt:export:timer}
+\end{align}
+
+If the value $\gamma[x] = v$ is present, rule
+\nameref{rule:semantics:grfrp:opsem:step:stmt:export:value} appends $(x, v)$ to the output list.
+If $\gamma[x] = \bot$, rule \nameref{rule:semantics:grfrp:opsem:step:stmt:export:bottom} simply
+skips the export and proceeds. Therefore, only flow changes/occurrences are exported to the
+communication bus.
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            % Exportval
+            \inferOPSEMFlowStmt
+            {
+                \gamma[x] = v \\
+                \stmtOpSem{\gamma}{s}{stmt^+}{i, t, v}{\gamma'}{s'}{(x_o, v_o)^+}{(i_T, t_T)^+}
+            }
+            {
+                \stmtOpSem{\gamma}{s}{\export{x}, stmt^+}{i, t, v}{\gamma'}{s'}{(x_o, v_o)^+, (x, v)}{(i_T, t_T)^+}
+            }
+            {Export{\scriptsize val}}
+            \label{rule:semantics:grfrp:opsem:step:stmt:export:value}
+
+            % ExportBottom
+            \inferOPSEMFlowStmt
+            {
+                \gamma[x] = \bot \\
+                \stmtOpSem{\gamma}{s}{stmt^+}{i, t, v}{\gamma'}{s'}{(x_o, v_o)^+}{(i_T, t_T)^+}
+            }
+            {
+                \stmtOpSem{\gamma}{s}{\export{x}, stmt^+}{i, t, v}{\gamma'}{s'}{(x_o, v_o)^+}{(i_T, t_T)^+}
+            }
+            {Export{\scriptsize bot}}
+            \label{rule:semantics:grfrp:opsem:step:stmt:export:bottom}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+We continue with the transition step of the \idf{aeb} service at time $t + 1s$, detailing the
+transition of the export statement:
+\begin{equation*}
+    (\mathtiny{\left[\begin{array}{l}
+                20./\idf{pedestrian\_l},  \\
+                20./\idf{pedestrian},     \\
+                \bot/\idf{t\_pedestrian}, \\
+                \Soft/\idf{strat}
+            \end{array}\right]}, ())
+    \xRightarrow[\export{\idf{start}}]{\idf{pedestrian\_l}, \, t+1s, \, 20.}
+    (\mathtiny{\left[\begin{array}{l}
+                20./\idf{pedestrian\_l},  \\
+                20./\idf{pedestrian},     \\
+                \bot/\idf{t\_pedestrian}, \\
+                \Soft/\idf{strat}
+            \end{array}\right]}, ()):
+    ([(\idf{strat}, \Soft)], \, []).
+\end{equation*}
+%
+Because \idf{strat} is present in the update context, it follows rule
+\nameref{rule:semantics:grfrp:opsem:step:stmt:export:value}, which is responsible for the output
+\idf{strat}. This output is then removed from the transition of the subsequent statements
+(the skip statement \skp in this case):
+\begin{equation*}
+    (\mathtiny{\left[\begin{array}{l}
+                20./\idf{pedestrian\_l},  \\
+                20./\idf{pedestrian},     \\
+                \bot/\idf{t\_pedestrian}, \\
+                \Soft/\idf{strat}
+            \end{array}\right]}, ())
+    \xRightarrow[\skp]{\idf{pedestrian\_l}, \, t+1s, \, 20.}
+    (\mathtiny{\left[\begin{array}{l}
+                20./\idf{pedestrian\_l},  \\
+                20./\idf{pedestrian},     \\
+                \bot/\idf{t\_pedestrian}, \\
+                \Soft/\idf{strat}
+            \end{array}\right]}, ()):
+    ([], \, []).
+\end{equation*}
+%
+The remaining step is described in the following paragraph.
+
+\subparagraph{Skip}
+Rule \nameref{rule:semantics:grfrp:opsem:step:stmt:skip} and
+\Cref{eq:semantics:grfrp:opsem:init:stmt:skip} capture the base case where no statements remain. It
+leaves an empty state, preserves the current context, and returns no outputs nor timer resets.
+%
+\begin{align}
+    \stateTy{\skp}   & = \{()\}                                                     &
+    \initstate{\skp} & = ()                                                         &
+    \timerTy{\skp}   & = \List{\emptyset \times \Time}                              &
+    \inittimer{\skp} & = \emptylist \label{eq:semantics:grfrp:opsem:init:stmt:skip}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.9\textwidth}
+        \centering
+        \begin{mathpar}
+            % Skip
+            \inferOPSEMFlowStmt
+            { }
+            { \stmtOpSem{\gamma}{()}{\skp}{i, t, v}{\gamma}{()}{\,}{\,} }
+            {Skip}
+            \label{rule:semantics:grfrp:opsem:step:stmt:skip}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+For instance, the rule \nameref{rule:semantics:grfrp:opsem:step:stmt:skip} finalizes the transition
+step of the \idf{aeb} service at time $t + 1s$:
+\begin{equation*}
+    (\mathtiny{\left[\begin{array}{l}
+                20./\idf{pedestrian\_l},  \\
+                20./\idf{pedestrian},     \\
+                \bot/\idf{t\_pedestrian}, \\
+                \Soft/\idf{strat}
+            \end{array}\right]}, ())
+    \xRightarrow[\skp]{\idf{pedestrian\_l}, \, t+1s, \, 20.}
+    (\mathtiny{\left[\begin{array}{l}
+                20./\idf{pedestrian\_l},  \\
+                20./\idf{pedestrian},     \\
+                \bot/\idf{t\_pedestrian}, \\
+                \Soft/\idf{strat}
+            \end{array}\right]}, ()):
+    ([], \, []).
+\end{equation*}
+
+\paragraph{Actualize flow operation}
+
+Flow operations are designed to react to event occurrences or signal updates, depending on the
+operation, to create the appropriate actualization. Some operations, such as \kwf{persist}, need
+to track previous values to detect signal changes and are therefore stateful. Additionally, some
+operations, like \kwf{timeout}, are associated with a timer that they reset when necessary.
+
+The actualization of an operation $\sigma$ in the context $\gamma$ is written as
+\begin{equation*}
+    \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{v_\bot^+}{(i_T, t_T)^+}.
+\end{equation*}
+In this notation, $s$ and $s'$ represent the current and next states, $[v_\bot^+]$ are the
+output values, and $[(i_T, t_T)^+]$ are the induced timer resets.
+
+The semantics of the output values depends on the type of flow $\sigma$: if it is a signal, $v_\bot$
+represents a signal update ($\bot$ if unchanged and $v$ if changed); if it is an event, $v_\bot$
+represents an event occurrence ($\bot$ if absent and $v$ if present).
+%
+To ensure that signals always have a well-defined value, even before their computations are
+triggered, we choose to interpret the first output value as an update to an initial default value
+$v_d$ (that is unique and predefined for each type).
+
+\subparagraph{Identifiers}
+
+As described in rule \nameref{rule:semantics:grfrp:opsem:step:op:ident}, an identifier ($x$) returns the value
+stored in the update context, independently of the flow kind (signal or event). It then
+has an empty initial state and timer queue, as defined by
+\Cref{eq:semantics:grfrp:opsem:init:op:ident}.
+
+\begin{align}
+    \stateTy{x} & = \{()\}                        & \initstate{x} & = ()                                                         &
+    \timerTy{x} & = \List{\emptyset \times \Time} & \inittimer{x} & = \emptylist  \label{eq:semantics:grfrp:opsem:init:op:ident}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Ident
+            \inferOPSEMFlow
+            { }
+            { \sigmaOpSem{\gamma}{()}{x}{t}{()}{\gamma[x]}{\,} }
+            {ID}
+            \label{rule:semantics:grfrp:opsem:step:op:ident}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subparagraph{Component application}
+
+The operational semantics of \GRSync, detailed in \Cref{sec:semantics:grsync:opsem}, models the
+execution of components as state machines: it has an initial state and a step function that
+produces, from inputs and the current state, outputs and the next state.
+
+The component application $f(\sigma^+)$ creates a tuple of signals and events, determined by the
+specification of the component $f$ in \G. The state machine associated with $f$ by the operational
+semantics of \GRSync performs a step only when one of its input signals has changed or one of its
+input events has occurred, as depicted in rule \nameref{rule:semantics:grfrp:opsem:step:op:app:value}.
+%
+The service delivers to the component state machine the current values of all inputs, denoted by
+$v_i^+$ and created using the function \smf{into\_val} from \Cref{rule:semantics:grfrp:opsem:aux:%
+    intoVal:signal,rule:semantics:grfrp:opsem:aux:intoVal:event}. These inputs include optional
+values for events and the most recent values for signals. If a signal has not changed, the service
+uses the previous input values stored in $(v_i^\explast)^+$, initialized to $v_d^+$ by \Cref{eq:%
+    semantics:grfrp:opsem:init:op:app:state}. The component state machine produces output values
+$v_o^+$, which are then filtered to retain only signal changes and event occurrences, represented as
+$v_{o\bot}^+$ and created using the function \smf{into\_bot} defined in \Cref{rule:semantics:grfrp:%
+    opsem:aux:intoBot:signal,rule:semantics:grfrp:opsem:aux:intoBot:event}. To distinguish signal
+changes, the service stores the previous output values in $(v_o^\explast)^+$, also initialized to
+$v_d^+$ by \Cref{eq:semantics:grfrp:opsem:init:op:app:state}.
+%
+When all events and signals return $\bot$, indicating that they are absent or unchanged, the rule
+\nameref{rule:semantics:grfrp:opsem:step:op:app:propag} is applied to propagate the flows states.
+
+\begin{align}
+    \stateTy{f(\sigma^+)}   & = \stateTy{f} \times \Pi_{x_i} \Val \times \Pi_{x_o} \Val \times \Pi_{\sigma} \stateTy{\sigma} \label{eq:semantics:grfrp:opsem:stateTy:op:app} \\
+    \text{with} \;          & \G[f] = \component{f}{x_i^+}{x_o^+}{\dots}{\dots} \nonumber                                                                                    \\
+    \initstate{f(\sigma^+)} & = (\initsync{f}, v_d^+, v_d^+, (\initstate{\sigma})^+) \label{eq:semantics:grfrp:opsem:init:op:app:state}                                      \\
+    \timerTy{f(\sigma^+)}   & = \List{(\bigcup U^+) \times \Time} \label{eq:semantics:grfrp:opsem:timerTy:op:app}                                                            \\
+    \text{with} \;          & \left(\timerTy{\sigma} = \List{U \times \Time}\right)^+ \nonumber                                                                              \\
+    \inittimer{f(\sigma^+)} & = \bigLstconcat (\inittimer{\sigma})^+ \label{eq:semantics:grfrp:opsem:init:op:app:timer}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Component application
+            \inferOPSEMFlow
+            {
+                \G[f] = \component{f}{x_i^+}{x_o^+}{eq^+}{x_m^+ = c^+} \\\\
+                \left(\sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{v_{i\bot}}{(i_\sigma, t_\sigma)^+}\right)^+ \\
+                \exists v_{i\bot} \neq \bot \\\\
+                (v_i = \intoVal{\tyCtx[x_i]}{v_i^\explast}{v_{i\bot}})^+ \\
+                (v_{o\bot} = \intoBot{\tyCtx[x_o]}{v_o^\explast}{v_o})^+ \\\\
+                \compOpsem{s_f}{v_i^+}{f}{s'_f}{v_o^+}
+            }
+            { \sigmaOpSem{\gamma}{(s_f, (v_i^\explast)^+, (v_o^\explast)^+, s^+)}{f(\sigma^+)}{t}
+                {(s'_f, v_i^+, v_o^+, s^{\prime+})}{v_{o\bot}^+}{((i_\sigma, t_\sigma)^+)^+} }
+            {App{\scriptsize val}}
+            \label{rule:semantics:grfrp:opsem:step:op:app:value}
+
+            \inferOPSEMFlow
+            { \left(\sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{\bot}{(i_\sigma, t_\sigma)^+}\right)^+ }
+            { \sigmaOpSem{\gamma}{(s_f, (v_i^\explast)^+, (v_o^\explast)^+, s^+)}{f(\sigma^+)}{t}
+                {(s_f, (v_i^\explast)^+, (v_o^\explast)^+, s^{\prime+})}{\bot^+}
+                {((i_\sigma, t_\sigma)^+)^+} }
+            {App{\scriptsize propag}}
+            \label{rule:semantics:grfrp:opsem:step:op:app:propag}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\begin{align}
+    \intoVal{ty}{v^\explast}{v_\bot} & = \ttf{match} \, v_\bot \, \{ \, v \rightarrow v, \, \bot \rightarrow v^\explast \, \} \label{rule:semantics:grfrp:opsem:aux:intoVal:signal}  \\
+    \intoVal{\mayB{ty}}{\_}{v_\bot}  & = \ttf{match} \, v_\bot \, \{ \, v \rightarrow \some{v}, \, \bot \rightarrow \none \, \} \label{rule:semantics:grfrp:opsem:aux:intoVal:event} \\
+    \intoBot{ty}{v^\explast}{v}      & = \text{if} \, v \neq v^\explast \, \text{then} \, v \, \text{else} \, \bot \label{rule:semantics:grfrp:opsem:aux:intoBot:signal}             \\
+    \intoBot{\mayB{ty}}{\_}{v}       & = \ttf{match} \, v \, \{ \, \some{v'} \rightarrow v' \, \none \rightarrow \bot \, \} \label{rule:semantics:grfrp:opsem:aux:intoBot:event}
+\end{align}
+
+\subparagraph{Sample}
+
+The operation \sample{\sigma}{T} creates an event that emits the most recent value of the flow
+$\sigma$ every $T$ seconds, provided that $\sigma$ has occurred. This gives control over the
+timing of the event, dictating its occurrence according to the specified period. In the semantics,
+the occurrence of the timer is verified using the update context: if $\gamma[i_T] = ()$, then the
+timer associated with \sample{\sigma}{T} has occurred; if $\gamma[i_T] = \bot$, then its timer is
+absent.
+%
+To achieve this, the operation needs to store the previous value of $\sigma$ in its state,
+represented as a bottom value $v_\bot \in \ValBot$ initialized to $\bot$ in
+\Cref{eq:semantics:grfrp:opsem:init:op:sample:state}.
+%
+If $\sigma$ has not occurred since the last period, $v_\bot$ is set to $\bot$. When $\sigma$ has a
+value, the rule \nameref{rule:semantics:grfrp:opsem:step:op:sample:value} is applied to update the memory $v_\bot$ with the
+new value $v$. If $\sigma$ returns $\bot$, indicating that the event is absent, the rule
+\nameref{rule:semantics:grfrp:opsem:step:op:sample:propag} propagates the new state $s'$ of $\sigma$. If the
+propagation is triggered by a timer $i_T$ associated with the \kwf{sample} operation, the rule
+\nameref{rule:semantics:grfrp:opsem:step:op:sample:timer} states that the operation evaluates to the stored
+value $v$, the memory is then reset to $\bot$, and the corresponding timer is reset.
+%
+In order to initiate this timer, it is added to the initial timer queue by
+\Cref{eq:semantics:grfrp:opsem:init:op:sample:timer}.
+
+\begin{align}
+    \stateTy{\sample{\sigma}{T}}   & = \ValBot \times \stateTy{\sigma} \label{eq:semantics:grfrp:opsem:stateTy:op:sample}      \\
+    \initstate{\sample{\sigma}{T}} & = (\bot, \initstate{\sigma}) \label{eq:semantics:grfrp:opsem:init:op:sample:state}        \\
+    \timerTy{\sample{\sigma}{T}}   & = \List{(\{i_T\} \cup U) \times \Time} \label{eq:semantics:grfrp:opsem:timerTy:op:sample} \\
+    \text{with} \;                 & \timerTy{\sigma} = \List{U \times \Time} \nonumber                                        \\
+    \inittimer{\sample{\sigma}{T}} & = (i_T, T) :: \inittimer{\sigma} \label{eq:semantics:grfrp:opsem:init:op:sample:timer}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Sample
+            \inferOPSEMFlow
+            {\sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{v}{(i_\sigma, t_\sigma)^+}}
+            {\sigmaOpSem{\gamma}{(v_\bot, s)}{\sample{\sigma}{T}}{t}{(v, s')}{\bot}{(i_\sigma, t_\sigma)^+}}
+            {Samp{\scriptsize val}}
+            \label{rule:semantics:grfrp:opsem:step:op:sample:value}
+
+            \inferOPSEMFlow
+            {
+                \gamma[i_T] = \bot \\
+                \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{\bot}{(i_\sigma, t_\sigma)^+}
+            }
+            {\sigmaOpSem{\gamma}{(v_\bot, s)}{\sample{\sigma}{T}}{t}{(v_\bot, s')}{\bot}{(i_\sigma, t_\sigma)^+}}
+            {Samp{\scriptsize propag}}
+            \label{rule:semantics:grfrp:opsem:step:op:sample:propag}
+
+            \inferOPSEMFlow
+            {
+                \gamma[i_T] = () \\
+                \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{\bot}{(i_\sigma, t_\sigma)^+}
+            }
+            {\sigmaOpSem{\gamma}{(v_\bot, s)}{\sample{\sigma}{T}}{t}{(\bot, s')}{v_\bot}{(i_T, t + T), (i_\sigma, t_\sigma)^+}}
+            {Samp{\scriptsize timer}}
+            \label{rule:semantics:grfrp:opsem:step:op:sample:timer}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subparagraph{Scan}
+
+The flow operation \scan{\sigma}{T} generates a signal that only includes the value updates from
+$\sigma$ at each period $T$. It stores the most recent value update of $\sigma$ named
+$v_\bot \in \ValBot$, as well as the last value of \scan{\sigma}{T} named $v^\explast \in \Val$,
+respectively initialized to $\bot$ and a default value $v_d$ in
+\Cref{eq:semantics:grfrp:opsem:init:op:scan:state}.
+%
+The different possible steps represent all the combinations of three parameters: the presence or
+absence of the associated timer $i_T$, the possible update of the input signal $\sigma$, and
+if the update of $\sigma$ is different from $v^\explast$ (\ie if it represents an update for
+\scan{\sigma}{T}).
+%
+When the timer $i_T$ associated with the \kwf{scan} operation is absent and $\sigma$ has a value
+different from $v^\explast$, the rule \nameref{rule:semantics:grfrp:opsem:step:op:scan:value} is
+applied to update the memory $v_\bot$ with the new value. If, however, the value of $\sigma$ is
+found to be equal to $v^\explast$, the rule \nameref{rule:semantics:grfrp:opsem:step:op:scan:drop}
+resets $v_\bot$ to $\bot$, indicating that no update has been made to the signal \scan{\sigma}{T}.
+If $i_T$ is absent and $\sigma$ returns $\bot$, indicating that the signal is unchanged, the rule
+\nameref{rule:semantics:grfrp:opsem:step:op:scan:propag} propagates the new state $s'$ of $\sigma$.
+If the propagation is triggered by $i_T$ and caused the update of $\sigma$ to a value $v$ different
+from $v^\explast$, the rule \nameref{rule:semantics:grfrp:opsem:step:op:scan:valuetimer} ensures
+that \scan{\sigma}{T} is updated to $v$. In this case, the memory is reset to $\bot$, the last value
+is updated to $v$, and the corresponding timer is reset. If the update of $\sigma$ is equal to
+$v^\explast$ then it is an update for \scan{\sigma}{T}, which returns $\bot$, resets its memory to
+$\bot$ and the corresponding timer, as defined by the rule
+\nameref{rule:semantics:grfrp:opsem:step:op:scan:droptimer}. If $i_T$ is present, $\sigma$ returns
+$\bot$, and the stored value is $v$, the rule
+\nameref{rule:semantics:grfrp:opsem:step:op:scan:timer} specifies that the operation evaluates to
+$v$, the memory is reset to $\bot$, the last value is updated to $v$, and the corresponding timer is
+reset. If, instead, the stored value is $\bot$, the rule
+\nameref{rule:semantics:grfrp:opsem:step:op:scan:bot} indicates that the operation evaluates to
+$\bot$. Here, the memory is reset to $\bot$, the last value remains unchanged, and the corresponding
+timer is reset.
+%
+Like \kwf{sample}, the timer is added to the initial timer queue by \Cref{eq:semantics:grfrp:opsem:init:op:scan:timer}.
+
+\begin{align}
+    \stateTy{\scan{\sigma}{T}}   & = \ValBot \times \Val \times \stateTy{\sigma} \label{eq:semantics:grfrp:opsem:stateTy:op:scan} \\
+    \initstate{\scan{\sigma}{T}} & = (\bot, v_d, \initstate{\sigma}) \label{eq:semantics:grfrp:opsem:init:op:scan:state}          \\
+    \timerTy{\scan{\sigma}{T}}   & = \List{(\{i_T\} \cup U) \times \Time} \label{eq:semantics:grfrp:opsem:timerTy:op:scan}        \\
+    \text{with} \;               & \timerTy{\sigma} = \List{U \times \Time} \nonumber                                             \\
+    \inittimer{\scan{\sigma}{T}} & = (i_T, T) :: \inittimer{\sigma} \label{eq:semantics:grfrp:opsem:init:op:scan:timer}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Scan
+            \inferOPSEMFlow
+            {
+                \gamma[i_T] = \bot \\
+                \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{v}{(i_\sigma, t_\sigma)^+} \\
+                v \neq v^\explast
+            }
+            {\sigmaOpSem{\gamma}{(v_\bot, v^\explast, s)}{\scan{\sigma}{T}}{t}{(v, v^\explast, s')}{\bot}{(i_\sigma, t_\sigma)^+}}
+            {Scan{\scriptsize val}}
+            \label{rule:semantics:grfrp:opsem:step:op:scan:value}
+
+            \inferOPSEMFlow
+            {
+                \gamma[i_T] = \bot \\
+                \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{v}{(i_\sigma, t_\sigma)^+} \\
+                v = v^\explast
+            }
+            {\sigmaOpSem{\gamma}{(v_\bot, v^\explast, s)}{\scan{\sigma}{T}}{t}{(\bot, v^\explast, s')}{\bot}{(i_\sigma, t_\sigma)^+}}
+            {Scan{\scriptsize drop}}
+            \label{rule:semantics:grfrp:opsem:step:op:scan:drop}
+
+            \inferOPSEMFlow
+            {
+                \gamma[i_T] = \bot \\
+                \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{\bot}{(i_\sigma, t_\sigma)^+}
+            }
+            {\sigmaOpSem{\gamma}{(v_\bot, v^\explast, s)}{\scan{\sigma}{T}}{t}{(v_\bot, v^\explast, s')}{\bot}{(i_\sigma, t_\sigma)^+}}
+            {Scan{\scriptsize propag}}
+            \label{rule:semantics:grfrp:opsem:step:op:scan:propag}
+
+            \inferOPSEMFlow
+            {
+                \gamma[i_T] = () \\
+                \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{v}{(i_\sigma, t_\sigma)^+} \\
+                v \neq v^\explast
+            }
+            {\sigmaOpSem{\gamma}{(v_\bot, v^\explast, s)}{\scan{\sigma}{T}}{t}{(\bot, v, s')}{v}{(i_T, t + T), (i_\sigma, t_\sigma)^+}}
+            {Scan{\scriptsize valTimer}}
+            \label{rule:semantics:grfrp:opsem:step:op:scan:valuetimer}
+
+            \inferOPSEMFlow
+            {
+                \gamma[i_T] = () \\
+                \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{v}{(i_\sigma, t_\sigma)^+} \\
+                v = v^\explast
+            }
+            {\sigmaOpSem{\gamma}{(v_\bot, v^\explast, s)}{\scan{\sigma}{T}}{t}{(\bot, v^\explast, s')}{\bot}{(i_T, t + T), (i_\sigma, t_\sigma)^+}}
+            {Scan{\scriptsize dropTimer}}
+            \label{rule:semantics:grfrp:opsem:step:op:scan:droptimer}
+
+            \inferOPSEMFlow
+            {
+                \gamma[i_T] = () \\
+                \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{\bot}{(i_\sigma, t_\sigma)^+}
+            }
+            {\sigmaOpSem{\gamma}{(v, v^\explast, s)}{\scan{\sigma}{T}}{t}{(\bot, v, s')}{v}{(i_T, t + T), (i_\sigma, t_\sigma)^+}}
+            {Scan{\scriptsize timer}}
+            \label{rule:semantics:grfrp:opsem:step:op:scan:timer}
+
+            \inferOPSEMFlow
+            {
+                \gamma[i_T] = () \\
+                \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{\bot}{(i_\sigma, t_\sigma)^+}
+            }
+            {\sigmaOpSem{\gamma}{(\bot, v^\explast, s)}{\scan{\sigma}{T}}{t}{(\bot, v^\explast, s')}{\bot}{(i_T, t + T), (i_\sigma, t_\sigma)^+}}
+            {Scan{\scriptsize bot}}
+            \label{rule:semantics:grfrp:opsem:step:op:scan:bot}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subparagraph{Timeout}
+
+The flow operation \timeout{\sigma}{T} creates an event with unit values, triggered when the event
+$\sigma$ has not emitted a value for more than $T$ seconds. When $\sigma$ has a value, the rule
+\nameref{rule:semantics:grfrp:opsem:step:op:timeout:reset} is applied to reset the corresponding timer.
+If $\sigma$ returns $\bot$, indicating the event is absent, the rule
+\nameref{rule:semantics:grfrp:opsem:step:op:timeout:propag} propagates the new state $s'$ of $\sigma$.
+If the propagation is triggered by a timer $i_T$ associated with the \kwf{timeout} operation, the
+rule \nameref{rule:semantics:grfrp:opsem:step:op:timeout:timer} specifies that the operation evaluates
+to $()$, and the corresponding timer is reset. Like \kwf{sample} and \kwf{scan}, the timer is
+added to the initial timer queue by \Cref{eq:semantics:grfrp:opsem:init:op:timeout:timer}.
+
+\begin{align}
+    \stateTy{\timeout{\sigma}{T}}   & = \stateTy{\sigma} \label{eq:semantics:grfrp:opsem:stateTy:op:timeout}                     \\
+    \initstate{\timeout{\sigma}{T}} & = \initstate{\sigma} \label{eq:semantics:grfrp:opsem:init:op:timeout:state}                \\
+    \timerTy{\timeout{\sigma}{T}}   & = \List{(\{i_T\} \cup U) \times \Time} \label{eq:semantics:grfrp:opsem:timerTy:op:timeout} \\
+    \text{with} \;                  & \timerTy{\sigma} = \List{U \times \Time} \nonumber                                         \\
+    \inittimer{\timeout{\sigma}{T}} & = (i_T, T) :: \inittimer{\sigma} \label{eq:semantics:grfrp:opsem:init:op:timeout:timer}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Timeout
+            \inferOPSEMFlow
+            { \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{v}{(i_\sigma, t_\sigma)^+} }
+            { \sigmaOpSem{\gamma}{s}{\timeout{\sigma}{T}}{t}{s'}{\bot}{(i_T, t + T), (i_\sigma, t_\sigma)^+} }
+            {TOut{\scriptsize reset}}
+            \label{rule:semantics:grfrp:opsem:step:op:timeout:reset}
+
+            \inferOPSEMFlow
+            {
+                \gamma[i_T] = \bot \\
+                \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{\bot}{(i_\sigma, t_\sigma)^+}
+            }
+            { \sigmaOpSem{\gamma}{s}{\timeout{\sigma}{T}}{t}{s'}{\bot}{(i_\sigma, t_\sigma)^+} }
+            {TOut{\scriptsize propag}}
+            \label{rule:semantics:grfrp:opsem:step:op:timeout:propag}
+
+            \inferOPSEMFlow
+            {
+                \gamma[i_T] = () \\
+                \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{\bot}{(i_\sigma, t_\sigma)^+}
+            }
+            { \sigmaOpSem{\gamma}{s}{\timeout{\sigma}{T}}{t}{s'}{()}{(i_T, t + T), (i_\sigma, t_\sigma)^+} }
+            {TOut{\scriptsize timer}}
+            \label{rule:semantics:grfrp:opsem:step:op:timeout:timer}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subparagraph{Throttle}
+
+The flow operation \throttle{\sigma}{\Delta} creates a signal that retains only the values from
+$\sigma$ whose difference from the previous value exceeds $\Delta$. To propagate updates for
+\throttle{\sigma}{\Delta}, its last value, denoted by $v^\explast \in \Val$, must be stored and
+initialized to a default value $v_d$, as defined in
+\Cref{eq:semantics:grfrp:opsem:stateTy:op:throttle,eq:semantics:grfrp:opsem:init:op:throttle:state}.
+When $\sigma$ returns a value such that the difference from $v^\explast$ exceeds $\Delta$, the rule
+\nameref{rule:semantics:grfrp:opsem:step:op:throttle:value} is applied, returning this new value as
+output and storing it as the updated $v^\explast$. Conversely, if the difference from $v^\explast$
+is smaller than $\Delta$, the rule \nameref{rule:semantics:grfrp:opsem:step:op:throttle:drop} is
+applied, dropping the value, returning $\bot$, and leaving $v^\explast$ unchanged. Finally, if
+$\sigma$ returns $\bot$, indicating that the signal remains unchanged, the rule
+\nameref{rule:semantics:grfrp:opsem:step:op:throttle:propag} is applied to propagate only the
+updated state $s'$ of $\sigma$.
+
+\begin{align}
+    \stateTy{\throttle{\sigma}{\Delta}}   & = \Val \times \stateTy{\sigma} \label{eq:semantics:grfrp:opsem:stateTy:op:throttle} \\
+    \initstate{\throttle{\sigma}{\Delta}} & = (v_d, \initstate{\sigma}) \label{eq:semantics:grfrp:opsem:init:op:throttle:state} \\
+    \timerTy{\throttle{\sigma}{\Delta}}   & = \timerTy{\sigma} \label{eq:semantics:grfrp:opsem:timerTy:op:throttle}             \\
+    \inittimer{\throttle{\sigma}{\Delta}} & = \inittimer{\sigma} \label{eq:semantics:grfrp:opsem:init:op:throttle:timer}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Throttle
+            \inferOPSEMFlow
+            {
+                \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{v}{(i_\sigma, t_\sigma)^+} \\
+                |v - v^\explast| \ge \Delta
+            }
+            { \sigmaOpSem{\gamma}{(v^\explast, s)}{\throttle{\sigma}{\Delta}}{t}{(v, s')}{v}{(i_\sigma, t_\sigma)^+} }
+            {Thrt{\scriptsize val}}
+            \label{rule:semantics:grfrp:opsem:step:op:throttle:value}
+
+            \inferOPSEMFlow
+            {
+                \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{v}{(i_\sigma, t_\sigma)^+} \\
+                |v - v^\explast| < \Delta
+            }
+            { \sigmaOpSem{\gamma}{(v^\explast, s)}{\throttle{\sigma}{\Delta}}{t}{(v^\explast, s')}{\bot}{(i_\sigma, t_\sigma)^+} }
+            {Thrt{\scriptsize drop}}
+            \label{rule:semantics:grfrp:opsem:step:op:throttle:drop}
+
+            \inferOPSEMFlow
+            { \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{\bot}{(i_\sigma, t_\sigma)^+} }
+            { \sigmaOpSem{\gamma}{(v^\explast, s)}{\throttle{\sigma}{\Delta}}{t}{(v^\explast, s')}{\bot}{(i_\sigma, t_\sigma)^+} }
+            {Thrt{\scriptsize propag}}
+            \label{rule:semantics:grfrp:opsem:step:op:throttle:propag}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subparagraph{Onchange}
+
+The flow operation \onchange{\sigma} derives an event from a signal. The values of the output event
+are identical to those of the input signal, as specified by the rule
+\nameref{rule:semantics:grfrp:opsem:step:op:onchange}. However, the interpretation and behavior of
+these values differ: for the output event, they represent event occurrences, whereas for the input
+signal, they represent signal updates. The initial state and timer queue of \onchange{\sigma} are
+inherited from $\sigma$, as defined in \Crefrange{eq:semantics:grfrp:opsem:init:op:onchange:state}
+{eq:semantics:grfrp:opsem:init:op:onchange:timer}.
+
+\begin{align}
+    \stateTy{\onchange{\sigma}}   & = \stateTy{\sigma} \label{eq:semantics:grfrp:opsem:stateTy:op:onchange}      \\
+    \initstate{\onchange{\sigma}} & = \initstate{\sigma} \label{eq:semantics:grfrp:opsem:init:op:onchange:state} \\
+    \timerTy{\onchange{\sigma}}   & = \timerTy{\sigma} \label{eq:semantics:grfrp:opsem:timerTy:op:onchange}      \\
+    \inittimer{\onchange{\sigma}} & = \inittimer{\sigma} \label{eq:semantics:grfrp:opsem:init:op:onchange:timer}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Onchange
+            \inferOPSEMFlow
+            { \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{v_\bot}{(i_\sigma, t_\sigma)^+} }
+            { \sigmaOpSem{\gamma}{s}{\onchange{\sigma}}{t}{s'}{v_\bot}{(i_\sigma, t_\sigma)^+} }
+            {OChg}
+            \label{rule:semantics:grfrp:opsem:step:op:onchange}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subparagraph{Persist}
+
+The flow operation \persist{\sigma} mirrors the \kwf{on\_change} operation, but in the opposite
+direction: it derives a signal from an event. To do so, it filters out redundant values, as signal
+output values must represent meaningful updates. The last value of the created signal, denoted by
+$v^\explast \in \Val$, is stored and initialized to a default value $v_d$, as defined in
+\Cref{eq:semantics:grfrp:opsem:init:op:persist:state}. This filtering behavior is governed by the
+rule \nameref{rule:semantics:grfrp:opsem:step:op:persist:drop}, which applies when the input event
+$\sigma$ emits a value equal to $v^\explast$. In such cases, the value is dropped, and
+\persist{\sigma} returns $\bot$, ensuring that only meaningful updates are retained. In all other
+cases, the values of $\sigma$ are directly passed to \persist{\sigma}, as described by the rules
+\nameref{rule:semantics:grfrp:opsem:step:op:persist:value} and
+\nameref{rule:semantics:grfrp:opsem:step:op:persist:propag}.
+
+\begin{align}
+    \stateTy{\persist{\sigma}}   & = \Val \times \stateTy{\sigma} \label{eq:semantics:grfrp:opsem:stateTy:op:persist} \\
+    \initstate{\persist{\sigma}} & = (v_d, \initstate{\sigma}) \label{eq:semantics:grfrp:opsem:init:op:persist:state} \\
+    \timerTy{\persist{\sigma}}   & = \timerTy{\sigma} \label{eq:semantics:grfrp:opsem:timerTy:op:persist}             \\
+    \inittimer{\persist{\sigma}} & = \inittimer{\sigma} \label{eq:semantics:grfrp:opsem:init:op:persist:timer}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Persist
+            \inferOPSEMFlow
+            {
+                \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{v}{(i_\sigma, t_\sigma)^+} \\
+                v = v^\explast
+            }
+            { \sigmaOpSem{\gamma}{(v^\explast, s)}{\persist{\sigma}}{t}{(v^\explast, s')}{\bot}{(i_\sigma, t_\sigma)^+} }
+            {Prst{\scriptsize drop}}
+            \label{rule:semantics:grfrp:opsem:step:op:persist:drop}
+
+            \inferOPSEMFlow
+            {
+                \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{v}{(i_\sigma, t_\sigma)^+} \\
+                v \neq v^\explast
+            }
+            { \sigmaOpSem{\gamma}{(v^\explast, s)}{\persist{\sigma}}{t}{(v, s')}{v}{(i_\sigma, t_\sigma)^+} }
+            {Prst{\scriptsize val}}
+            \label{rule:semantics:grfrp:opsem:step:op:persist:value}
+
+            \inferOPSEMFlow
+            { \sigmaOpSem{\gamma}{s}{\sigma}{t}{s'}{\bot}{(i_\sigma, t_\sigma)^+} }
+            { \sigmaOpSem{\gamma}{(v^\explast, s)}{\persist{\sigma}}{t}{(v^\explast, s')}{\bot}{(i_\sigma, t_\sigma)^+} }
+            {Prst{\scriptsize propag}}
+            \label{rule:semantics:grfrp:opsem:step:op:persist:propag}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\subparagraph{Merge}
+
+The flow operation $\mergeop{\sigma_1}{\sigma_2}$ combines the values from the events $\sigma_1$ and
+$\sigma_2$ into a new event. In cases where both events occur simultaneously, as handled by rule
+\nameref{rule:semantics:grfrp:opsem:step:op:merge:1}, the resulting event prioritizes the values from
+$\sigma_1$. If only one event occurs, rules \nameref{rule:semantics:grfrp:opsem:step:op:merge:1} or
+\nameref{rule:semantics:grfrp:opsem:step:op:merge:2} are applied, depending on which event occurred, and
+the value of this event is returned. When both events return $\bot$, indicating their absence, rule
+\nameref{rule:semantics:grfrp:opsem:step:op:merge:propag} propagates the updated states $s_1'$ and $s_2'$
+of $\sigma_1$ and $\sigma_2$, respectively. Its initial state and timer queue correspond to those of
+$\sigma_1$ and $\sigma_2$, as defined in \Cref{eq:semantics:grfrp:opsem:init:op:merge:timer}.
+
+\begin{align}
+    \stateTy{\mergeop{\sigma_1}{\sigma_2}}   & = \stateTy{\sigma_1} \times \stateTy{\sigma_2} \label{eq:semantics:grfrp:opsem:stateTy:op:merge}                     \\
+    \initstate{\mergeop{\sigma_1}{\sigma_2}} & = (\initstate{\sigma_1}, \initstate{\sigma_2}) \label{eq:semantics:grfrp:opsem:init:op:merge:state}                  \\
+    \timerTy{\mergeop{\sigma_1}{\sigma_2}}   & = \List{(U_1 \cup U_2) \times \Time} \label{eq:semantics:grfrp:opsem:timerTy:op:merge}                               \\
+    \text{with} \;                           & \timerTy{\sigma_1} = \List{U_1 \times \Time} \; \text{and} \; \timerTy{\sigma_2} = \List{U_2 \times \Time} \nonumber \\
+    \inittimer{\mergeop{\sigma_1}{\sigma_2}} & = \inittimer{\sigma_1} \lstconcat \inittimer{\sigma_2} \label{eq:semantics:grfrp:opsem:init:op:merge:timer}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%% Merge
+            \inferOPSEMFlow
+            {
+                \sigmaOpSem{\gamma}{s_1}{\sigma_1}{t}{s'_1}{v_1}{(i_{\sigma_1}, t_{\sigma_1})^+} \\
+                \sigmaOpSem{\gamma}{s_2}{\sigma_2}{t}{s'_2}{v_{2\bot}}{(i_{\sigma_2}, t_{\sigma_2})^+}
+            }
+            { \sigmaOpSem{\gamma}{(s_1, s_2)}{\mergeop{\sigma_1}{\sigma_2}}{t}{(s'_1, s'_2)}{v_1}{(i_{\sigma_1}, t_{\sigma_1})^+, (i_{\sigma_2}, t_{\sigma_2})^+} }
+            {Mrg{\scriptsize val1}}
+            \label{rule:semantics:grfrp:opsem:step:op:merge:1}
+
+            \inferOPSEMFlow
+            {
+                \sigmaOpSem{\gamma}{s_1}{\sigma_1}{t}{s'_1}{\bot}{(i_{\sigma_1}, t_{\sigma_1})^+} \\
+                \sigmaOpSem{\gamma}{s_2}{\sigma_2}{t}{s'_2}{v_2}{(i_{\sigma_2}, t_{\sigma_2})^+}
+            }
+            { \sigmaOpSem{\gamma}{(s_1, s_2)}{\mergeop{\sigma_1}{\sigma_2}}{t}{(s'_1, s'_2)}{v_2}{(i_{\sigma_1}, t_{\sigma_1})^+, (i_{\sigma_2}, t_{\sigma_2})^+} }
+            {Mrg{\scriptsize val2}}
+            \label{rule:semantics:grfrp:opsem:step:op:merge:2}
+
+            \inferOPSEMFlow
+            {
+                \sigmaOpSem{\gamma}{s_1}{\sigma_1}{t}{s'_1}{\bot}{(i_{\sigma_1}, t_{\sigma_1})^+} \\
+                \sigmaOpSem{\gamma}{s_2}{\sigma_2}{t}{s'_2}{\bot}{(i_{\sigma_2}, t_{\sigma_2})^+}
+            }
+            { \sigmaOpSem{\gamma}{(s_1, s_2)}{\mergeop{\sigma_1}{\sigma_2}}{t}{(s'_1, s'_2)}{\bot}{(i_{\sigma_1}, t_{\sigma_1})^+, (i_{\sigma_2}, t_{\sigma_2})^+} }
+            {Mrg{\scriptsize propag}}
+            \label{rule:semantics:grfrp:opsem:step:op:merge:propag}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\setcounter{subparagraph}{0}
+\subparagraph{Time}
+
+The flow operation \timeop represents time as a signal. During its execution, it returns only the
+timestamp of the current propagation, as specified by the rule
+\nameref{rule:semantics:grfrp:opsem:step:op:time}. It then has an empty initial state and timer queue, as
+defined by \Cref{eq:semantics:grfrp:opsem:init:op:time:state,eq:semantics:grfrp:opsem:init:op:time:timer}.
+
+\begin{align}
+    \stateTy{\timeop} & = \{()\}                        & \initstate{\timeop} & = () \label{eq:semantics:grfrp:opsem:init:op:time:state}         \\
+    \timerTy{\timeop} & = \List{\emptyset \times \Time} & \inittimer{\timeop} & = \emptylist \label{eq:semantics:grfrp:opsem:init:op:time:timer}
+\end{align}
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \centering
+        \begin{mathpar}
+            %%%%% Time
+            \inferOPSEMFlow
+            { }
+            {\sigmaOpSem{\gamma}{()}{\timeop}{t}{()}{t}{\,}}
+            {Time}
+            \label{rule:semantics:grfrp:opsem:step:op:time}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Summary}
+This section introduced the operational semantics for \GRFRP services, formalizing their push-based,
+event-driven execution model. The semantics models how a service reacts to external messages%
+---either a new value or a timer expiration---by initiating a deterministic propagation cascade.
+The propagation context tracks signal updates and event occurrences within a single reaction step.
+We defined a hierarchy of transition rules: a top-level rule for service message handling, a
+recursive rule for propagating updates through statements, and a set of rules for evaluating
+individual flow operations. The semantics detailed the behavior of stateful flow operations,
+including the interface to synchronous \GRSync components and the management of timers for
+time-based operators like \kwf{timeout}, \kwf{sample}, and \kwf{scan}. Together, these rules provide
+a rigorous foundation for the asynchronous, message-passing behavior of \GRFRP, ensuring that
+computations are performed efficiently only when necessary.

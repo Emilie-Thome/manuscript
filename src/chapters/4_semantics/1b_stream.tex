@@ -1,0 +1,428 @@
+\section{Streams and Clocks}
+\label{sec:semantics:streams}
+
+In dataflow languages like \GRust, an expression is interpreted not as a single value, but as an
+\emph{infinite sequence of values} it produces over time. This sequence is called a \emph{stream}, a
+concept foundational to the semantics of dataflow programming~\cite{%
+    DBLP:conf/ifip/Kahn74,%
+    DBLP:journals/tecs/BourkePP23,%
+    DBLP:journals/tcad/LeeS98%
+}. Streams provide a mathematical model for the entire temporal evolution of a value.
+%
+This section formalizes the theory of streams and describes its application to the denotational
+semantics of \GRust.
+
+\subsection{The Principle of Coinduction}
+\label{sec:semantics:streams:coinduction}
+
+Reasoning about infinite data structures requires a different approach from the induction used for
+finite data structures, such as lists. Inductive proofs rely on a base case (\eg an empty list) and
+a step that decomposes a structure into a \emph{smaller} substructure (\eg the head and tail of a
+list). This process is guaranteed to terminate because the structure diminishes at each step.
+
+Infinite streams, by definition, lack a base case and cannot be reduced to smaller parts. Attempting
+an inductive proof on a stream leads to infinite regress: proving a property for a stream would
+require proving it for its tail, which is also an infinite stream. The proof would never conclude.
+
+Instead, we use the dual principle of \emph{coinduction}, a technique for defining and proving
+properties of infinite data structures~\cite{DBLP:journals/mscs/KozenS17}. Coinduction is based on
+the idea of \emph{observation}: what can be concretely observed about an infinite object in a finite
+amount of time? For a stream, we can only observe its first element (the \emph{head}) and the
+remainder of the stream (the \emph{tail}).
+
+Coinduction formalizes this observational logic into a proof method. To prove that a property holds
+for an infinite stream, we must establish two points:
+%
+\begin{description}
+    \item[Progress] The proof must show that the property holds for the head of the stream---the
+          part that can be observed immediately. This step ensures that the stream is productive and
+          the proof is not vacuous.
+    \item[Opacity] After demonstrating progress, the proof may \emph{assume} that the property holds
+          for the tail of the stream. This assumption is the \emph{coinductive hypothesis}. The term
+          \emph{opacity} signifies that we treat the rest of the stream as an abstract entity that
+          satisfies the hypothesis, without inspecting its infinite structure further.
+\end{description}
+%
+By requiring observable progress before applying the hypothesis, coinduction avoids infinite regress
+and provides a sound method for verifying properties of infinite data structures.
+
+\subsection{Definition of Streams}
+\label{sec:semantics:streams:def}
+
+Let $A$ be a non-empty set. A stream over $A$, or an $A$-stream, is an infinite sequence of elements
+from $A$. The set of all $A$-streams is denoted by \Stream{A}.
+
+Formally, a stream is defined coinductively as the greatest fixed-point of the recursive type
+equation:
+%
+\begin{equation}
+    \Stream{A} = \nu X. A \times X \label{eq:semantics:streams:type_equation}
+\end{equation}
+%
+This equation states that the type \Stream{A} is equivalent to a pair, consisting of an element from
+$A$ and another stream. This structure implies functions to construct and deconstruct streams.
+
+The unique constructor for streams is the function $\texttt{cons}$:
+%
+\begin{align}
+    \texttt{cons}: A \times \Stream{A} \to \Stream{A}
+\end{align}
+%
+For readability, we adopt the infix operator \step as a convenient notation for this constructor:
+for any $a \in A$ and $s \in \Stream{A}$, the stream $a \step s$ denotes $\texttt{cons}(a, \, s)$.
+Using this notation, we can define specific streams with recursive equations. For example, a stream
+of zeros is the unique solution to:
+%
+\begin{equation}
+    \texttt{zeros} = 0 \step \texttt{zeros}
+\end{equation}
+
+Conversely, two observer functions deconstruct a stream. The function \texttt{head} returns the
+first element of the stream:
+\begin{align}
+     & \texttt{head} : \Stream{A} \to A \\
+     & \texttt{head}(a \step s) = a
+\end{align}
+%
+The function $\texttt{tail}$ returns the remainder of the stream:
+\begin{align}
+     & \texttt{tail} : \Stream{A} \to \Stream{A} \\
+     & \texttt{tail}(a \step s) = s
+\end{align}
+%
+The interaction between the constructor and observers is governed by the \emph{unfold property} that
+follows. For any stream $s \in \Stream{A}$:
+%
+\begin{align}
+    s = \texttt{head}(s) \step \texttt{tail}(s) \label{eq:semantics:streams:unfold}
+\end{align}
+%
+The unfold property asserts that any stream can be deconstructed and then perfectly reconstructed.
+
+The equivalence of two $A$-streams, $s_1$ and $s_2$, asserts they are pointwise identical and is
+written $s_1 \equiv s_2$. We define this relation using the coinductive principle, formalized by the
+inference rule \nameref{eq:semantics:streams:equiv}.
+%
+\begin{mathpar}
+    \myinfer
+    {a_1 = a_2 \and s_1 \equiv s_2}
+    {(a_1 \step s_1) \equiv (a_2 \step s_2)}
+    {Equiv}
+    \label{eq:semantics:streams:equiv}
+\end{mathpar}
+%
+This rule is a direct application of coinductive reasoning. To prove two streams equal, we must
+satisfy the two conditions in the premise:
+%
+\begin{enumerate}
+    \item \textbf{Progress:} Show that their heads are equal ($a_1 = a_2$).
+    \item \textbf{Opacity:} Assume, \via the coinductive hypothesis, that their tails are also
+          equivalent ($s_1 \equiv s_2$).
+\end{enumerate}
+
+The stream formalism is the foundation of our denotational semantics. The constructor \step is used
+to define stream transformations, while the equivalence relation $\equiv$ is central to semantic
+properties. Although the \texttt{head} and \texttt{tail} functions are theoretically fundamental,
+they do not appear explicitly in our semantic rules. Instead, we use pattern matching on the form
+$a \step s$ to deconstruct a stream into its head $a$ and tail $s$.
+
+\subsection{Application in Denotational Semantics}
+\label{sec:semantics:streams:usage}
+
+In the denotational semantics of \GRust, streams provide the mathematical basis for modeling
+dataflows. The meaning of a program is given by associating each identifier with an infinite stream
+of values. The structure of these streams differs between \GRSync and \GRFRP to reflect their
+distinct execution models.
+
+\paragraph{\GRSync: Synchronous Streams}
+
+The semantics of \GRSync follows the synchronous dataflow paradigm~\cite{%
+    DBLP:journals/tecs/BourkePP23,%
+    DBLP:conf/ifip/Kahn74%
+}. In this model, program execution advances in lock-step through a sequence of discrete
+\emph{logical instants}. Each identifier is interpreted as a stream, where the $n^\text{th}$ element
+corresponds to the value of that identifier at the $n^\text{th}$ logical instant. This synchronous
+approach ensures that values at the same position across different streams are temporally aligned
+and thus available simultaneously during execution.
+
+A challenge, however, arises with conditional computations, such as expressions in a specific branch
+of a pattern match. These expressions produce values only when their branch is active. To preserve
+the lock-step nature of streams, every stream must contain an entry for every logical instant.
+%
+This issue is resolved by introducing a special marker for absence. Let \Val be the set of all
+possible values. We extend this set to $\ValBot = \Val \cup \{\bot\}$, where the distinct
+\emph{bottom} value, $\bot$, represents the absence of a value at a given instant. This ensures that
+even when a computation is inactive, its corresponding stream is populated with a placeholder,
+maintaining alignment with all other streams.
+
+The denotational semantics of \GRSync therefore maps each identifier to a stream of type
+\Stream{\ValBot}, and components to functions from input streams to output streams.
+
+\paragraph{\GRFRP: Asynchronous Timestamped Streams}
+
+In contrast to \GRSync, \GRFRP models asynchronous services by abandoning the notion of a global
+logical instant. This design reflects the reality of reactive systems where inputs from sensors or
+other components arrive at irregular intervals. To manage this asynchrony, we must establish a
+coherent temporal ordering of values.
+%
+The solution is to pair each value with a timestamp, a model similar to the
+\emph{Tagged Signal Model}~\cite{DBLP:journals/tcad/LeeS98}. Let \Time be the set of all possible
+timestamps. A flow in \GRFRP is interpreted as a stream where each element is a pair $(t, v)$,
+consisting of a timestamp $t \in \Time$ and a value $v \in \Val$.
+
+A critical property of these streams is that time must not flow backward. We enforce this by
+requiring timestamps to be monotonically non-decreasing. A stream that respects this ordering is a
+well-formed \emph{timestamped stream}. The set of all such streams over a value set $A$, denoted by
+\TStream{A}, is the subset of \Stream{\Time \times A} where timestamps are ordered.
+%
+Formally, this property is defined coinductively:
+%
+\begin{equation}
+    \TStream{A} = \{ (t, v) \step (t', v') \step \ts \mid t \le t' \wedge
+    ((t', v') \step \ts) \in \TStream{A}\}
+    \label{eq:semantics:streams:usage:tstream}
+\end{equation}
+
+The denotational semantics of \GRFRP interprets flows as well-formed timestamped streams of type
+\TStream{\Val}, and services as functions from input to output timestamped stream contexts. This
+model captures the asynchronous arrival of data while preserving a well-defined progression of time.
+
+\subsection{Clocks}
+\label{sec:semantics:streams:clock}
+
+In synchronous and reactive languages, a \emph{clock} is a stream that governs the rate of other
+streams~\cite{DBLP:conf/emsoft/ColacoP03}. It dictates when computations are performed and when
+values are considered present. This concept is essential for coordinating dataflows, particularly
+those operating at different rates. Clocks are handled differently in \GRSync and \GRFRP to suit
+their respective execution models.
+
+\paragraph{Implicit Clocks in \GRSync}
+
+In the synchronous context of \GRSync, a clock, denoted by $ck$, is a stream of booleans,
+\Stream{\Bool}. Each element corresponds to a logical instant. If the value is \true, the clock is
+said to \emph{tick}, signaling that associated computations should execute. If the value is \false,
+computations on that clock are inactive.
+
+Every stream is defined \emph{on} a clock, which determines the presence of its values. We write
+\on{s}{ck} to assert that stream $s$ is on clock $ck$. This relation means that at any instant, if
+the clock ticks \true, the stream must contain a value from \Val; if the clock is \false, the stream
+must contain the bottom value, $\bot$. This is defined by the following two rules.
+
+\begin{mathpar}
+    \myinfer
+    {\on{s}{ck}}
+    {\on{v \step s}{\true \step ck}}
+    {On{\scriptsize val}}
+    \label{rule:semantics:streams:onclock:val}
+
+    \myinfer
+    {\on{s}{ck}}
+    {\on{\bot \step s}{\false \step ck}}
+    {On{\scriptsize bot}}
+    \label{rule:semantics:streams:onclock:bot}
+\end{mathpar}
+
+A key design choice in \GRSync is that clocks are \emph{implicit}. Programmers do not manipulate
+them directly; instead, the compiler generates sub-clocks automatically from the program structure.
+For instance, each branch of a \kwf{match} expression defines a sub-clock that ticks only when
+the input value matches the corresponding pattern. Expressions within that branch are computed on
+this sub-clock. If the patterns are exhaustive, the outputs from all branches are merged back into a
+single stream on the original clock of the matched expression.
+
+This approach contrasts with languages that feature \emph{explicit} clock management, which require
+a \emph{clock calculus}~\cite{DBLP:conf/emsoft/ColacoP03} to verify that clock relations are
+correctly defined by the programmer. While powerful, mastering a clock calculus demands a deep
+understanding of the formal semantics of the language. Indeed, many of these languages provide
+higher-level constructs, such as \kwf{automaton} or \kwf{switch}, to ease the development of
+state-based systems. Following this principle, \GRSync omits entirely explicit clocks and instead
+provides the higher-level constructs \kwf{when} and \kwf{match}. This design ensures that programs
+are well-clocked by construction, a property formally established by the productivity theorem
+(\Cref{thm:semantics:grsync:theorems:productivity}).
+
+All top-level computations within a \GRSync component are defined on a \emph{base clock}. Formally,
+this clock is an infinite stream of \true values: $ck = \true \step ck$.
+%
+This clock provides the fundamental sequence of logical instants that underpins the synchronous
+execution model, representing the fastest possible rate within the top-level component. Every
+stream in the top-level component is on this clock, meaning it must provide a value at each instant.
+%
+The base clock is an abstraction that connects the synchronous semantics of \GRSync to the
+asynchronous environment of \GRust. This connection is realized by the calling \GRFRP service, which
+acts as the driver for the \GRSync component, following the
+\emph{Globally Asynchronous, Locally Synchronous} (GALS) principle~\cite{DBLP:phd/us/Chapiro85}.
+%
+The \GRFRP service orchestrates the execution. When an asynchronous event occurs (\eg a new sensor
+value arrives), the service invokes the top-level component to process the new data. Each such
+invocation corresponds to a single logical instant, or one \true tick, of the base clock.
+%
+Therefore, the sequence of invocations from the \GRFRP service constitutes the concrete realization
+of the abstract base clock. From the perspective of the component, its execution is a deterministic
+progression from one discrete instant to the next, unaware of the real-time delays or the
+asynchronous nature of its driver. This design effectively bridges the two domains: the \GRFRP
+service translates unpredictable external events into a predictable sequence of synchronous ticks,
+thereby ensuring deterministic computation within a globally asynchronous system.
+
+\paragraph{Timestamped Clocks in \GRFRP}
+
+In the asynchronous setting of \GRFRP, the lock-step model is replaced by explicit timestamps.
+Consequently, a clock is a well-formed \emph{timestamped stream} of booleans, denoted by
+$\tck \in \TStream{\Bool}$ (following the definition of \TStream{A} from
+\Cref{eq:semantics:streams:usage:tstream}, with $A$ being \Bool). A tick of this clock is a pair
+$(t, \true)$, indicating that a computation is active at time $t$.
+
+This model defines a formal relationship between a dataflow and its controlling clock. We say a
+stream \ts is \emph{on} a clock \tck, written \on{\ts}{\tck}, if the timestamps of the values in \ts
+are a subset of the timestamps where \tck ticks \true. This property ensures a stream carries values
+only at times permitted by its clock. The relation is defined coinductively by the following two
+rules:
+
+\begin{mathpar}
+    \myinfer
+    {\on{\ts}{\tck}}
+    {\on{(t, v) \step \ts}{(t, \true) \step \tck}}
+    {On{\scriptsize exact}}
+    \label{rule:semantics:streams:onclock:exact}
+
+    \myinfer
+    {\on{\ts}{\tck}}
+    {\on{\ts}{(t, b) \step \tck}}
+    {On{\scriptsize pass}}
+    \label{rule:semantics:streams:onclock:pass}
+\end{mathpar}
+
+The \nameref{rule:semantics:streams:onclock:exact} rule enforces direct synchronization: if a stream
+has a value $v$ at time $t$, its clock must have a corresponding tick $(t, \true)$. The remainder of
+the stream must then be on the remainder of the clock.
+
+In contrast, the \nameref{rule:semantics:streams:onclock:pass} rule accommodates asynchrony. It
+allows the clock to have a tick $(t, b)$ at a time when the data stream has no value. In this case,
+the relation continues to be checked on the remainder of the clock. This rule permits a stream to be
+sparser than its clock, which is fundamental to modeling asynchronous and event-driven behaviors.
+
+\medskip
+
+In summary, the concept of a clock in \GRust is adapted to the specific needs of its two
+sub-languages. In the synchronous kernel, \GRSync, clocks are an implicit and structural mechanism,
+ensuring lock-step execution and temporal alignment of data. This design guarantees that programs
+are well-clocked by construction.
+%
+Conversely, in the asynchronous kernel, \GRFRP, timestamped clocks provide an explicit
+representation of time, enabling the coordination of event-driven and temporally irregular
+dataflows.
+%
+This dual treatment is central to the design of \GRust, as it allows the seamless integration of
+deterministic, synchronous components within a flexible, asynchronous architecture. With these
+foundational concepts of streams and clocks established, we are now equipped to define formally the
+\GRust language.
+
+\subsection{Advanced Coinductive Constructs}
+\label{sec:semantics:streams:coinductive_constructs}
+
+The denotational semantics of \GReact operations, detailed in \Cref{sec:semantics:grfrp:denot}, are
+built upon auxiliary functions that generate timestamped streams coinductively. Proving that these
+functions are well-defined is crucial for the soundness of the semantics. This section lays the
+groundwork for these proofs by introducing and validating key coinductive constructs, such as
+periodic time streams and stream pairs. These formal tools are essential for establishing the
+denotational semantics of \GRFRP.
+
+\paragraph{Periodic and Translated Time Streams}
+
+A common requirement is to model periodic events, such as those from a timer. We can define a
+periodic time stream coinductively. Let $T \in \Time$ be a period. The stream of periodic timestamps
+$S_0^T$ is the unique solution to the equation:
+%
+\begin{equation}
+    S_k^T = kT \step S_{k+1}^T
+\end{equation}
+%
+This equation defines an infinite stream of timestamps $S_0^T = 0 \step T \step 2T \step \dots$.
+
+More generally, we need to transform existing time streams. The function \texttt{trans} performs a
+translation of a time stream to a new starting time while preserving its internal rhythm (\ie, the
+intervals between its elements). It is defined as follows:
+%
+\begin{align}
+     & \texttt{trans} : \Time \times \Stream{\Time} \to \Stream{\Time}                                       \\
+     & \texttt{trans}(t, \: t_1 \step t_2 \step s) = t \step \texttt{trans}(t + (t_2 - t_1), \: t_2 \step s)
+\end{align}
+%
+This function is well-defined by coinduction for its domain. It makes a recursive call on a stream
+that has progressed, using the tail of the original input. By the coinductive hypothesis, we assume
+this recursive call produces a valid stream. Thus, the entire operation yields a valid stream.
+%
+As a convenient shorthand, we write $t_0 + S_k^T$ to denote the translation of a periodic stream,
+\ie $\texttt{trans}(t_0, S_k^T)$.
+
+\paragraph{Stream Pairs}
+
+To handle functions with multiple inputs or outputs, it is useful to define a pair of streams as a
+single coinductive data structure. The set of all stream pairs over sets $A$ and $B$ is denoted by
+\PStream{A}{B}. Formally, it is the greatest fixed-point of the recursive type equation:
+%
+\begin{equation}
+    \PStream{A}{B} = \nu (X,Y). (A \times X) \times (B \times Y)
+\end{equation}
+%
+We introduce constructors and observers to operate on each stream within the pair independently. The
+constructors $\texttt{cons}_1$ and $\texttt{cons}_2$ prepend an element to the first or second
+stream, respectively:
+%
+\begin{align}
+    \texttt{cons}_1 & : A \times \PStream{A}{B} \to \PStream{A}{B} \\
+    \texttt{cons}_1 & (a, (s_1, s_2)) = (a \step s_1, s_2)         \\[1em]
+    \texttt{cons}_2 & : B \times \PStream{A}{B} \to \PStream{A}{B} \\
+    \texttt{cons}_2 & (b, (s_1, s_2)) = (s_1, b \step s_2)
+\end{align}
+%
+Conversely, the observers extract the head or tail from a specified stream. For the first stream in
+the pair:
+%
+\begin{align}
+    \texttt{head}_1 & : \PStream{A}{B} \to A   & \texttt{tail}_1 & : \PStream{A}{B} \to \PStream{A}{B} \\
+    \texttt{head}_1 & ((a \step s_1, s_2)) = a & \texttt{tail}_1 & ((a \step s_1, s_2)) = (s_1, s_2)
+\end{align}
+%
+Symmetrical functions, $\texttt{head}_2$ and $\texttt{tail}_2$, exist for the second stream:
+%
+\begin{align}
+    \texttt{head}_2 & : \PStream{A}{B} \to B   & \texttt{tail}_2 & : \PStream{A}{B} \to \PStream{A}{B} \\
+    \texttt{head}_2 & ((s_1, b \step s_2)) = b & \texttt{tail}_2 & ((s_1, b \step s_2)) = (s_1, s_2)
+\end{align}
+%
+This abstraction allows functions to consume from or produce to one stream in a pair while leaving
+the other unmodified.
+
+For example, merging two ordered streams can be defined coinductively as follows:
+%
+\begin{align*}
+    \texttt{merge}(a \step s_1, b \step s_2) & = a \step \texttt{merge}(s_1, b \step s_2) &
+                                             & \text{if } a < b                             \\
+    \texttt{merge}(a \step s_1, b \step s_2) & = b \step \texttt{merge}(a \step s_1, s_2) &
+                                             & \text{otherwise}
+\end{align*}
+%
+This function is well-defined by coinduction. The argument proceeds as follows. At each step, the
+function deconstructs the input stream pair to compare the heads of its elements. Based on the
+comparison, it makes a recursive call on a new pair formed from the tail of one of the original
+streams (applying $\texttt{tail}_1$ or $\texttt{tail}_2$). This demonstrates \emph{progress}, as the
+state of the coinductive pair has advanced.
+%
+Because progress is established, we can apply the \emph{coinductive hypothesis}. This allows us to
+assume that the result of the recursive call is a valid, infinite stream. This step embodies the
+principle of \emph{opacity}: we rely on the hypothesis for the remainder of the computation without
+needing to inspect the infinite structure of the tails.
+%
+The function then uses the stream constructor to prepend the chosen head element ($a$ or $b$) to the
+valid stream returned by the recursive call. Since this construction always yields a head followed
+by a valid tail (by hypothesis), we conclude that the \texttt{merge} function is well-defined.
+
+The \texttt{merge} function serves as a key example illustrating a crucial property of these
+coinductive stream pairs: a proof can be progressed by advancing just one of the streams.
+
+\subsection{Summary}
+This section has laid the mathematical groundwork for our semantic definitions. We have formalized
+the concept of infinite dataflows using the coinductive theory of streams and established two
+distinct clocking models: implicit clocks for the synchronous \GRSync kernel and explicit
+timestamped clocks for the asynchronous \GRFRP kernel. With these foundational concepts in place, we
+are now equipped to formally define the \GRust language. We begin with \GRSync, the synchronous
+component-modeling kernel, detailing its syntax and semantics.

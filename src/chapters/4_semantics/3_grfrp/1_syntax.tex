@@ -1,0 +1,76 @@
+\subsection{Formal Syntax of \GRFRP}
+\label{sec:semantics:grfrp:syntax}
+
+The syntax of \GRFRP is presented below and described in the following paragraphs.
+
+\begin{center}
+    \begin{bnf}(comment = {:is:})
+        $F, f, x$     :is: Identifiers      :in: \idSet ;;
+        $\Delta$      :is: Constants        :in: \textit{Const} ;;
+        $T$           :is: Time             :in: \textit{Time} ;;
+        $\mathcal{S}$ :is: Services         ::=  \service{F}{stmt^+} ;;
+        $stmt$        :is: Flow Statements  ::=  \decl{x^+}{\sigma} // \import{x} // \export{x} ;;
+        $\sigma$      :is: Flows            ::=  $x$ // $f(\sigma^+)$ // \onchange{\sigma} // \persist{\sigma}
+        | \scan{\sigma}{T}// \sample{\sigma}{T} // \timeout{\sigma}{T}
+        | \mergeop{\sigma}{\sigma} // \throttle{\sigma}{\Delta} // \timeop ;;
+    \end{bnf}
+\end{center}
+
+In \GRFRP, flows are categorized as \emph{signals} (continuous values) and \emph{events} (discrete
+occurrences). A signal always has a value that may evolve over time. In contrast, an event only
+carries a value at the moment it occurs.
+
+A service (\service{F}{stmt^+}) defines a flow-processing unit. Its declaration assigns it a name
+$F$ and specifies a list of flow statements ($stmt^+$) describing its behavior.
+%
+Flow statements are of two kinds: declarations statements (\decl{x^+}{\sigma}) define the behavior
+of local flows $x^+$ as flow operation $\sigma$, and interface statements (\import{x} or \export{x})
+where imported flows are produced by other entities (sensors, or other services), and exported flows
+are made available for other entities in the system (actuators, or other services).
+%
+As an example, \Cref{fig:semantics:example:aeb:code} defines the \idf{aeb} service
+(\Crefrange{ex:line:aebStart}{ex:line:aebEnd}). It imports a signal \idf{speed} and events
+\idf{pedestrian\_l} and \idf{pedestrian\_r}
+(\Crefrange{ex:line:importSpeed}{ex:line:importPedestrians}) from sensors or other services; it
+defines local flows \idf{pedestrian}, \idf{t\_pedestrian}, and \idf{strat}
+(\Crefrange{ex:line:pedestrian}{ex:line:strat}); and it exports the signal \idf{strat}
+(\Cref{ex:line:export}).
+
+Flows ($\sigma$) are constructed using identifiers ($x$), applications of components
+user-defined in \GRSync ($f(\sigma^+)$), and a collection of built-in operators from the \GReact
+library.
+
+The \GRSync language, used to define components, is presented in \Cref{sec:semantics:grsync}.
+%
+Components called in services should be \emph{reactive}, it is a crucial static property (formally defined
+in \Cref{sec:semantics:grfrp:react_typing,sec:semantics:grsync:react_typing}) that
+ensures a sound usage of components in asynchronous environments.
+\Cref{thm:semantics:grsync:theorems:oversampling} states that a reactive component can be executed
+based on changes propagation, in an event-driven manner. This execution is proved to be resilient to
+\emph{oversampling}: the absence of changes from the imported flows of the service leads to an
+absence of changes from its exported flows.
+
+The \GReact library, presented in the table below, extends the \GRFRP model with flow operators
+inspired by ReactiveX~\cite{reactivex}.
+%
+\begin{center}
+    \begin{tabularx}{\textwidth}{|l|X|}\hline
+        \onchange{s}         & Produces an event that emits values whenever the signal $s$ updates.                               \\\hline
+        \persist{e}          & Produces a signal that updates to hold the most recent value emitted by the event $e$.             \\\hline
+        \scan{s}{T}          & Produces a signal that updates with the latest value of signal $s$ every $T$ milliseconds.         \\\hline
+        \sample{e}{T}        & Produces an event that emits the latest value observed from $e$ every $T$ milliseconds.            \\\hline
+        \timeout{e}{T}       & Produces an event that emits a unit value if no value is emitted by $e$ within $T$ milliseconds.
+        The timeout resets each time $e$ emits a value or $T$ milliseconds have passed.                                           \\\hline
+        \mergeop{e_1}{e_2}   & Produces an event that emits values from either $e_1$ or $e_2$, prioritizing $e_1$ if both emit
+        simultaneously.                                                                                                           \\\hline
+        \throttle{s}{\Delta} & Produces a signal that updates only when the value of $s$ changes by more than threshold $\Delta$. \\\hline
+        \timeop              & Produces a signal that reflects the current time.                                                  \\\hline
+    \end{tabularx}
+\end{center}
+%
+These operators enable declarative flow definitions within \GRFRP services.
+%
+As seen in \Cref{fig:semantics:example:aeb}, the \kwf{merge} operator is used
+(\Cref{ex:line:pedestrian}) to create an event from the union of \idf{pedestrian\_l} and
+\idf{pedestrian\_r}. Similarly, \kwf{timeout} (\Cref{ex:line:timeout}) triggers an event when
+\idf{pedestrian} has not occurred for 2 seconds.

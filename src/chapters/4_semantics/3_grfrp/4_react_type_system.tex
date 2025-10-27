@@ -1,0 +1,341 @@
+\subsection{Reactive Type System of \GRFRP}
+\label{sec:semantics:grfrp:react_typing}
+
+As stated in \Cref{sec:semantics:grfrp:syntax}, components invoked within services must be
+\emph{reactive}. This static property, introduced in \Cref{sec:semantics:grsync:react_typing},
+tracks dependencies on \emph{continuous flows}. A continuous flow is one whose evolution depends
+on the execution rate itself, rather than on discrete input changes. Such flows are
+problematic for an event-driven model, which assumes computations are triggered only by new
+input values. We identify three primary sources of this continuity.
+
+The first source is the \timeop operation, which returns the current execution time. Its value
+changes continuously, an observation will always give a value different from the last observation.
+
+The second arises from an untriggered feedback loop using a \kwf{last} memory. For instance,
+consider the simple counter component from \Cref{sec:semantics:grsync:react_typing}:
+\begin{equation*}
+    \component{\idf{count}}{}{\idf{o}}{\idf{o} = \last{\idf{o}} + 1}{\idf{o} = 0}.
+\end{equation*}
+From an event-driven perspective, this component should remain inactive, as it has no inputs
+to trigger a computation. However, its definition implies a self-perpetuating loop where the
+value of \idf{o} depends on its own previous value, \last{\idf{o}}. The flow is thus
+\emph{continuous}, as it should be continuously re-evaluated in order to maintain its value
+up-to-date. This violates the principles of reactive, event-driven execution.
+
+The third source is the untriggered emission of an event with the \kwf{emit} operator.
+Consider the \idf{emit\_now} component, also from \Cref{sec:semantics:grsync:react_typing}:
+\begin{equation*}
+    \component{\idf{emit\_now}}{\idf{s}}{\idf{e}}{\idf{e} = \emit{\idf{s}}}{}.
+\end{equation*}
+Conceptually, the output event \idf{e} is \emph{continuously} present. However, an
+event-driven execution would trigger the component only when the input signal \idf{s}
+changes, emitting the event only at that moment. This mismatch between the intended
+continuous presence and the discrete nature of event-driven propagation creates ambiguity.
+
+To resolve these conflicts, the use of \timeop or untriggered \kwf{last} memories and event
+emissions must be restricted. We formalize this restriction through a reactive type system that
+distinguishes between two kinds of flows:
+%
+\begin{itemize}
+    \item \emph{Continuous flows}, which originate from sources inherently tied to the
+          execution step itself, such as \timeop or untriggered memories and event emissions.
+    \item \emph{Discrete flows}, which encompass all other flows. These are driven by input
+          changes and are stable between events: signals hold their last value, and events
+          are absent.
+\end{itemize}
+
+This distinction is enforced statically by the reactive type system.
+\Cref{sec:semantics:grsync:react_typing} introduced the \GRSync portion of this system, which
+defines typing rules to qualify a component as reactive. This section presents the \GRFRP
+portion. Enforcing this type system for services enables the oversampling theorem
+(\Cref{thm:semantics:grfrp:theorems:oversampling}). This theorem guarantees that propagating
+input changes is sufficient to keep outputs up-to-date, and that re-computing them without
+new inputs does not alter their values.
+
+\begin{table}[!ht]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}\hline
+        \rType ::= \cType $\vert$ \dType        & Reactive type denoting if the
+        associated element is continuous (depending on \timeop or untriggered event emissions and
+        \kwf{last} memories) or discrete.                                                     \\\hline
+        $\Theta[x] = \rType$                    & A reactive typing context $\Theta$
+        mapping flow identifiers to their reactive type.                                      \\\hline
+        \servTypedReact{F}                      & The service $F$ is reactive.                \\\hline
+        \stmtTypedReact{\Theta}{stmt^+}         & The statements $stmt^+$ are reactive
+        in the reactive typing context $\Theta$.                                              \\\hline
+        \opTypedReact{\Theta}{\sigma}{\rType^+} & The flow operation $\sigma$ is reactive and
+        has type $\rType^+$ in the reactive typing context $\Theta$.                          \\\hline
+    \end{tabularx}
+    \caption[Notations for the reactive type system of \GRFRP.]%
+    {Notations for the logic of the reactive type system of \GRFRP.}
+    \label{tab:semantics:grfrp:react_typing:notations}
+\end{table}
+
+The notations for the reactive type system, which recall and extend those for \GRSync from
+\Cref{sec:semantics:grsync:react_typing}, are summarized in
+\Cref{tab:semantics:grfrp:react_typing:notations}.
+%
+The reactive type \rType detects dependencies on continuous sources. A typing context $\Theta$
+maps each flow identifier $x$ to its type. $\Theta[x] = \cType$ denotes that $x$ is a
+\emph{continuous} flow, while $\Theta[x] = \dType$ denotes that it is a \emph{discrete} flow.
+%
+Typing judgments capture reactivity at different levels of the syntax. \servTypedReact{F}
+asserts that a service $F$ is reactive. \stmtTypedReact{\Theta}{stmt^+} asserts that a
+sequence of statements is reactive in a context $\Theta$. Finally,
+\opTypedReact{\Theta}{\sigma}{\rType^+} asserts that a flow operation $\sigma$ has type
+$\rType^+$ in context $\Theta$.
+
+The following paragraphs present the rules that define the \GRFRP portion of this reactive
+type system.
+
+\paragraph{Services}
+
+A service is reactive if its implementation adheres to the constraints of the type system,
+ensuring its soundness under an event-driven execution model.
+%
+According to \nameref{rule:semantics:grfrp:react_typing:serv}, a service
+\service{F}{stmt^+} is reactive if there exists a typing context $\Theta$ under which its
+block of statements $stmt^+$ is reactive.
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \begin{mathpar}
+            \inferREACT
+            {
+                G[F] = \service{F}{stmt^+} \\
+                \stmtTypedReact{\Theta}{stmt^+}
+            }
+            { \servTypedReact{F} }
+            {Serv}
+            \label{rule:semantics:grfrp:react_typing:serv}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Statements}
+%
+Statements propagate reactive types from flow operations to identifiers.
+%
+As formalized by \nameref{rule:semantics:grfrp:react_typing:stmts}, a block of statements
+($stmt^+$) is reactive if each individual statement ($stmt$) is reactive.
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \begin{mathpar}
+            \inferREACTFlowStmt
+            { \left(\stmtTypedReact{\Theta}{stmt}\right)^+ }
+            { \stmtTypedReact{\Theta}{stmt^+} }
+            {Blck}
+            \label{rule:semantics:grfrp:react_typing:stmts}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+As stated by \nameref{rule:semantics:grfrp:react_typing:stmt:decl}, a declaration
+(\decl{x^+}{\sigma}) is reactive if the flow operation $\sigma$ is reactive and its resulting
+types match the types assigned to $x^+$ in the context $\Theta$.
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \begin{mathpar}
+            \inferREACTFlowStmt
+            { \opTypedReact{\Theta}{\sigma}{(\Theta[x])^+} }
+            { \stmtTypedReact{\Theta}{\decl{x^+}{\sigma}} }
+            {Decl}
+            \label{rule:semantics:grfrp:react_typing:stmt:decl}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The rules \nameref{rule:semantics:grfrp:react_typing:stmt:import} and
+\nameref{rule:semantics:grfrp:react_typing:stmt:export} for \kwf{import} and \kwf{export} require
+the associated flows to be discrete (of type \dType).
+This enforces a clear boundary for the service, ensuring its external interface only involves
+discrete flows and preventing continuous behaviors from leaking in or out.
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \begin{mathpar}
+            \inferREACTFlowStmt
+            { \Theta[x] = \dType }
+            { \stmtTypedReact{\Theta}{\import{x}} }
+            {Import}
+            \label{rule:semantics:grfrp:react_typing:stmt:import}
+
+            \inferREACTFlowStmt
+            { \Theta[x] = \dType }
+            { \stmtTypedReact{\Theta}{\export{x}} }
+            {Export}
+            \label{rule:semantics:grfrp:react_typing:stmt:export}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Flow operations}
+
+The typing rules for flow operations determine if a resulting flow is continuous or discrete,
+thereby propagating dependencies on continuous sources.
+%
+An identifier ($x$) has the type assigned to it in the context $\Theta$, as formalized by
+\nameref{rule:semantics:grfrp:react_typing:op:ident}.
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \begin{mathpar}
+            \inferREACTFlow
+            { }
+            { \opTypedReact{\Theta}{x}{\Theta[x]} }
+            {ID}
+            \label{rule:semantics:grfrp:react_typing:op:ident}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The \timeop operation is the primary source of continuity and is therefore always of type
+\cType, as per \nameref{rule:semantics:grfrp:react_typing:op:time}.
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \begin{mathpar}
+            \inferREACTFlow
+            { }
+            { \opTypedReact{\Theta}{\timeop}{\cType} }
+            {Time}
+            \label{rule:semantics:grfrp:react_typing:op:time}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+A component application $f(\sigma^+)$ is reactive if the component $f$ is itself reactive,
+given the types of its inputs. As specified by
+\nameref{rule:semantics:grfrp:react_typing:op:app}, this check relies on the component typing
+judgment from \GRSync.
+The reactivity of a component is crucial to ensure a sound usage in an asynchronous service.
+\Cref{thm:semantics:grsync:theorems:oversampling} states that a reactive component can be executed
+in an event-driven manner, only propagating changes. This execution is proved to be resilient to
+oversampling: the absence of changes from the discrete input flows of the component leads to an
+absence of changes from its internal memory and from its discrete output flows.
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \begin{mathpar}
+            \inferREACTFlow
+            {
+                \left(\opTypedReact{\Theta}{\sigma}{\rType_i}\right)^+ \\
+                \compTypedReact{f}{\rType_i^+}{\rType_o^+}
+            }
+            { \opTypedReact{\Theta}{f(\sigma^+)}{\rType_o^+} }
+            {App}
+            \label{rule:semantics:grfrp:react_typing:op:app}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+All events must occur at precise, discrete moments. The \onchange{\sigma} and
+\mergeop{\sigma_1}{\sigma_2} operations produce events and thus require their inputs to be
+discrete, ensuring their outputs are also discrete.
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \begin{mathpar}
+            \inferREACTFlow
+            { \opTypedReact{\Theta}{\sigma}{\dType} }
+            { \opTypedReact{\Theta}{\onchange{\sigma}}{\dType} }
+            {OChg}
+            \label{rule:semantics:grfrp:react_typing:op:onchange}
+
+            \inferREACTFlow
+            { \forall i \in \{1,2\}, \; \opTypedReact{\Theta}{\sigma_i}{\dType} }
+            { \opTypedReact{\Theta}{\mergeop{\sigma_1}{\sigma_2}}{\dType} }
+            {Mrg}
+            \label{rule:semantics:grfrp:react_typing:op:merge}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+Similarly, the \persist{\sigma} and \sample{\sigma}{T} operations are triggered by an event
+$\sigma$, as specified by
+\nameref{rule:semantics:grfrp:react_typing:op:persist} and
+\nameref{rule:semantics:grfrp:react_typing:op:sample}. To ensure the output is produced at a precise
+time, the input event must be discrete, resulting in a discrete output.
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \begin{mathpar}
+            \inferREACTFlow
+            { \opTypedReact{\Theta}{\sigma}{\dType} }
+            { \opTypedReact{\Theta}{\persist{\sigma}}{\dType} }
+            {Prst}
+            \label{rule:semantics:grfrp:react_typing:op:persist}
+
+            \inferREACTFlow
+            { \opTypedReact{\Theta}{\sigma}{\dType} }
+            { \opTypedReact{\Theta}{\sample{\sigma}{T}}{\dType} }
+            {Samp}
+            \label{rule:semantics:grfrp:react_typing:op:sample}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The \scan{\sigma}{T} operation produces periodic samples of the signal $\sigma$, as formalized by
+rule \nameref{rule:semantics:grfrp:react_typing:op:scan}. Because the sampling is driven by a
+fixed-period timer, the output is always a discrete signal, regardless of the input type. This
+operation is one of the few ways to discretize a continuous flow.
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \begin{mathpar}
+            \inferREACTFlow
+            { \opTypedReact{\Theta}{\sigma}{\rType} }
+            { \opTypedReact{\Theta}{\scan{\sigma}{T}}{\dType} }
+            {Scan}
+            \label{rule:semantics:grfrp:react_typing:op:scan}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The \timeout{\sigma}{T} operation creates a timer that resets on an input event. The input
+event must be discrete to ensure that the reset occurs at a precise moment, as stated by
+\nameref{rule:semantics:grfrp:react_typing:op:timeout}. If the input timing were imprecise, the
+reset will also be imprecise, and all subsequent timeout events would also have imprecise timing.
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \begin{mathpar}
+            \inferREACTFlow
+            { \opTypedReact{\Theta}{\sigma}{\dType} }
+            { \opTypedReact{\Theta}{\timeout{\sigma}{T}}{\dType} }
+            {TOut}
+            \label{rule:semantics:grfrp:react_typing:op:timeout}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+The \throttle{\sigma}{\Delta} operation filters a signal. If the input signal $\sigma$ were
+continuous, the exact moment its value crosses the $\Delta$ threshold would be ill-defined in
+an event-driven model. To avoid this ambiguity, the input must be discrete, as stated by the rule
+\nameref{rule:semantics:grfrp:react_typing:op:throttle}, which in turn
+makes the output discrete.
+
+\begin{center}
+    \begin{minipage}{0.95\textwidth}
+        \begin{mathpar}
+            \inferREACTFlow
+            { \opTypedReact{\Theta}{\sigma}{\dType} }
+            { \opTypedReact{\Theta}{\throttle{\sigma}{\Delta}}{\dType} }
+            {Thrt}
+            \label{rule:semantics:grfrp:react_typing:op:throttle}
+        \end{mathpar}
+    \end{minipage}
+\end{center}
+
+\paragraph{Summary}
+
+This section has detailed the reactive type system for \GRFRP, which complements the system for
+\GRSync components. By classifying flows as either \emph{continuous} or \emph{discrete}, the type
+system imposes constraints on service definitions. It mandates that service interfaces (\ie imports
+and exports) and most event-based operations handle only discrete flows. This disciplined approach
+prevents the propagation of continuous behaviors that are incompatible with an event-driven
+execution model. Consequently, any well-typed service is guaranteed to be reactive, establishing a
+formal foundation for the correctness of its asynchronous execution
+(\cf \Cref{thm:semantics:grfrp:theorems:oversampling}).

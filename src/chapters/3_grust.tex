@@ -1,0 +1,56 @@
+This chapter provides a comprehensive technical description of the \GRust language. It begins with a
+practical example to illustrate core concepts, then delves into the specification of the syntax,
+identifier usage, and type system. The chapter subsequently details the implementation of the
+prototype compiler, explaining its architecture and compilation pipelines. Finally, it presents
+benchmarks that validate the performance, expressiveness, and industrial applicability of the
+language.
+
+The chapter is structured as follows.
+\begin{description}
+    \item[\Cref{sec:grust:example}]
+          presents an Adaptive Cruise Control (ACC) example to showcase the main features of \GRust.
+          It demonstrates how to model services with the \GRFRP kernel, define stateful components
+          with the \GRSync kernel, and specify safety properties for formal verification with
+          \GReusot.
+
+    \item[\Cref{sec:grust:syntax}]
+          presents the language syntax using EBNF notation. This covers the asynchronous \GRFRP
+          kernel for service modeling, the \GReact library of built-in operators, the synchronous
+          \GRSync kernel for component definition, and the \GReusot extension for formal contracts.
+
+    \item[\Cref{sec:grust:id_usage}]
+          formalizes the rules for identifier usage with inference rules that define scoping
+          mechanisms for the language, including the sequential, lexical scoping of \GRFRP services
+          and the mutually recursive scoping of \GRSync components.
+
+    \item[\Cref{sec:grust:typing}]
+          details the static type system, which ensures the correct composition of synchronous and
+          asynchronous constructs. It distinguishes between \emph{flow types} (\eg \texttt{signal},
+          \texttt{event}) and \emph{sampling types} (\eg \texttt{type}, \texttt{type?}).
+
+    \item[\Cref{sec:grust:implem}]
+          describes the implementation of the prototype compiler, including its architecture as a
+          \Rust procedural macro. It details the compilation pipelines for both sub-languages:
+          \GRSync components are compiled into synchronous state machines, and \GRFRP services into
+          asynchronous data-propagation machines. The translation of \GReusot specifications into
+          \Creusot annotations is also explained.
+
+    \item[\Cref{sec:grust:benchmarks}]
+          concludes with a three-part benchmark evaluation. A quantitative analysis compares the
+          performance of generated code against established \Lustre compilers. A qualitative case
+          study on a UAV Kalman filter demonstrates improved design clarity over a \Ci
+          implementation. Finally, an industrial evaluation at \ampere shows significant code
+          reduction and equivalent performance when reimplementing production services in \GRust.
+\end{description}
+
+\input{./chapters/3_grust/1_example.tex}
+
+\input{./chapters/3_grust/2_syntax.tex}
+
+\input{./chapters/3_grust/3a_identifier_usage.tex}
+
+\input{./chapters/3_grust/3b_type_system.tex}
+
+\input{./chapters/3_grust/4_implementation.tex}
+
+\input{./chapters/3_grust/6_benchmarks.tex}
