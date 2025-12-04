@@ -414,7 +414,7 @@ Using \texttt{unsafe} does not disable all safety checks, but it does place the 
 programmer to manually uphold the language's safety invariants. To manage this responsibility
 formally, the academic community has developed frameworks for verifying \texttt{unsafe} code. The
 \RustBelt project~\cite{DBLP:journals/pacmpl/0002JKD18}, for example, provides a formal foundation
-in the Rocq proof assistant~\cite{rocq} for proving that safe abstractions built on top of
+in the \Rocq proof assistant~\cite{rocq} for proving that safe abstractions built on top of
 \texttt{unsafe} code are, in fact, sound. This allows for the creation of verified, low-level
 libraries---such as a correct(ed) mutex implementation~\cite{rustbelt_mutex_proof,rust_mutex_issue}%
 ---that can be used from safe \Rust code without compromising the overall safety of the program.
@@ -3055,7 +3055,7 @@ version of the \texttt{step} function on an existing state, but it is not clear 
 correct state instance.
 
 A more robust solution would be to draw inspiration from established model checkers like
-Kind~2~\cite{DBLP:conf/cav/ChampionMST16}, which uses $k$-induction to verify properties of stateful
+\Kind~\cite{DBLP:conf/cav/ChampionMST16}, which uses $k$-induction to verify properties of stateful
 \Lustre nodes. Integrating a similar technique into \Creusot would represent a significant research
 effort, but it would provide a powerful and truly compositional method for verifying complex,
 hierarchical \GRust models.

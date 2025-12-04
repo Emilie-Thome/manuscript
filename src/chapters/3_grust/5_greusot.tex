@@ -314,7 +314,7 @@ component call, two options arise: either we create a ghost state for the compon
 \apriori knowledge of its contents; or we reuse an existing state and call a logical version of its
 \texttt{step} function (analogous to function calls), which does not modify the state. In the latter
 case, care must be taken to select the component state that corresponds to a call with the same
-inputs as in the specification. The model checker Kind 2~\cite{DBLP:conf/cav/ChampionMST16} supports
+inputs as in the specification. The model checker \Kind~\cite{DBLP:conf/cav/ChampionMST16} supports
 specifications for Lustre nodes using the k-induction
 technique~\cite{DBLP:conf/fmcad/SheeranSS00}, a well-established method for verifying transition
 systems such as stateful nodes (or components). Integrating a similar k-induction approach into

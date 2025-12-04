@@ -152,12 +152,12 @@ COSSAP and the Signal Processing WorkSystem~\cite{books/kap/BattacharyyaLM96}.
 a declarative style. In these \emph{synchronous dataflow languages}, KPNs are restricted
 to eliminate communication buffers entirely: each process is associated with a clock that defines
 when computations occur. Flows can be filtered and combined using clock operators, and all
-timing dependencies are made explicit in the program structure. The \emph{synchrony hypothesis} is
+timing dependencies are made explicit in the program structure. The \emph{synchronous hypothesis} is
 assumed: outputs are produced instantaneously with respect to inputs, simplifying concurrency
 modeling. A synchronous program reacts at discrete logical instants governed by its \emph
-{base-clock}, and compilation ensures bounded memory usage and bounded reaction time. The latter can
+{base clock}, and compilation ensures bounded memory usage and bounded reaction time. The latter can
 be measured as the \emph{Worst Case Execution Time} (\wcet), which is checked to be smaller than the
-base-clock period to verify the synchronous hypothesis and guarantee real-time correctness.
+base clock period to verify the synchronous hypothesis and guarantee real-time correctness.
 
 Other synchronous languages include \Signal~\cite{DBLP:journals/scp/BenvenisteGJ91} and
 \Esterel~\cite{DBLP:journals/scp/BerryG92}. While \Lustre is strictly functional, \Signal is
@@ -178,7 +178,7 @@ graphical user interfaces (GUIs) in a declarative and composable way. In \frp, p
 time-varying values, such as user input or sensor data, using high-level functional abstractions.
 These values are represented as \emph{signals} (continuous or discrete over time) and \emph{events}
 (discrete occurrences), allowing the programmer to define reactive behavior as pure functions over
-dataflows. Unlike synchronous languages like \Lustre, which assume a single base-clock and bounded
+dataflows. Unlike synchronous languages like \Lustre, which assume a single base clock and bounded
 reaction times, \frp embraces a more flexible and often asynchronous notion of time. It prioritizes
 expressivity and composability over predictability and timing guarantees.
 %
@@ -202,7 +202,7 @@ discrete events, which ensures deterministic and well-defined signal propagation
 such as Modal \frp, use a modal type theory to formally prevent issues like memory leaks, as
 demonstrated by \textsc{Rattus}~\cite{DBLP:journals/pacmpl/BahrGM19}, which enforces a clock-based
 execution model, and its asynchronous extension
-\textsc{Async RaTT}~\cite{DBLP:journals/pacmpl/BahrM23}. These
+\textsc{Async Rattus}~\cite{DBLP:journals/pacmpl/BahrM23}. These
 refinements make \frp more suitable for embedded and reactive systems while preserving its
 declarative and compositional nature.
 
@@ -221,7 +221,7 @@ not changed).
 %
 This distinction influences how data dependencies propagate and how resources are managed. Most
 synchronous language compilers adopt a pull-based approach: computations occur at each tick of the
-system's base-clock, independently of input changes. This supports static scheduling and
+system's base clock, independently of input changes. This supports static scheduling and
 predictable resource usage. In contrast, many \frp implementations support push-based or hybrid
 strategies~\cite{reactivex,DBLP:conf/pldi/CzaplickiC13,DBLP:conf/ppdp/MandelPP15}. Push-based
 execution suits input-driven systems like GUIs or sensor networks, while pull-based evaluation
@@ -800,7 +800,7 @@ We establish key semantic guarantees that validate the soundness of the language
 \end{itemize}
 %
 These results have been proven by hand and are included in this manuscript. Unlike
-\Velus~\cite{DBLP:conf/pldi/BourkeBDLPR17}, which formalizes correctness in \textsc{Roq}, our approach does not aim to
+\Velus~\cite{DBLP:conf/pldi/BourkeBDLPR17}, which formalizes correctness in \Rocq, our approach does not aim to
 produce computer-formalized and verified proofs. Such formalization, while valuable, is known to be
 labor-intensive and highly sensitive to implementation details, making it difficult to maintain
 alongside evolving compiler code.
@@ -848,6 +848,10 @@ be formally checked on the generated code, contributing to \iso-compliant verifi
 This manuscript presents \GRust, from its practical design to its theoretical foundations. The
 chapters are structured to guide the reader through the language specification, its formal
 semantics, and a summary of the contributions.
+
+\paragraph*{\Cref{cha:sota}} motivates the definition of \GRust by showing that the state of the art
+on the domain does not completely address the problems emphasized above. It also details the
+distinctive features of the language.
 
 \paragraph*{\Cref{cha:grust}} provides a technical guide to the \GRust language, written for
 practitioners and system developers. It begins with a practical example, an Adaptive Cruise Control
