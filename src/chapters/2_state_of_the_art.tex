@@ -1,0 +1,1499 @@
+\section{Industrial Model-Based Tools and Ecosystems}
+\label{sec:sota:tools}
+
+The automotive industry has long relied on a specific set of model-based tools. This section
+evaluates these dominant and emerging tools against the challenges of the Software-Defined Vehicle
+(\sdv), demonstrating a clear gap in the current state of the art that \GRust aims to fill.
+
+\subsection{The Legacy: Pull-Based, C-Centric Toolchains}
+\label{sec:sota:tools:legacy}
+
+The established toolchains for automotive design, while proven and effective, are built on a
+paradigm that creates significant architectural friction with the emerging needs of the \sdv.
+
+\paragraph*{Simulink}
+As the de facto industry standard, \Simulink~\cite{simulink} offers a powerful graphical
+environment for modeling and simulation. However, its execution model, based on discrete-time
+solvers and periodic sample times, is the direct source of the inefficiencies identified in
+\Cref{sec:intro:gap}. This pull-based, periodic approach is ill-suited for efficiently modeling the
+event-driven reality of an \sdv. Furthermore, its generation of standard \Ci
+code~\cite{simulink_codegen,simulink_misra} forgoes the memory and concurrency safety offered by
+modern languages. While highly optimized for legacy architectures, it is less adapted to the dynamic
+software environment of the \sdv.
+
+\paragraph*{Scade Suite}
+For safety-critical systems, \Scade~\cite{DBLP:conf/fdl/ColacoPPP18} represents the pinnacle of the
+synchronous, model-based approach, offering formal guarantees and certifiable code generation based
+on \Lustre~\cite{DBLP:conf/popl/CaspiPHP87}. However, its design philosophy is deeply rooted in the
+single-threaded, synchronous world and lacks native constructs for asynchronous dataflow. This poses
+significant challenges for a seamless and natural integration with event-driven runtimes like
+\texttt{tokio}. While formally sound, \Scade presents an architectural mismatch with the emerging,
+asynchronous automotive software ecosystem.
+
+\subsection{The Emerging Alternative: Rust-Centric Stacks}
+\label{sec:sota:tools:rust_stacks}
+
+In response to the limitations of legacy tools, new \Rust-centric stacks have emerged that embrace
+an asynchronous, event-driven model. However, they introduce a new abstraction gap.
+
+\paragraph*{Veecle}
+This project provides a modular runtime and high-level APIs for building asynchronous automotive
+applications in \Rust. It successfully abstracts away middleware and hardware details, but it is
+primarily a runtime infrastructure, not a model-based design tool. It provides the framework of
+execution but lacks the high-level, domain-specific modeling abstractions familiar to control
+engineers, leaving them to implement complex logic using low-level programming primitives.
+
+\paragraph*{Pictorus}
+This tool addresses the modeling gap by offering a visual, \Simulink-like environment that generates
+\Rust code. It successfully bridges the language gap but fails to bridge the architectural one. Its
+underlying execution model remains largely sequential, lacking the native, first-class support for
+event-driven dataflow and asynchronous interactions that are essential for building efficient \sdv
+software.
+
+\subsection{Synthesis: The Unfilled Gap}
+\label{sec:sota:tools:synthesis}
+
+The current landscape presents a clear dichotomy. On one side, legacy tools like \Simulink and
+\Scade offer mature, high-level modeling abstractions but are tied to an inefficient, pull-based
+execution model. On the other side, emerging \Rust-based stacks embrace the correct event-driven
+architecture but fail to provide the high-level, formally-grounded modeling abstractions needed for
+complex control systems.
+
+Neither of these worlds successfully marries the rigor of synchronous, model-based design with the
+safety and asynchronous efficiency of the modern \Rust-based \sdv platform. This unfilled gap is
+precisely where \GRust is positioned. It is designed to provide the formal, declarative modeling of
+a synchronous language while directly generating safe asynchronous \Rust code, bridging the gap that
+current industrial and emerging tools leave open.
+
+\section{Synchronous Languages and Academic Toolsets}
+\label{sec:sota:synchronous}
+
+The synchronous paradigm, which models computation as occurring in a sequence of discrete,
+instantaneous reactions, has given rise to a rich family of academic languages. These languages
+provide a formal basis for designing critical systems with strong guarantees of correctness and
+predictability. This section surveys influential synchronous languages, analyzing their distinct
+approaches to managing time, concurrency, and program structure.
+
+\subsection{Lustre: A Declarative Synchronous Language}
+\label{sec:sota:synchronous:lustre}
+
+As introduced in \Cref{sec:intro:dsl:dataflow}, a dataflow model describes a system as a network of
+components that process data flows. \Lustre is a \emph{declarative} dataflow language where programs
+are defined as pure functions over these flows, which are called \emph{streams}~\cite{DBLP:conf/popl/CaspiPHP87}.
+
+In \Lustre, a stream is an infinite sequence of values aligned on a discrete \emph{logical clock}.
+All streams are \emph{synchronous}, meaning their values are conceptually produced at the same
+logical instants. A program, called a \emph{node}, is defined by a set of equations that specify how
+output streams are computed from input streams. The \texttt{pre} operator provides access to the
+value of a stream at the previous instant, enabling stateful computations.
+
+The central concept in \Lustre is the \emph{clock} of a stream, which defines the sequence of
+instants at which it holds a \emph{concrete value}. At other instants, the stream is considered
+absent and carries a special \emph{bottom value}, denoted by $\bot$. The base clock represents the
+fastest rate of reaction. Slower streams can be derived using the \texttt{when} operator, which
+samples a stream based on a boolean condition. The compiler uses a \emph{clock calculus} to
+statically verify that operations only combine streams that are present at the same instants. This
+formal verification guarantees bounded memory usage, determinism, and a predictable reaction time
+(\wcet), making \Lustre a foundational language for safety-critical systems, as demonstrated by its
+industrial successor, \Scade~\cite{DBLP:conf/fdl/ColacoPPP18}.
+
+\begin{multicols}{2}[The \texttt{EXAMPLE} program below illustrates these features.]
+  \begin{lstlisting}[basicstyle=\ttfamily\footnotesize\color{BlackText}]
+  node EXAMPLE(I: int) returns
+    (CLK: bool; O: int when CLK)
+  var V: int;
+  let
+    CLK = true -> not pre(CLK);
+    V = 0 -> pre(I);
+    O = (V * 2) when CLK;
+  tel
+\end{lstlisting}
+
+  \newcolumn
+
+  \hfill
+
+  \begin{table}[H]
+    \centering
+    \begin{tabular}{l|cccccc}
+      \texttt{I}   & 1             & 2              & 3             & 4              & \dots \\
+      \texttt{CLK} & \texttt{true} & \texttt{false} & \texttt{true} & \texttt{false} & \dots \\
+      \texttt{V}   & 0             & 1              & 2             & 3              & \dots \\
+      \texttt{O}   & 0             & $\bot$         & 4             & $\bot$         & \dots \\
+    \end{tabular}
+    \caption{Execution of the \texttt{EXAMPLE} program.}
+    \label{tab:sota:synchronous:lustre:exec}
+  \end{table}
+\end{multicols}
+
+\Cref{tab:sota:synchronous:lustre:exec} shows an execution trace of the program. The node computes
+two outputs, \texttt{CLK} and \texttt{O}, from the input \texttt{I}. The equation
+\texttt{CLK = true -> not pre(CLK)} defines a boolean stream \texttt{CLK} that is \texttt{true} at the
+first instant and alternates at subsequent instants. The stream \texttt{V} is initialized to
+\texttt{0} and then takes the previous value of \texttt{I}. The output \texttt{O} is defined on the
+clock of \texttt{CLK}: it has a concrete value only when \texttt{CLK} is \texttt{true}, at which point
+its value is \texttt{V * 2}.
+
+\paragraph*{Comparison with GRust}
+
+\GRust, and specifically its \GRSync component sub-language, is heavily inspired by \Lustre. It mirrors
+the declarative, equation-based style and uses a \texttt{last} operator for state management, which
+is analogous to the \texttt{pre} operator in \Lustre.
+
+The key difference lies in the handling of clocks and concurrency. \Lustre employs a formal clock
+calculus to manage multi-rate behavior within a single, unified synchronous model. \GRSync
+simplifies this by omitting user-defined clocks. Instead, multi-rate computations are handled by
+built-in constructs, such as \texttt{when} and \texttt{match} equations. While less expressive than
+a full clock calculus, this approach is simpler to use. A \GRSync component is thus a single-clocked
+synchronous island, which is asynchronously triggered in a push manner by a \GRFRP service,
+following the GALS architecture described in the introduction.
+
+This design choice acknowledges the complexity of a full clock calculus. Indeed, modern extensions
+to \Lustre have introduced higher-level constructs such as \texttt{automaton} and \texttt{switch}.
+While built upon the clock calculus, these features abstract away direct clock manipulation,
+offering a more structured and accessible way to model state-based behavior. This evolution in
+\Lustre itself suggests a trend toward providing abstractions that are easier to use than the
+underlying formal mechanisms.
+
+\subsection{Signal: A Polychronous Relational Language}
+\label{sec:sota:synchronous:signal}
+
+Like \Lustre, \Signal is a declarative, dataflow synchronous language, but it follows a
+\emph{relational} approach where a program is a system of equations over streams, also called
+\emph{signals}~\cite{DBLP:journals/scp/BenvenisteGJ91}.
+
+The key innovation of \Signal is a sophisticated \emph{clock calculus} that treats clocks as
+first-class citizens. This allows a programmer to declare clock variables (of type \texttt{event}),
+extract the clock from a signal (\eg \texttt{e = when s}), and define explicit equations over these
+clocks (\eg \verb|o ^= a ^+ b| to specify that the clock of \texttt{o} is the union of those of
+\texttt{a} and \texttt{b}). By making timing relationships a part of the program specification
+itself, \Signal provides a powerful formalism for describing complex, multi-rate, and distributed
+systems.
+
+This relational model enables \emph{polychrony}~\cite{DBLP:journals/jcsc/GuernicTL03}, meaning a
+program can be specified with multiple, independent base clocks. The compiler's task is to prove the
+logical and temporal coherence of the system by solving the global set of clock constraints. In
+contrast, \Lustre is \emph{endochronous}, assuming a single base clock. While polychrony is highly
+expressive, it introduces significant compilation challenges. The underlying constraint-solving
+problem is NP-hard, meaning the compiler cannot guarantee a solution for all valid programs and may
+reject some correct specifications for the sake of efficiency.
+
+\begin{multicols}{2}[The \texttt{SAMPLER} process below illustrates the relational model.]
+  \begin{lstlisting}[basicstyle=\ttfamily\footnotesize\color{BlackText}]
+  process SAMPLER =
+    (? integer A, B, C;
+     ! integer O;)
+    (| CLK ^= (when A) ^+ (when B);
+     | O   := C when CLK;
+     |)
+  where
+        event CLK
+  end
+\end{lstlisting}
+
+  \newcolumn
+
+  \hfill
+
+  \begin{table}[H]
+    \centering
+    \begin{tabular}{l|cccccc}
+      \texttt{A}   & 10     & $\bot$ & 12  & $\bot$ & \dots \\
+      \texttt{B}   & $\bot$ & 20     & 21  & $\bot$ & \dots \\
+      \texttt{C}   & 100    & 101    & 102 & 103    & \dots \\
+      \texttt{CLK} & t      & t      & t   & $\bot$ & \dots \\
+      \texttt{O}   & 100    & 101    & 102 & $\bot$ & \dots \\
+    \end{tabular}
+    \caption{Execution of the \texttt{SAMPLER} process.}
+    \label{tab:sota:synchronous:signal:exec}
+  \end{table}
+\end{multicols}
+
+The example defines a process that samples a dense signal \texttt{C} based on an event derived from
+two sparse signals, \texttt{A} and \texttt{B}. It explicitly declares a local event, \texttt{CLK},
+and defines it with the equation \verb|CLK ^= (when a) ^+ (when b)|. This constrains \texttt{CLK} to
+be present at the union of the instants where \texttt{A} or \texttt{B} are present.
+
+The output \texttt{O} is then defined by the equation \texttt{O := c when CLK}, meaning \texttt{O}
+takes the value of \texttt{C} only at the instants defined by \texttt{CLK}. As shown in the trace in
+\Cref{tab:sota:synchronous:signal:exec}, the compiler synthesizes the clock for \texttt{CLK} from
+\texttt{A} and \texttt{B}. The output \texttt{O} is then produced only when \texttt{CLK} is present,
+demonstrating how value and timing constraints are solved together.
+
+\paragraph*{Comparison with GRust}
+
+\Signal uses its powerful but complex clock calculus to formally reason about all timing relations
+across the entire system. In contrast, \GRust adopts a more constrained GALS model. It isolates
+synchronous logic into single-clocked \GRSync components and manages the asynchronous interactions
+between them at the \GRFRP service layer. This approach deliberately avoids the need for a global
+clock constraint solver, trading the expressive power of polychrony for simpler compilation and a
+clear separation of concerns between local computation and global communication.
+
+\subsection{The Esterel Family: Imperative Synchrony}
+\label{sec:sota:synchronous:esterel}
+
+In contrast to the declarative style of \Lustre, \Esterel is an imperative synchronous language
+designed for programming complex control logic~\cite{DBLP:journals/scp/BerryG92}. It provides
+high-level control structures, including sequencing, explicit concurrency (\via the construct
+\texttt{||}), and preemption mechanisms. Statements like \texttt{await}, \texttt{emit}, and
+\texttt{loop} allow programmers to specify intricate reactive behaviors in a style closer to
+traditional imperative programming.
+
+\begin{multicols}{2}[The \texttt{ABRO} module below illustrates the imperative style of \Esterel.]
+  \begin{lstlisting}[basicstyle=\ttfamily\footnotesize\color{BlackText}]
+  module ABRO:
+    input A, B, R;
+    output O;
+    loop
+      [ await A || await B ];
+      emit O
+    each R
+  end module
+\end{lstlisting}
+
+  \newcolumn
+
+  \hfill
+
+  \begin{table}[H]
+    \centering
+    \begin{tabular}{l|cccccc}
+      \texttt{A} & \texttt{()} & $\bot$      & $\bot$      & \texttt{()} & $\bot$      & \dots \\
+      \texttt{B} & $\bot$      & \texttt{()} & $\bot$      & $\bot$      & \texttt{()} & \dots \\
+      \texttt{R} & $\bot$      & $\bot$      & \texttt{()} & $\bot$      & \texttt{()} & \dots \\
+      \texttt{O} & $\bot$      & \texttt{()} & $\bot$      & $\bot$      & $\bot$      & \dots \\
+    \end{tabular}
+    \caption[An execution trace of the \texttt{ABRO} module.]%
+    {An execution trace of the \texttt{ABRO} module. \texttt{()} denotes the presence of a signal,
+      $\bot$ its absence.}
+    \label{tab:sota:synchronous:esterel:exec}
+  \end{table}
+\end{multicols}
+
+The core statement, \texttt{[ await A || await B ]}, uses the parallel operator \texttt{||} to wait
+until both input signals \texttt{A} and \texttt{B} have occurred. It initiates two concurrent
+threads of control; one for each \texttt{await}. The statement terminates at the precise instant the
+\emph{second} of these signals is received. The sequencing operator \texttt{;} is
+\emph{instantaneous}, it ensures that the \texttt{emit O} statement is executed in the very same
+instant that the preceding parallel statement terminates. Thus, \texttt{O} is emitted as soon as
+both \texttt{A} and \texttt{B} have been seen. The entire behavior is wrapped in a
+\texttt{loop...each R} construct. This statement implements a strong preemption: if signal
+\texttt{R} is present, the body of the loop is immediately aborted and restarted, discarding its
+current state. This gives the reset signal \texttt{R} priority over the internal logic.
+
+The trace in \Cref{tab:sota:synchronous:esterel:exec} reflects this behavior. At the second instant,
+\texttt{O} is emitted because \texttt{B} arrives, fulfilling the condition set by the parallel
+statement (since \texttt{A} was seen in the first instant). In the third instant, \texttt{R} resets
+the module. At he fifth instant, although \texttt{B} occurs (which would have completed the wait
+started in the fourth instant), the simultaneous presence of \texttt{R} aborts the computation
+\emph{before} \texttt{O} can be emitted. The module is reset, which results in \texttt{O} being
+absent in that instant.
+
+The semantics of \Esterel is formally defined by compiling programs into finite state machines or,
+more commonly, logic circuits~\cite{DBLP:books/daglib/0023221}. This compilation process resolves
+all concurrency and signal dependencies at compile time, producing a deterministic, single-threaded
+execution function. \Esterel is then suited for hardware synthesis and time-critical control
+applications.
+
+\smallskip
+
+The ideas in \Esterel have been influential, inspiring derivatives that bring its rigorous
+concurrency model to other ecosystems.
+
+\paragraph*{ReactiveML}
+\textsc{ReactiveML}~\cite{DBLP:conf/ppdp/MandelP05} transposes the synchronous-reactive model of
+\Esterel into the functional programming language \Caml. It is implemented as a compiler extension
+that translates a dedicated syntax into standard \Caml code. In \textsc{ReactiveML}, data is
+manipulated through pure functions, leveraging the type safety and composability inherent to the
+functional paradigm. The language retains the core principles of \Esterel, including instantaneous
+broadcast of signals, deterministic concurrency, and strong preemption. Programs are structured as a
+set of parallel processes that communicate through signals. At each logical instant, processes
+execute until they reach a statement that explicitly consumes time, such as \texttt{pause} or
+\texttt{await}, ensuring the system evolves deterministically.
+
+\begin{multicols}{2}[The \texttt{EDGE} process below illustrates \textsc{ReactiveML}.]
+  \begin{lstlisting}[basicstyle=\ttfamily\footnotesize\color{BlackText}]
+  let process EDGE I O =
+    loop
+      present I
+      then pause
+      else (await immediate I;
+            emit O)
+    end
+\end{lstlisting}
+
+  \newcolumn
+
+  \hfill
+
+  \begin{table}[H]
+    \centering
+    \begin{tabular}{l|ccccccc}
+      \texttt{I} & $\bot$ & \texttt{()} & \texttt{()} & $\bot$ & \texttt{()} & $\bot$ & \dots \\
+      \texttt{O} & $\bot$ & \texttt{()} & $\bot$      & $\bot$ & \texttt{()} & $\bot$ & \dots \\
+    \end{tabular}
+    \caption[An execution trace of the \texttt{EDGE} process.]%
+    {An execution trace of the \texttt{EDGE} process. \texttt{()} denotes the presence of a signal,
+      $\bot$ its absence.}
+    \label{tab:sota:synchronous:reactiveml:exec}
+  \end{table}
+\end{multicols}
+
+The process is designed to detect a rising edge: it emits the output signal \texttt{O} only in the
+first instant that the input signal \texttt{I} becomes present after an absence. The behavior is
+defined by a loop containing a \texttt{present} statement, which checks for the presence of
+\texttt{I} in the current instant. If the signal is present, the \texttt{then pause} branch is
+taken; the \texttt{pause} statement consumes a single logical instant, waiting for the next tick
+without taking further action. This prevents \texttt{O} from being emitted repeatedly while
+\texttt{I} remains high. Conversely, if \texttt{I} is absent, the \texttt{else} branch is executed.
+Here, the process executes \texttt{await immediate I}, suspending execution until \texttt{I}
+appears. The instantaneous sequencing operator (\texttt{;}) then ensures that \texttt{emit O} is
+executed in the very same instant that the wait is fulfilled.
+
+The execution trace in \Cref{tab:sota:synchronous:reactiveml:exec} demonstrates this logic. In the
+first instant, \texttt{I} is absent, so the process begins to await its arrival. In the second
+instant, \texttt{I} appears, the \texttt{await} terminates, and \texttt{O} is emitted. In the third
+instant, \texttt{I} is still present, so the \texttt{pause} statement is executed and \texttt{O} is
+absent.
+
+\paragraph*{HipHop.js}
+\textsc{HipHop.js}~\cite{DBLP:conf/pldi/BerryS20} adapts the synchronous-reactive model to
+\JavaScript, aiming to solve the challenges of coordinating complex, event-driven behaviors in web
+applications. Modules are compiled into self-contained objects called \emph{reactive machines},
+which can be controlled from standard \JavaScript code. It imports core temporal statements from
+\Esterel, such as concurrency and preemption, allowing developers to replace complex chains of
+callbacks with clear, compositional logic.  By treating external events as synchronous signals,
+\textsc{HipHop.js} brings determinism and structured concurrency to an inherently asynchronous
+environment.
+
+The key innovation in \textsc{HipHop.js} is the \texttt{async} construct, which bridges the
+synchronous machine and the asynchronous world of \JavaScript. An \texttt{async} block is bound to a
+signal and behaves as a single, time-consuming statement. When executed, it launches an asynchronous
+task and pauses the local synchronous control thread—without blocking other parallel threads—until
+the task completes.
+
+\begin{multicols}{2}[The \texttt{AUTHENTICATE} module illustrates the use of \texttt{async} in
+    \textsc{HipHop.js}.]
+  \begin{lstlisting}[basicstyle=\ttfamily\footnotesize\color{BlackText}]
+  hiphop module AUTHENTICATE {
+    in NAME, PASSW;
+    out STATE, RESULT;
+    emit STATE("start");
+    async RESULT {
+      let req = authenticate(
+        NAME.nowval, PASSW.nowval);
+      req.on('result',
+        res => { this.notify(res) });
+      req.end();
+    }
+    emit STATE("result");
+  }
+\end{lstlisting}
+  \newcolumn
+  \begin{table}[H]
+    \centering
+    \begin{tabular}{l|cccc}
+      \texttt{NAME}   & \texttt{"user"}     & $\bot$ & $\bot$            & \dots \\
+      \texttt{PASSW}  & \texttt{"password"} & $\bot$ & $\bot$            & \dots \\
+      \texttt{RESULT} & $\bot$              & $\bot$ & \texttt{true}     & \dots \\
+      \texttt{STATE}  & \texttt{"start"}    & $\bot$ & \texttt{"result"} & \dots \\
+    \end{tabular}
+    \caption{An execution trace of the \texttt{AUTHENTICATE} module.}
+    \label{tab:sota:synchronous:hiphop:exec}
+  \end{table}
+\end{multicols}
+
+The execution flow, captured by the trace in \Cref{tab:sota:synchronous:hiphop:exec}, unfolds across
+several instants. In the first instant, upon receiving \texttt{NAME} and \texttt{PASSW}, the module
+emits \texttt{STATE} with the value \texttt{"start"}. It then executes the \texttt{async RESULT} statement,
+which launches the external \texttt{authenticate} function and immediately pauses this synchronous
+thread. While the network request is in flight, the local thread remains suspended. Finally, in a
+future instant, the request completes and its callback invokes \texttt{this.notify}. This triggers a
+new reaction where two things happen simultaneously: the \texttt{async} statement emits the
+\texttt{RESULT} signal and terminates, allowing the final statement, \texttt{emit STATE("result")},
+to execute. Thus, in this final instant, \texttt{RESULT} is present and \texttt{STATE} is updated to
+\texttt{"result"}.
+
+\paragraph*{Comparison with GRust}
+\GRust shares with \Esterel the goal of providing a formal model for deterministic, reactive
+control, but it follows a fundamentally different philosophy. The \GRSync sub-language of \GRust is
+declarative and dataflow-oriented, similar to \Lustre, whereas \Esterel is imperative. An engineer
+using \GRust describes \emph{what} the relationships between dataflows are, not the sequence of
+steps required to compute them. This design aligns \GRust more closely with the block-diagram models
+familiar to control engineers. Furthermore, the execution model of \GRust is based purely on the
+propagation of signal changes and event occurrences (\emph{push-based}). A significant consequence
+is that \GRust cannot detect the absence of an event; computations are only triggered by the arrival
+of new data, and without a global clock tick to react against, there is no moment to check if a
+signal was absent.
+
+The approach to asynchrony also differs fundamentally. \GRust confines asynchrony to the \GRFRP
+layer, which orchestrates asynchronous \emph{dataflows}---that is, streams of values that arrive at
+different and irregular intervals. This contrasts with the \texttt{async} construct in
+\textsc{HipHop.js}, which serves to integrate a single, time-consuming asynchronous operation into a
+synchronous execution thread. The \textsc{HipHop.js} approach is conceptually similar to the futures
+in \Lustre~\cite{DBLP:conf/emsoft/CohenGP12}. \GRust adopts a GALS architecture, where the
+imperative control of \Esterel is replaced by the declarative composition of dataflow components.
+
+\subsection{Prelude: From Synchronous Models to Multi-Periodic Architectures}
+\label{sec:sota:synchronous:prelude}
+
+\Prelude is an architectural language and compiler that builds upon synchronous dataflow languages
+like \Lustre, with a specific focus on generating multi-task, hard real-time
+systems~\cite{DBLP:journals/deds/PagettiFBCL11}. It directly addresses the inefficiency of the
+single-threaded approach common to synchronous compilers, as illustrated by the conceptual \Lustre
+code in the example below.
+
+\begin{multicols}{2}
+  \begin{lstlisting}[basicstyle=\ttfamily\footnotesize\color{BlackText}]
+  node MULTIRATE(I: int)
+        returns (O: int)
+  var CLK: bool; V: int when CLK;
+  let
+    O = FAST(I, current(V));
+    CLK = true -> not pre(CLK);
+    V = SLOW((0 fby O) when CLK);
+  tel
+\end{lstlisting}
+  \newcolumn
+  \begin{table}[H]
+    \centering
+    \begin{tabular}{l|ccccc}
+      \texttt{I}   & $i_0$         & $i_1$          & $i_2$         & $i_3$          & \dots \\
+      \texttt{CLK} & \texttt{true} & \texttt{false} & \texttt{true} & \texttt{false} & \dots \\
+      \texttt{V}   & $v_0$         & $\bot$         & $v_1$         & $\bot$         & \dots \\
+      \texttt{O}   & $o_0$         & $o_1$          & $o_2$         & $o_3$          & \dots \\
+    \end{tabular}
+    \caption{An execution trace of the multi-rate node.}
+    \label{tab:sota:synchronous:lustre:gap}
+  \end{table}
+\end{multicols}
+
+In this model, the \texttt{SLOW} node representes a computation that takes time, and that is only
+activated on the clock \texttt{CLK}, which is half the rate of the base clock. A standard compiler
+would generate a single \texttt{step} function that must run at the fastest rate. The overall
+reaction time of the system would be constrained by the \wcet of the \texttt{SLOW} step function,
+forcing the faster \texttt{FAST} node to idle while the slower logic is checked.
+
+\begin{multicols}{2}[\Prelude solves this by providing a language to describe the real-time
+    architecture, allowing the compiler to generate a partitioned, multi-task system. The
+    following code provides the same system described in \Prelude.]
+  \begin{lstlisting}[basicstyle=\ttfamily\footnotesize\color{BlackText}]
+  imported node FAST (I, J: int) 
+             returns (O: int) wcet 2;
+  imported node SLOW (I: int) 
+             returns (O: int) wcet 9;
+
+  node MULTIRATE(I: int rate(10, 0))
+        returns (O: int)
+  var V: int;
+  let
+    O = FAST(I, current(V) *^ 2);
+    V = SLOW((0 fby O) /^ 2);
+  tel
+\end{lstlisting}
+  \newcolumn
+  \begin{table}[H]
+    \centering
+    \begin{tabular}{l|ccccc}
+      date       & 0     & 10    & 20    & 30    & \dots \\
+      \texttt{I} & $i_0$ & $i_1$ & $i_2$ & $i_3$ & \dots \\
+      \texttt{V} & $v_0$ &       & $v_1$ &       & \dots \\
+      \texttt{O} & $o_0$ & $o_1$ & $o_2$ & $o_3$ & \dots \\
+    \end{tabular}
+    \caption{A real-time trace of the \texttt{MULTIRATE} node.}
+    \label{tab:sota:synchronous:prelude:exec}
+  \end{table}
+\end{multicols}
+
+The \Prelude code enriches the synchronous model with real-time properties. The \texttt{wcet} and
+\texttt{rate} annotations provide timing information. The key elements are the rate-change
+operators: \verb|/^ 2| is a \emph{downsampling} operator that creates a clock twice as slow, while
+\verb|*^ 2| is an \emph{upsampling} operator that holds the last value of a slow signal for use by a
+faster component.
+
+This enriched specification enables the \Prelude compiler to perform an architectural
+transformation. It partitions the node into two clock-coherent tasks: a fast task for \texttt{FAST}
+and a slow task for \texttt{SLOW}. It generates a real-time configuration: \texttt{fast\_task} with
+a 10ms period and a 2ms WCET, and \texttt{slow\_task} with a 20ms period and a 9ms WCET. It
+synthesizes the communication buffers needed to pass data between the tasks, whose sizes are
+statically proven to be bounded. This process, formally proven correct, yields a verifiable
+multi-task architecture from a high-level model, bridging the gap between logical specification and
+real-time implementation.
+
+\paragraph*{Comparison with GRust}
+The most significant difference lies in their interpretation of the GALS model. \Prelude implements
+a \emph{multi-periodic} GALS, where the asynchronous communication is structured and predictable,
+designed to be mapped onto the fixed, periodic tasks of an RTOS. Its goal is to guarantee hard
+real-time schedulability.
+
+\GRust, in contrast, implements an \emph{event-driven} GALS. The asynchronous communication at the
+\GRFRP level is truly sporadic, designed to react efficiently to an unpredictable environment. Its
+target is not a conventional RTOS but a modern asynchronous runtime like \texttt{tokio}.
+Consequently, the timing constraints in \GRust (\eg \texttt{debounce}, \texttt{refresh}) are not for
+hard real-time scheduling but for managing event load and ensuring liveness. \Prelude brings the
+synchronous paradigm to multi-periodic real-time platforms, whereas \GRust embeds synchronous
+components within a fully event-driven architecture.
+
+\subsection{Synthesis: GRust in the Synchronous Landscape}
+\label{sec:sota:synchronous:synthesis}
+
+The survey of synchronous languages reveals a spectrum of design philosophies, from the declarative
+dataflow of \Lustre to the imperative control of \Esterel. \GRust carves out a distinct position by
+selectively combining principles from this landscape and adapting them to the specific challenges of
+event-driven, high-performance systems. The main distinctions can be summarized along three primary
+axes: the programming model, the clocking and execution model, and the target architecture.
+
+First, \GRust aligns firmly with the declarative, dataflow paradigm of \Lustre, not the imperative
+style of \Esterel. A \GRust engineer describes relationships between dataflows, which is a natural
+fit for the block-diagram models used in control engineering. It deliberately omits the complex
+intra-component concurrency and preemption constructs of \Esterel, simplifying the component-level
+logic.
+
+Second is its clocking and execution model. Where \Lustre and \Signal offer powerful but complex
+clock calculi to manage multi-rate systems, \GRust makes a radical simplification: the \GRSync
+sub-language has no user-defined clocks. Instead, it provides only high-level constructs that abstract
+away clock manipulation, much like the \texttt{automaton} or \texttt{switch} features in modern
+\Lustre. This is coupled with a purely \emph{push-based} execution model, where computations in
+\GRFRP are triggered only by the arrival of new data. This design directly addresses the goal of
+avoiding redundant computations, but it has a profound consequence: a \GRust component cannot
+detect the absence of a signal, as there is no global clock tick to react against.
+
+Finally, these choices are dictated by its target architecture. Languages like \Lustre and \Esterel
+target safety-critical, hard real-time environments; \Prelude refines this by mapping synchronous
+models to multi-periodic RTOS tasks. \GRust, in contrast, is designed for the event-driven GALS
+architecture of modern software-defined vehicles. Its goal is not hard real-time schedulability but
+efficient resource management in a high-throughput asynchronous runtime like \texttt{tokio}. This
+focus explains why its approach to asynchrony---orchestrating sporadic dataflows at the service
+level---differs from the integration of single asynchronous operations found in \textsc{HipHop.js}.
+
+In summary, \GRust can be seen as an adaptation of synchronous principles. It trades the expressive
+power of complex clock calculi and imperative control for a simpler, event-driven model that is
+formally defined, safe by construction, and tailored for integration into modern, asynchronous
+\Rust-based systems.
+
+\section{Languages and Frameworks for Distributed Systems}
+\label{sec:sota:distributed}
+
+While synchronous languages provide a powerful model for logically centralized systems, modern
+automotive architectures are distributed. This section examines frameworks designed explicitly for
+coordinating distributed components, from time-triggered periodic models to best-effort event-based
+systems.
+
+\subsection{Giotto: A Time-Triggered Methodology}
+\label{sec:sota:distributed:giotto}
+
+\textsc{Giotto} is a programming methodology and language for hard real-time embedded systems that
+enforces a strict separation between the functional behavior of tasks and their real-time execution%
+~\cite{DBLP:journals/pieee/HenzingerHK03}. A \textsc{Giotto} program is structured around three main
+units: tasks, drivers, and modes. The basic functional unit is the \emph{task}, which periodically
+executes external code. Tasks communicate with each other, as well as with sensors and actuators,
+through \emph{drivers}, which are pieces of code assumed to execute essentially instantaneously,
+satisfying the synchrony hypothesis. In this way, the \textsc{Giotto} abstraction integrates
+scheduled, time-consuming computations (tasks) with synchronous, instantaneous communication
+(drivers). Finally, a set of concurrently executing tasks makes up a \emph{mode}; the system can
+switch between modes to change its behavior.
+
+The central concept enabling this is \emph{Logical Execution Time}
+(LET)~\cite{DBLP:conf/birthday/KirschS12}. A task reads its inputs precisely at its release time and
+produces its outputs precisely at its termination time, regardless of when the underlying
+computation actually completes, provided it finishes before its deadline. This decoupling of logical
+from physical time is the source of both \textsc{Giotto}'s primary strength and its main drawback.
+On one hand, it makes the system's timing behavior perfectly deterministic and predictable: whether
+a task runs on a fast or a slow processor, its outputs appear at the same logical moments. On the
+other hand, it introduces inherent latency. Because a task's output is not visible until the end of
+its logical execution window, the system cannot react faster than this pre-defined duration. This
+model, while safe and predictable, can be restrictive and imply high end-to-end latencies from input
+acquisition to the corresponding output production.
+
+A \textsc{Giotto} programmer specifies only the logical timing and functional dependencies, it does
+not dictate how or when tasks are scheduled. Instead, this responsibility falls to the compiler. It
+translates the program---composed of tasks, modes, and their periodic schedules---into a
+time-triggered instruction set, performing the necessary schedulability analysis to generate a
+static schedule that guarantees all timing constraints can be met on the target platform.
+
+\paragraph*{Comparison with GRust}
+The primary distinction between \textsc{Giotto} and \GRust lies in the philosophy of
+\emph{time-triggered} versus \emph{event-triggered} execution. \textsc{Giotto} is
+fundamentally time-triggered: computations happen at pre-determined points in time, dictated
+by a static schedule, regardless of whether inputs have changed. \GRust, conversely, is
+fundamentally event-triggered, with computations happening only in response to the arrival of
+new data. This leads to a key trade-off in the context of the \sdv: \textsc{Giotto} provides
+predictable timing for hard real-time control at the potential cost of inefficiency (running
+computations on unchanged data), while \GRust prioritizes efficiency by avoiding redundant
+computations, giving up the hard real-time guarantees that come from a static,
+time-triggered schedule.
+
+\subsection{Lingua Franca: A Reactor-Oriented Coordination Language}
+\label{sec:sota:distributed:lf}
+
+The design of \textsc{Lingua Franca} (LF) is heavily influenced by actor-oriented frameworks like
+\emph{Ptolemy~II}~\cite{DBLP:journals/pieee/EkerJLLLLNSX03}. Building on these concepts, LF is a
+polyglot coordination language based on \emph{reactors}---components with input and output ports and
+\emph{reactions} (code blocks) that execute in response to events carrying logical timestamps, or
+\emph{tags}~\cite{DBLP:journals/tcad/LeeS98}. A dedicated runtime enforces a deterministic execution
+order based on these tags and a dependency analysis of the reactions, guaranteeing that the behavior
+of the system is repeatable~\cite{DBLP:journals/taco/MenardLBCDDFLSTKCL23}. LF preserves determinism
+by default, admitting nondeterminism only when explicitly introduced by the programmer, and can
+target multiple languages, including \Ci, \Cpp, \textsc{Python}, \textsc{TypeScript}, and \Rust.
+
+The \texttt{Sample} reactor below, which targets \Rust, illustrates these concepts.
+
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize\color{BlackText}]
+target Rust
+reactor Sample(offset: time = 0, period: time) {
+  input i: i32
+  output o: i32
+  state s: i32 = 0
+  timer t(offset, period)
+  reaction(t) -> o {= ctx.set(o, ctx.get(s)); =}
+  reaction(i) {= self.s = ctx.get(i).unwrap(); =}
+}
+\end{lstlisting}
+
+This reactor defines two event-triggered computations, with native \Rust code specified inside
+\texttt{\{= ... =\}} blocks. The first reaction is triggered by an event on the input port
+\texttt{i} and updates the internal \texttt{state s} of the reactor. The second is triggered by a
+periodic \texttt{timer t} and sets the output port \texttt{o} on the current state. This setup
+creates a classic sampler: the state is updated whenever new input arrives, but the output is only
+produced periodically. The LF runtime guarantees that if a timer event and an input event occur at
+the same logical time, the input reaction will execute first due to the implicit data dependency
+through the state variable \texttt{s}.
+
+Where a language like \Prelude partitions a single synchronous program into a fixed set of
+\emph{periodic} tasks, LF provides a more general coordination layer for any set of event-driven
+components. It ensures deterministic execution even with sporadic events, separating the
+coordination logic from the computational code within the reactions.
+
+\paragraph*{Comparison with GRust}
+Both LF and the \GRFRP layer of \GRust can be seen as coordination languages for event-driven
+components, but their core guarantees and programming models differ. This is most evident in
+how they define behavior. In LF, the programmer explicitly defines the chain of causality by
+specifying reactions and their triggers---in effect, declaring the event propagation path. In
+\GRust, the programmer uses a declarative, equation-based style to define the relationships between
+dataflows, and it is the compiler's responsibility to derive the propagation strategy.
+
+This distinction leads to their different core guarantees. The primary contribution of LF is
+\emph{deterministic concurrency}: its centralized, time-aware runtime guarantees a globally
+consistent and repeatable order of reactions. \GRust, by targeting an asynchronous runtime like
+\texttt{tokio}, operates in a best-effort asynchronous world and does not guarantee a deterministic
+execution order \emph{between} its services. Instead, \GRust focuses on providing formal dataflow
+correctness, determinism, and memory safety \emph{within} each service.
+
+\subsection{Robot Operating System (ROS)}
+\label{sec:sota:distributed:ros}
+
+The \emph{Robot Operating System} (ROS) is a widely adopted open-source framework and middleware for
+building complex, distributed robotic systems~\cite{ros}. Its architecture is based on a
+decentralized, publish-subscribe model. A system is composed of independent processes called
+\emph{nodes}, which communicate by passing messages over named channels called \emph{topics}.
+
+However, the default communication model in ROS is fundamentally asynchronous and non-deterministic.
+There is no central clock or coordinator, and message delivery is best-effort, with no built-in
+guarantees on latency or ordering. While this flexibility is excellent for rapid prototyping, it
+makes formal reasoning about system-wide properties, especially timing, extremely difficult.
+Correctness relies on careful node-level design and extensive integration testing rather than on
+formal guarantees from the framework itself.
+
+The Python code below, implementing a simple robot controller, highlights a key consequence of
+this model.
+
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize\color{BlackText}]
+from rospy import Publisher, Subscriber, init_node, spin
+from std_msgs.msg import Float64
+import threading
+
+class RobotController:
+  def __init__(self):
+    self.lock = threading.Lock()
+    self.x = 0.0
+    self.goal = 0.0
+    self.cmd_pub = Publisher('/robot/cmd', Float64, queue_size=10)
+    self.x_sub = Subscriber('/robot/x', Float64, self.x_callback)
+    self.goal_sub = Subscriber('/robot/goal', Float64, self.goal_callback)
+
+  def x_callback(self, msg: Float64):
+    with self.lock:
+      self.x = msg.data
+      self._move()
+
+  def goal_callback(self, msg: Float64):
+    with self.lock:
+      self.goal = msg.data
+      self._move()
+
+  def _move(self):
+    error = self.goal - self.x
+    if abs(error) >= 0.01:
+      self.cmd_pub.publish(error)
+    else:
+      self.cmd_pub.publish(0.0)
+
+if __name__ == '__main__':
+  init_node('robot_controller')
+  controller = RobotController()
+  spin()
+\end{lstlisting}
+
+Functionally, the node implements a simple proportional controller to move a robot to a goal
+position. Architecturally, it reveals a critical challenge. The callbacks \texttt{x\_callback} and
+\texttt{goal\_callback} can be executed concurrently by the ROS runtime. Without protection, this
+creates a race condition: one callback could be preempted by the other after reading a shared state
+variable but before acting on it, leading to a command being issued based on inconsistent,
+partially-updated state. To prevent this non-deterministic behavior, the programmer must manually
+introduce a \texttt{threading.Lock}. This explicit, manual management of concurrency is notoriously
+difficult and error-prone, yet it is essential for achieving safety and determinism in a standard
+ROS node.
+
+\paragraph*{Comparison with GRust}
+At an architectural level, the \GRust model of services communicating \via imports and exports is
+conceptually similar to ROS nodes communicating over topics. Both frameworks embrace an
+event-driven, asynchronous philosophy for system-level coordination. The key difference lies in the
+guarantees provided for the components themselves. A ROS node is typically an unstructured program
+where the burden of ensuring correctness and concurrency safety falls entirely on the developer. In
+contrast, a \GRust service is constructed from formally defined, synchronous \GRSync components.
+\GRust thus brings the rigor of synchronous programming and the safety of the \Rust language to the
+implementation of individual components within a larger, ROS-like asynchronous architecture,
+abstracting away the need for manual locking and imperative propagation logic.
+
+\subsection{Synthesis: GRust in the Distributed Systems Landscape}
+\label{sec:sota:distributed:synthesis}
+
+The frameworks surveyed for distributed systems reveal a fundamental design spectrum, with the
+trade-off between determinism and efficiency at its core. At one end lies the \emph{time-triggered}
+model of \textsc{Giotto}, which provides the strongest guarantees of predictability and temporal
+determinism through a static, pre-verified schedule. This safety, however, comes at the cost of
+potential inefficiency, as computations are performed at fixed intervals, regardless of whether new
+data is available.
+
+At the other end of the spectrum is the \emph{best-effort, event-triggered} model of ROS. It offers
+maximum flexibility and responsiveness, making it ideal for rapid prototyping and loosely-coupled
+systems. However, it provides no built-in guarantees of determinism, latency, or ordering, placing
+the entire burden of ensuring safety and managing concurrency on the developer, often through
+complex and error-prone manual locking.
+
+\textsc{Lingua Franca} carves out a third, distinct position. It is event-triggered but not best-effort. By
+embedding logical timestamps into events and using a centralized, time-aware runtime, it achieves
+\emph{deterministic concurrency}, combining the responsiveness of an event-driven model with the
+repeatability of a time-triggered one.
+
+\GRust offers another distinct point on this spectrum, one that is pragmatically tailored to the
+modern automotive context. Architecturally, it embraces a similar event-driven, best-effort model to
+ROS at the system level, acknowledging that the underlying hardware and network of an \sdv are
+inherently asynchronous. However, its philosophy diverges at the component level. Instead of
+enforcing global determinism like \textsc{Lingua Franca}, or leaving it entirely to the programmer like ROS,
+\GRust focuses on guaranteeing \emph{local determinism} at the service level.
+
+\section{Functional Reactive Programming}
+\label{sec:sota:frp}
+
+Functional Reactive Programming (\frp) offers a declarative approach to programming reactive systems
+by modeling behavior as functions over time-varying values. Originating in the functional
+programming community, it has evolved into a broad family of languages and libraries, each with
+different trade-offs between expressivity, performance, and safety guarantees.
+
+\subsection{Classical and Arrowized FRP}
+\label{sec:sota:frp:classical}
+
+Classical \frp, as introduced in \textsc{Fran}~\cite{DBLP:conf/icfp/ElliottH97}, is defined by two
+core abstractions: \emph{Behaviors}, representing continuous time-varying values, and \emph{Events},
+representing discrete occurrences in time. Programs are constructed by composing pure functions over
+these signals, enabling a highly declarative and compositional style.
+
+A canonical example is the modeling of a bouncing ball, whose state changes discretely (at each
+bounce) while its motion is described by continuous physics between bounces.
+
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize\color{BlackText}]
+bouncing y0 v0 t0 = start t0 (y0, v0)
+  where
+    start t (y, v) = motion `untilB' bounce +=> start
+      where
+        motion = pairB pos vel
+        pos    = lift0 y + integral vel
+        vel    = lift0 v + integral (-9.81)
+        bounce = ((predicate (pos <=* 0) t) `snapshot' motion)
+                   ==> \(_, (yB, vB)) -> (yB, -0.8*vB)
+\end{lstlisting}
+
+This code defines a recursively specified behavior. Let us break down the \frp concepts it uses.
+The position (\texttt{pos}) and velocity (\texttt{vel}) are \emph{Behaviors}. They are defined using
+continuous-time concepts like \texttt{integral}, which describes the physics of motion under
+constant gravity. The \texttt{motion} is a behavior that pairs them together. An \emph{Event} is
+created using a \texttt{predicate} that monitors a boolean \emph{Behavior}. Here, an event is
+triggered whenever the ball hits the floor (\texttt{pos <=* 0}). When the collision event from the
+\texttt{predicate} occurs, \texttt{snapshot} captures the \emph{current value} of the
+\texttt{motion} behavior at that exact moment. The \texttt{untilB} operator switches from one
+behavior to another when an event occurs. The program follows the continuous \texttt{motion}
+behavior \emph{until} the \texttt{bounce} event. The \texttt{+=>} operator then defines the next
+behavior. It takes the value from the \texttt{bounce} event (which contains the new, damped
+velocity) and uses it to recursively call \texttt{start}, defining the next phase of continuous
+motion.
+
+However, this expressive denotational model, based on lazy evaluation, suffered from practical
+implementation challenges. The purity of the model made it difficult for the runtime to garbage
+collect the history of signals, leading to space and time leaks where resource consumption would
+grow without bound~\cite{DBLP:conf/icfp/Krishnaswami13}.
+
+To address these limitations, \emph{Arrowized \frp} (AFRP), as implemented in
+\Yampa~\cite{DBLP:conf/haskell/CourtneyNP03}, introduced a more structured approach. AFRP
+makes the static dataflow structure of the program explicit. Programs are built from \emph{signal
+  functions} (type \texttt{SF a b}), which are stateful transformations from an input signal of
+type \texttt{a} to an output signal of type \texttt{b}. The \texttt{ballGUI} example below
+demonstrates how these are composed using arrow syntax.
+
+\newpage
+
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize\color{BlackText}]
+mouseSF  :: SF GUIInput Point
+moveBall :: Point -> Picture
+ballGUI  :: SF GUIInput Picture
+ballGUI = proc gin -> do
+               mouse <- mouseSF         -< gin
+               bpic  <- liftSF moveBall -< mouse
+               returnA -< bpic
+\end{lstlisting}
+
+Here, the program is a signal function that transforms GUI inputs into a picture. The \texttt{proc}
+block enables arrow notation, where signal functions are wired together. The \texttt{mouseSF} signal
+function takes the raw GUI input signal \texttt{gin} and produces a signal of mouse coordinates
+(\texttt{Point}). The \texttt{-<} operator is the application that wires the input signal to the
+signal function. The \texttt{liftSF} combinator lifts a pure function (\texttt{moveBall}) into a
+stateless signal function. This new signal function is then applied to the \texttt{mouse} signal to
+produce the final picture signal, \texttt{bpic}. \texttt{returnA} specifies the final output signal
+of the composed \texttt{ballGUI} signal function. This arrow syntax makes the dataflow explicit,
+allowing the compiler to manage state within each signal function and guarantee bounded resource
+usage, at the cost of some dynamic flexibility.
+
+\paragraph*{Comparison with GRust}
+The design of \GRust is directly informed by this history. It avoids the problems of classical \frp
+by imposing a strict separation of concerns: the \GRFRP sub-language is a \emph{compositional} layer for
+wiring together dataflow operators, while new operators must be defined in the \GRSync sub-language. The
+\GRSync components are conceptually similar to the signal functions of \Yampa, providing the
+same guarantee of bounded resource usage.
+
+However, \GRust goes further to address a subtle but fundamental tension in the handling of feedback
+loops in \Yampa with the \texttt{loop} operator. In a purely push-based (on-change)
+execution, it is ambiguous how a stateful feedback loop should be evaluated. If it re-evaluates on
+every input change, the result may be semantically incorrect, as the output of the stateful node
+depends on its internal state, not just the current input. If it evaluates periodically, it loses
+the efficiency of the push-based model. If it computes a fix-point, it may not terminate.
+
+\GRust addresses this challenge directly with what we call a \emph{reactive type system}
+(\Cref{sec:semantics:grsync:react_typing,sec:semantics:grfrp:react_typing}). This
+system statically ensures that for any well-typed service, a purely push-based execution (reacting
+only to input changes) is semantically equivalent to a fine-grained synchronous periodic execution
+(\Cref{thm:semantics:grfrp:theorems:oversampling}). This provides a formal guarantee that the
+efficient, event-driven execution strategy is also correct, resolving the ambiguity present in other
+push-based systems.
+
+\subsection{Real-Time and Event-Driven FRP}
+\label{sec:sota:frp:rt}
+
+To make \frp suitable for resource-constrained and real-time environments, researchers have proposed
+variants that impose restrictions to gain predictability. Early approaches focused on imposing
+semantic restrictions on the classical model. \emph{Real-Time \frp}
+(RT-\frp)~\cite{DBLP:conf/icfp/WanTH01} ensures bounded memory and time by discretizing signals and
+restricting recursive definitions, making the signal history finite and manageable.
+\emph{Event-Driven \frp} (E-\frp)~\cite{DBLP:conf/padl/WanTH02} addresses causality concerns by
+making all updates explicitly triggered by discrete events, ensuring a clear and deterministic
+signal propagation path.
+
+To make the concepts of RT-\frp and E-\frp more concrete, we can examine how each would model a
+simple reactive computation. The syntax used here is hypothetical but reflects the core principles
+of each approach.
+
+\paragraph*{RT-FRP: Bounded State through Discretization}
+The goal of RT-\frp is to guarantee bounded time and memory. It achieves this by treating
+signals as discrete sequences (like in synchronous languages) and by restricting recursion to
+occur only across time steps. Consider a simple event counter.
+
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize\color{BlackText}]
+update_signal = let snapshot inc <- IncButton in
+  let snapshot dec <- DecButton in
+    (ext if is_some(inc) then 1 else if is_some(dec) then -1 else 0)
+
+count_signal = let snapshot update <- update_signal in
+  let snapshot count <- delay 0 (ext count + update) in 
+    (ext count)
+\end{lstlisting}
+
+This model operates in discrete, synchronous steps. Let's break down the syntax. The
+\texttt{let snapshot x <- s} takes the current value of the signal \texttt{s} and stores it as
+\texttt{x}. The \texttt{update\_signal} is thus a stream whose value is \texttt{1}, \texttt{-1}, or
+\texttt{0} at each instant. The definition of \texttt{count\_signal} uses the expression
+\texttt{delay 0 (...)}, a direct analog to the \texttt{pre} operator in \Lustre. It initializes the
+signal with \texttt{0} and, in every subsequent step, provides the value of the signal from the
+previous step.
+
+By enforcing that recursion must be guarded by a \texttt{delay}, RT-\frp ensures that the
+computation for each step is finite and non-circular. The system only needs to store the state from
+the single previous step to compute the next, guaranteeing bounded memory and solving the space leak
+problem of classical \frp.
+
+\paragraph*{E-FRP: Guaranteed Causality through Event Triggers}
+The goal of E-\frp is to ensure causality: an output at time $t$ can only depend on inputs that
+occurred at or before $t$. It achieves this by ensuring all state changes are explicitly triggered
+by discrete events.
+
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize\color{BlackText}]
+count = init x = 0 in
+    { IncButton => x + 1 }
+    { DecButton => x - 1 }
+
+color = if count < 0 then (0, 0, 255) 
+        else if count >= 100 then (255, 0, 0) else (0, 255, 0)
+\end{lstlisting}
+
+This model is not based on continuous-time behaviors or synchronous steps, but on atomic state
+updates. The program defines a piece of state, \texttt{count}, initialized to \texttt{0}. It then
+declares a set of \emph{event handlers}. When an \texttt{IncButton} event arrives, the state of
+\texttt{count} is updated by applying the pure function \texttt{x + 1} to the current state. The
+same logic applies to \texttt{DecButton}. The \texttt{color} value is a pure, stateless function
+derived from the current value of the \texttt{count} state.
+
+This event-handler style makes causality explicit. The state of the system evolves in a series of
+discrete, atomic transitions, each triggered by a specific input event. There is no ambiguity about
+when a computation happens, which was a key challenge in classical \frp.
+
+\paragraph*{Comparison with GRust}
+\GRust can be seen as a synthesis of the principles found in both RT-FRP and E-FRP, but with a
+strict architectural separation.
+
+On one hand, the \GRSync sub-language is conceptually identical to RT-FRP. It is a discrete, synchronous
+dataflow model where recursion is guarded by a delay operator (\texttt{last}) to guarantee bounded
+time and memory. A \GRSync component is, in essence, a formally-defined RT-FRP signal function,
+providing the same strong guarantees on resource usage and determinism.
+
+On the other hand, the \GRFRP service layer embodies the philosophy of E-FRP. It is a purely
+event-driven system where computations are triggered by the arrival of asynchronous events, ensuring
+a clear causal link from input to computation.
+
+The key innovation of \GRust lies not in choosing one model over the other, but in its explicit
+integration of both within a Globally Asynchronous, Locally Synchronous (GALS) architecture. Where
+RT-FRP and E-FRP are distinct language-level solutions to the problems of classical FRP, \GRust uses
+their principles as complementary architectural layers. The result is a system that provides the
+formal, analyzable safety of synchronous programming for its core computations (\GRSync) while
+retaining the efficiency and responsiveness of a fully event-driven system at the service level
+(\GRFRP).
+
+\subsection{Modal FRP for Safe Reactive Programming}
+\label{sec:sota:frp:modal}
+
+While the restrictions of RT-\frp and E-\frp are effective, a more recent and principled approach is
+\emph{Modal \frp}, which uses advanced type systems to enforce resource safety by
+construction~\cite{DBLP:conf/icfp/Krishnaswami13,DBLP:conf/popl/KrishnaswamiBH12,DBLP:conf/sfp/DischHB25}.
+\textsc{Rattus}~\cite{DBLP:journals/pacmpl/BahrGM19} is an example of this approach. It employs a
+modal type theory to distinguish between computations that can be executed in the current time step
+(\emph{now}) and those that must be delayed until the \emph{next} time step. This distinction,
+enforced by the type checker, statically prevents common \frp bugs like space leaks and causality
+violations.
+
+In a synchronous modal \frp like \textsc{Rattus}, the type system provides strong guarantees. The
+core idea is to use a modal type, written \texttt{O a}, to represent a computation that will produce
+a value of type \texttt{a} in the next time step. The type checker ensures that any recursive
+definition on a stream must pass through this \texttt{O} modality (\eg \via a \texttt{delay}
+operator). This rule makes it impossible to define a stream that depends on its own value at the
+same instant, thus guaranteeing productivity and causality.
+
+However, the synchronous model, which relies on a single global clock, is inefficient for many
+applications. For example, in a GUI, a text field needs to react to keyboard input, while a button
+reacts to mouse clicks. A global clock would force both components to execute a computation step for
+every single input, wasting resources. To address this, the extension
+\textsc{Async Rattus}~\cite{DBLP:journals/pacmpl/BahrM23} adapts the modal model with dynamic, local
+clocks, enabling efficient asynchronous computation.
+
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize\color{BlackText}]
+map :: Box (a -> b) -> Sig a -> Sig b
+map f (x ::: xs) = unbox f x ::: delay (map f (adv xs))
+
+const :: a -> Sig a
+const x = x ::: never
+
+switch :: Sig a -> O (Sig a) -> Sig a
+switch (x ::: xs) ysd = x ::: delay (case select xs ysd of
+                                       Fst  xs' ysd' -> switch xs' ysd'
+                                       Snd  _   ys   -> ys
+                                       Both _   ys   -> ys)
+\end{lstlisting}
+
+In \textsc{Async Rattus}, the semantics of the \texttt{O} modality changes: it represents a delay
+relative to a \emph{local} clock, not a global one. The above code, taken from the signal library of
+\textsc{Async Rattus}~\cite{async_ratt}, illustrates key concepts. The recursive call in
+\texttt{map} is guarded by \texttt{delay}, which is required by the type system to ensure
+productivity. The function itself is passed in a \texttt{Box}, representing a time-invariant,
+reusable computation. The \texttt{const} signal uses \texttt{never}, a computation whose local clock
+will never tick, creating a truly static value. The \texttt{switch} function allows a signal to
+behave like \texttt{xs} initially, but dynamically change its behavior to that of a new signal
+\texttt{ys} as soon as the local clock of \texttt{ys} ticks.
+
+\paragraph*{Comparison with GRust}
+
+\GRust is philosophically aligned with the goal of Modal \frp of achieving safety by construction,
+but it draws its solutions from a different research history: the established principles of
+synchronous dataflow languages.
+
+Causality and productivity are not enforced through a modal type system. Instead, they are
+guaranteed by the simpler dataflow structure of \GRSync components, where the \texttt{last} operator
+provides a straightforward, non-modal form of delay that is sufficient for static causality
+analysis. Similarly, memory safety is not derived from a custom type theory. \GRust leverages two
+powerful, orthogonal mechanisms: synchronous compilation ensures that each component has a
+statically bounded memory footprint, while the underlying \Rust compiler provides compile-time
+guarantees against memory errors \via its ownership and borrow-checking system.
+
+This design allows \GRust to offer strong safety guarantees without requiring its users to
+understand modal logic, making it more accessible to automotive engineers.
+
+\subsection{Practical FRP-Inspired Ecosystems}
+\label{sec:sota:frp:practical}
+
+The core ideas of \frp have been widely adopted through a generation of libraries that, while
+inspired by \frp, often deviate significantly from its classical formulation. Systems like the
+\ReactiveX (Rx) family~\cite{reactivex} focus on discrete event streams and adopt a predominantly
+\emph{push-based} or hybrid execution model. This makes them highly responsive and a natural fit for
+handling user input and network events in modern applications. Their primary strength lies in
+providing a rich set of compositional operators (\eg \texttt{map}, \texttt{filter}, \texttt{merge},
+\texttt{scan}) that allow developers to manage complex asynchronous dataflows declaratively.
+
+The \ReactiveX (RxJS) code below illustrates this style. It defines a declarative pipeline that
+transforms a stream of events based on timing.
+
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize\color{BlackText}]
+var times = [ { val: 0, t: 100 }, { val: 1, t: 600 },
+              { val: 2, t: 400 }, { val: 3, t: 700 } ];
+var source = Rx.Observable.from(times)
+  .flatMap((item) => Rx.Observable.of(item.val).delay(item.t));
+var double = source.debounce(500).map((x) => 2*x);
+\end{lstlisting}
+
+Let's trace the execution of this code. The \texttt{flatMap} operator processes the initial
+observable resulting from the array. For each item, it creates a new observable that will emit the
+value of the item after a specified delay. All these timers start at roughly the same time. This
+results in a \texttt{source} stream that will emit values on the following approximate timeline:
+\begin{itemize}
+  \item At t = 100\,ms: emits \texttt{0}
+  \item At t = 400\,ms: emits \texttt{2}
+  \item At t = 600\,ms: emits \texttt{1}
+  \item At t = 700\,ms: emits \texttt{3}
+\end{itemize}
+This \texttt{source} stream is then piped into the \texttt{debounce(500)} operator. This operator
+only emits a value if a 500\,ms period of silence passes after that value was received. If a new
+value arrives before the 500\,ms is up, the timer is reset and the previous value is discarded. The
+value \texttt{0} (at 100\,ms) is discarded because \texttt{2} arrives 300\,ms later. The value
+\texttt{2} (at 400\,ms) is discarded because \texttt{1} arrives 200\,ms later. The value \texttt{1}
+(at 600\,ms) is discarded because \texttt{3} arrives 100\,ms later. Only the final value,
+\texttt{3}, is followed by a quiet period longer than 500\,ms. Therefore, approximately 1200\,ms
+from the start (700\,ms + 500\,ms), the \texttt{debounce} operator emits \texttt{3}. This value is
+then passed to the \texttt{map} operator, and the final \texttt{double} stream emits the value
+\texttt{6}. This example demonstrates how a complex, stateful, and time-dependent behavior can be
+expressed concisely by composing a few powerful operators.
+
+While powerful for data transformation, this style can lead to challenges when managing the overall
+state of a complex application, as state can become implicitly distributed across many
+interconnected streams. The evolution of the \Elm language is particularly instructive in
+this context~\cite{DBLP:conf/pldi/CzaplickiC13}. \Elm began as a web-focused \frp language
+with a pure signal-graph model, but later transitioned to a more explicit state management
+architecture.
+
+Consider a simple counter application with two buttons, \texttt{incButton} and \texttt{decButton}.
+In early, \frp-style \Elm, this would be modeled by creating two independent event streams
+(one for each button) and merging them into a single stream of \texttt{updates}.
+
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize\color{BlackText}]
+incEvents = Signal.map (\_ -> 1) incButton.clicks
+decEvents = Signal.map (\_ -> -1) decButton.clicks
+updates = Signal.merge incEvents decEvents
+count = Signal.foldp (+) 0 updates
+main = Signal.map showCount count
+\end{lstlisting}
+
+In this model, the state (\texttt{count}) is not stored in a variable but exists implicitly as the
+result of folding all past update events from the merged stream. While elegant, this approach proved
+difficult to scale. In large application, the state of the application should be passed through
+folding operations.
+
+To solve this, \Elm moved away from the signal graph to \emph{The {Elm} Architecture}
+(TEA), a more predictable, centralized state management pattern.
+
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize\color{BlackText}]
+type alias Model = Int
+type Msg = Increment | Decrement
+init = 0
+update msg model =
+  case msg of
+    Increment -> model + 1
+    Decrement -> model - 1
+view model =
+  div []
+    [ button [ onClick Increment ] [ text "+" ],
+      div [] [ text (String.fromInt model) ],
+      button [ onClick Decrement ] [ text "-" ] ]
+main = Browser.sandbox { init = init, update = update, view = view }
+\end{lstlisting}
+
+In TEA, the entire application state is held in a single, explicit \texttt{Model}. The only way to
+change the state is to dispatch a \texttt{Msg}, which is processed by a pure \texttt{update}
+function. The \texttt{view} is also a pure function that renders the current \texttt{Model}. This
+shift created a clear, unidirectional dataflow and a single source of truth, making applications far
+easier to reason about and debug. This evolution highlights a broader trend: for mainstream
+application development, many ecosystems have favored simpler, more predictable state management
+models over the full, unconstrained power of classical \frp.
+
+\paragraph*{Comparison with GRust}
+\GRust is strongly aligned with this pragmatic family of languages. The \GReact library is
+explicitly inspired by the operators in \ReactiveX. The \GRFRP service layer, which composes
+operators on event streams, directly mirrors the declarative style of these libraries.
+
+\Elm addressed the challenges of implicit, distributed state by adopting a single,
+centralized state model (The \Elm Architecture). \GRust provides a more compositional
+solution to the same problem. The crucial difference lies in what constitutes a user-defined
+operator. In a system like \ReactiveX, a custom operator is typically an unstructured function in
+the host language (\eg \JavaScript), which can implicitly hold state and have arbitrary side
+effects.
+
+In \GRust, a user-defined operator must be a formally-defined synchronous \GRSync component. Each
+component is effectively an isolated, synchronous state machine, with a well-defined state that
+evolves predictably from one discrete instant to the next. This design choice is central to our
+contribution: it provides a formal foundation for building \emph{stateful} operators, ensuring that
+even complex, state-dependent logic remains analyzable and predictable. In essence, while
+\Elm enforces discipline at the application level, \GRust enforces it at the component
+level, allowing for safe composition of complex stateful behaviors.
+
+\subsection{Synthesis: GRust in the Functional Reactive Landscape}
+\label{sec:sota:frp:synthesis}
+
+The history of \frp is a compelling narrative of trade-offs between expressive power, formal safety,
+and practical usability. Classical \frp offered unparalleled declarative elegance but was plagued by
+resource leaks. Arrowized and Safe \frp variants solved these leaks, either by restricting the
+programming model or by introducing advanced type systems, but often at the cost of increased
+complexity. In parallel, practical libraries like \ReactiveX gained massive adoption by prioritizing
+a simple, push-based model, while frameworks like \Elm ultimately pivoted away from implicit
+signal graphs entirely toward a more predictable, centralized state architecture.
+
+Like Arrowized and Safe \frp, \GRust guarantees bounded memory and time. However, it achieves this
+not through a modal type system, but through its GALS architecture. The \GRSync sub-language enforces the
+same ``delayed recursion" principle as RT-\frp and synchronous languages, ensuring that any stateful
+component is provably resource-bounded. This provides the safety of academic \frp using a simpler,
+synchronous mechanism.
+
+The evolution of \Elm highlights the difficulty of managing state in a purely compositional,
+signal-based model. The \Elm Architecture (TEA) solves this with a single, monolithic state
+object. \GRust offers a more compositional alternative. By requiring all user-defined operators to
+be synchronous \GRSync components, it ensures that each piece of stateful logic is an isolated,
+well-defined state machine. This allows for the safe composition of complex, stateful behaviors.
+
+Practical libraries like \ReactiveX are efficient but lack a clear formal semantics, especially
+regarding stateful feedback loops. \GRust embraces the efficient, push-based execution model but
+formalizes it. The reactive type system (\Cref{sec:semantics:grsync:react_typing,sec:semantics:grfrp:react_typing})
+guarantees that for any well-typed service, this
+event-driven execution is semantically equivalent to a more easily understood periodic execution.
+This provides the efficiency of practical \frp with the correctness guarantees of formal synchronous
+models.
+
+In essence, \GRust navigates the \frp landscape by combining the compositional, event-driven style
+of practical libraries at the service level with the formal rigor and guaranteed safety of
+synchronous languages at the component level.
+
+\section{Verification of Synchronous Dataflow Programs}
+\label{sec:sota:verification}
+
+The development of critical systems requires not only a sound programming model but also a rigorous
+methodology for verification and analysis. This section surveys techniques and tools used to
+establish confidence in system correctness.
+
+\subsection{Property Checking with Observers and Contracts}
+\label{sec:sota:verification:properties}
+
+A primary goal of formal verification is to prove that a system satisfies key safety properties. In
+the context of synchronous languages, this is commonly achieved using two main approaches: the
+observer pattern and contract-based verification.
+
+The \emph{observer pattern}~\cite{TR-2018-11} encodes a property as a synchronous node that monitors
+the inputs and outputs of the system under verification. It typically consists of two parts: a node
+for the assumed hypotheses and a node for the expected properties. The observer outputs a boolean
+stream that is true as long as the property holds and becomes false at the first violation. The
+verification task is then transformed into proving that this output can never be false, a proof
+typically discharged by a model checker such as the BDD-based tool \textsc{Lesar}~\cite{DBLP:phd/hal/Ratel92}.
+
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize\color{BlackText}]
+node counter(sec, bea: bool) returns (ontime, late, early: bool);
+var diff: int;
+let
+  diff   = (0 -> pre(diff)) + (if bea then  1 else 0)
+                            + (if sec then -1 else 0);
+  early  = diff <= 2;
+  late   = diff >= -2;
+  ontime = not (early or late);
+tel
+
+node assume(sec, bea: bool) returns (hypothesis: bool);
+var forbid_sec, forbid_bea: bool;
+let
+  forbid_sec = if (false -> pre(forbid_sec)) then not bea else sec;
+  forbid_bea = if (false -> pre(forbid_bea)) then not sec else bea;
+  hypothesis = not(sec and forbid_sec or bea and forbid_bea);
+tel
+
+node expect(ontime: bool) returns (ok: bool);
+let
+  ok = ontime
+tel
+
+
+node verification(sec, bea: bool) returns (hypothesis, ok: bool);
+var ontime, late, early: bool;
+let
+  ontime, late, early = counter(sec, bea);
+  hypothesis = assume(sec, bea);
+  ok = expect(ontime);
+tel
+\end{lstlisting}
+
+The example above, from~\cite{TR-2018-11}, monitors the speed of a train by counting beacon
+(\texttt{bea}) and second (\texttt{sec}) signals. The property to verify is ``if the train maintains
+cruising speed, it remains on time." The \texttt{assume} node formalizes the hypothesis that beacons
+and seconds alternate. A model-checker like \textsc{Lesar} can then formally verify that if this
+\texttt{hypothesis} is always true, the property \texttt{ok} also remains true.
+
+A complementary approach, particularly suited for SMT-based tools like
+\Kind~\cite{DBLP:conf/cav/ChampionMST16}, is \emph{contract-based verification}. Properties are
+specified as annotations directly within the code using pre-conditions (\texttt{assume}) and
+post-conditions or invariants (\texttt{guarantee}).
+
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize\color{BlackText}]
+node avg(x, y: real) returns (a: real);
+(*@contract
+  assume x <= y;
+  guarantee x <= a and a <= y; *)
+let
+  a = (x + y) / 2.0;
+tel
+
+node max(x: real) returns (m: real);
+let
+  m = x -> if x > pre x then x else pre m;
+tel
+
+node sav(x: real) returns (s: real);
+(*@contract
+  assume x > 0.0 and x > pre x;
+  guarantee s <= max(x); *)
+let
+  s = avg(x -> pre s, x);
+tel
+\end{lstlisting}
+
+The code above, from~\cite{DBLP:conf/cav/ChampionMST16}, illustrates this method. The node
+\texttt{sav} defines a stateful smoothing average. The contract specifies that if we \texttt{assume}
+the input stream \texttt{x} is positive and strictly increasing, we want to \texttt{guarantee} that
+the output \texttt{s} will never exceed the maximum value of \texttt{x} seen so far. A tool like
+\Kind translates the node and its contract into a set of logical formulas and uses an SMT solver to
+prove the property, often employing techniques like k-induction~\cite{DBLP:conf/fmcad/SheeranSS00}
+to reason about the infinite execution of the synchronous program.
+
+\paragraph*{Comparison with GRust}
+\GReusot, the verification tool for \GRust, implements the contract-based approach. \GReusot adopts
+a similar annotation style to allow developers to specify pre- and post-conditions on \GRSync
+components. However, its methodology differs in a crucial aspect: the verification target. While
+\Kind verifies the abstract synchronous model, \GReusot translates its specifications into
+annotations \emph{on the generated code} for \Creusot, a verifier for the \Rust language itself.
+This means the formal proof applies directly to a low-level artifact, bridging the gap between the
+model and the implementation.
+
+This choice of targeting \Rust provides a second, significant advantage. A verifier for a \Ci-like
+language must contend with aliasing, pointer arithmetic, and memory management, requiring extensive
+annotations to prove memory safety before even considering functional correctness. \Creusot, in
+contrast, leverages the ownership and borrow-checking system of the \Rust compiler. Since the
+compiler has already statically guaranteed memory and thread safety, the verifier can focus
+exclusively on the logical correctness of the algorithm, greatly simplifying the proof effort
+required from the developer.
+
+\subsection{Heptagon/BZR: Contract-Based Synthesis}
+\label{sec:sota:synchronous:heptagon}
+
+\Heptagon/BZR is a \Lustre-like language that integrates the concept of \emph{behavioral contracts}
+directly into the language, not just for verification, but for the purpose of
+\emph{synthesis}~\cite{DBLP:conf/lctrts/DelavalMR10}. A contract specifies assumptions about the
+inputs of a component and guarantees about its outputs. Crucially, it can also declare
+\emph{controllable} variables, for which the compiler must synthesize control logic to ensure the
+contract is never violated.
+
+This approach shifts the developer's burden from manual implementation and post-hoc verification to
+the formal specification of requirements. The compiler leverages these contracts to automatically
+generate a correct-by-construction controller, enabling a higher degree of automation in the design
+process.
+
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize\color{BlackText}]
+node twomodes (v:int) = (y:int)
+  contract
+    assume  (v <= 1)  & (v >= 0)
+    enforce (o <= 10) & (o >= 0)
+    with    (c:bool)
+var last x : int = 0;
+let
+  y = x;
+  automaton
+    state Up
+      do x = last x + v
+      until c then Down
+    state Down
+      do x = last x - v
+      until not c then Up
+  end
+tel
+\end{lstlisting}
+
+The example above, from~\cite{heptreax_manual}, defines a component whose state variable \texttt{x}
+(and thus output \texttt{y}) either increments or decrements based on the state of an automaton. The
+contract enforces that the output \texttt{y} must remain within the range $[0, 10]$. The boolean
+\texttt{c} is declared as a controllable variable using the \texttt{with} clause. The task of the
+compiler is to synthesize a control strategy for \texttt{c}. To satisfy the contract, it must
+generate logic that sets \texttt{c} to true (switching to the \texttt{Down} state) when \texttt{x}
+approaches 10, and sets \texttt{c} to false (switching to the \texttt{Up} state) when \texttt{x}
+approaches 0, effectively creating a bounded counter.
+
+\paragraph*{Comparison with GRust}
+Both \GRust and \Heptagon/BZR integrate formal specifications directly into the source code, but
+their objectives differ fundamentally. \Heptagon/BZR focuses on \emph{synthesis}: automatically
+generating an implementation from a high-level contract. In contrast, \GRust, through \GReusot,
+focuses on the \emph{deductive verification} of a manually written implementation. This aligns with
+a more traditional engineering workflow where the developer writes the control logic and a verifier
+confirms its correctness.
+
+\subsection{Verified Compilers and Code-Level Analyzers}
+\label{sec:sota:verification:compilers}
+
+Ensuring that the safety guarantees of a high-level model are preserved after compilation is a
+critical challenge. A bug in the compiler could invalidate all high-level proofs. This is addressed
+in two main ways: verifying the compiler itself, or verifying its output.
+
+The most robust solution is a \emph{formally verified compiler}. An example is
+CompCert~\cite{compcert}, a \Ci compiler formally proven in \Rocq to be free of miscompilation
+errors. In the synchronous world, \Velus~\cite{velus} provides a formally verified compiler for a
+subset of \Lustre, offering the strongest guarantee that the semantics of the source program are
+preserved. However, the immense effort required means that evolving a language with a verified
+compiler is extremely difficult, as even small changes can require significant proof maintenance.
+
+An alternative approach is to analyze the generated code. This is the strategy taken by the \LustreC
+language~\cite{lustrec}, which uses \FramaC~\cite{framac} for the formal verification of properties
+directly on the generated \Ci code. Using techniques like weakest precondition calculus, \FramaC can
+prove the absence of runtime errors (\eg buffer overflows) and verify functional contracts. While
+this approach is powerful because it verifies the final artifact that will be deployed, it remains
+extremely labor-intensive. A significant portion of the proof effort is dedicated to the onerous
+task of establishing memory safety properties that are trivial in the high-level source model.
+
+\paragraph*{Comparison with GRust}
+\GRust offers a pragmatic and powerful alternative that sits between these two extremes. The \GRust
+compiler itself is not formally verified like \Velus. However, its verification strategy directly
+addresses the model-to-implementation gap in a novel way. The \GReusot tool translates contracts
+written on the high-level \GRust model into formal annotations on the \emph{generated \Rust code}.
+This means the verification effort targets the final artifact, ensuring the correctness of the
+output of the compiler for a given program, without requiring a full proof of the compiler itself.
+
+\subsection{Synthesis: GRust in the Verification Landscape}
+\label{sec:sota:verification:synthesis}
+
+The survey of verification techniques reveals a landscape of trade-offs between the level of
+automation, the strength of the guarantees, and the practicality of the engineering workflow. The
+approaches range from automated synthesis from contracts, to model-level verification, to laborious
+code-level analysis. \GRust, through its verification tool \GReusot, carves out a distinct and
+pragmatic position within this landscape, defined by a series of deliberate design choices.
+
+First, \GReusot aligns with the contract-based deductive verification approach of tools like \Kind,
+rather than the synthesis-from-contract model of \Heptagon/BZR. This choice supports a traditional
+and flexible engineering workflow where the developer retains full control over the implementation
+logic, and the formal method is used to verify its correctness, not to generate it.
+
+Second, and most critically, \GReusot addresses the ``trust in tools" problem by verifying the
+\emph{generated code}, not the abstract source model. This is philosophically similar to the
+\LustreC/\FramaC toolchain, acknowledging that proofs on the final artifact are the most meaningful.
+However, \GRust's choice of \Rust as a compilation target eliminates the generated assertions
+required to prove memory safety in \Ci with \FramaC. The ownership and borrow-checking system of the
+\Rust compiler provides these guarantees by construction, for free.
+
+This allows the developer and the verifier (\Creusot) to focus exclusively on the high-level
+functional properties of the system, as expressed in the contracts. \GReusot combines the rigor of
+code-level analysis with the practicality of a modern, safe-by-construction language ecosystem,
+offering a powerful and accessible path to high-assurance software.
+
+\section{Overall Synthesis and Positioning of GRust}
+\label{sec:sota:overall_synthesis}
+
+This chapter has surveyed the state of the art across four key domains: industrial model-based
+tools, academic synchronous languages, distributed systems frameworks, and Functional Reactive
+Programming. The analysis reveals a spectrum of design philosophies, with different sets of
+trade-offs between formal guarantees, performance, and programming abstraction.
+
+Legacy tools like \Simulink and \Scade offer mature modeling environments but are tied to an
+inefficient periodic execution model. Synchronous languages such as \Lustre and \Esterel provide
+powerful formalisms for correctness, with derivatives like \Prelude and \textsc{HipHop.js}
+adapting these principles to multi-periodic or asynchronous environments. \frp variants solve
+theoretical issues of resource management, while Modal \frp introduces advanced type systems to
+guarantee safety. Conversely, frameworks like ROS and \ReactiveX embrace asynchrony but delegate
+the burden of ensuring correctness to the developer.
+
+\GRust carves out a distinct and pragmatic position within this landscape, as summarized in
+\Cref{tab:sota:synthesis:comparison}. It synthesizes principles from these different domains to
+directly address the challenges of the Software-Defined Vehicle. It combines the declarative,
+formally-grounded components of synchronous languages with the efficient, event-driven execution
+model of practical reactive libraries, all while leveraging the safety guarantees of the \Rust
+ecosystem.
+
+\begin{table}[ht!]
+  \centering
+  \begin{tabularx}{\textwidth}{@{} >{\raggedright}p{0.15\textwidth}
+    >{\raggedright}p{0.27\textwidth}
+    >{\raggedright}p{0.27\textwidth}
+    >{\raggedright\arraybackslash}p{0.27\textwidth} @{}}
+    \toprule
+    \textbf{Framework}                                                              & \textbf{Execution Model} & \textbf{Concurrency Guarantee} & \textbf{Primary Use Case} \\
+    \midrule
+    \Lustre / \Scade                                                                &
+    Synchronous: pull-based execution at a single base-clock rate.                  &
+    Sequential: compiles to a single-threaded step function.                        &
+    Safety-critical control systems.                                                                                                                                        \\
+    \addlinespace
+    \Esterel                                                                        &
+    Imperative synchronous: complex control-flow with preemption.                   &
+    Deterministic concurrency: resolved at compile-time into a state machine.       &
+    Time-critical control logic and hardware synthesis.                                                                                                                     \\
+    \addlinespace
+    \textsc{HipHop.js}                                                              &
+    Synchronous reactive with asynchronous tasks.                                   &
+    Deterministic concurrency: within the reactive machine.                         &
+    Complex web applications.                                                                                                                                               \\
+    \addlinespace
+    \Prelude                                                                        &
+    Multi-periodic, time-triggered: partitions a synchronous model into RTOS tasks. &
+    Schedulability analysis: generates verifiable multi-task code.                  &
+    Multi-periodic hard real-time systems.                                                                                                                                  \\
+    \addlinespace
+    \textsc{Lingua Franca}                                                          &
+    Event-triggered with logical time: reactions ordered by timestamped events.     &
+    Deterministic concurrency: enforced by a centralized runtime scheduler.         &
+    Distributed real-time systems.                                                                                                                                          \\
+    \addlinespace
+    \Yampa                                                                          &
+    Discrete-time, pull-based sampling of a continuous-time model.                  &
+    Sequential: composition of stateful signal functions.                           &
+    Animations, robotics, and GUIs.                                                                                                                                         \\
+    \addlinespace
+    \textsc{Async Rattus}                                                           &
+    Asynchronous modal FRP: execution on local-clocks.                              &
+    Causality and productivity by construction.                                     &
+    GUIs and formal methods research.                                                                                                                                       \\
+    \addlinespace
+    ROS / \ReactiveX                                                                &
+    Event-triggered: asynchronous message/event streams.                            &
+    Non-deterministic: requires manual locking or schedulers.                       &
+    Robotics and UI development.                                                                                                                                            \\
+    \midrule
+    \GRust                                                                          &
+    GALS: locally synchronous components in a globally asynchronous system.         &
+    Locally deterministic: guaranteed within services, but globally best-effort.    &
+    Asynchronous automotive stack for SDV.                                                                                                                                  \\
+    \bottomrule
+  \end{tabularx}
+  \caption[Comparative analysis of languages and frameworks.]%
+  {A comparative analysis of languages and frameworks, positioning \GRust within the design spectrum
+    of reactive and distributed systems.}
+  \label{tab:sota:synthesis:comparison}
+\end{table}
