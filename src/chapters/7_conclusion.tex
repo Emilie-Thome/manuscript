@@ -87,18 +87,13 @@ While this thesis establishes the theoretical foundations and practical viabilit
 important to acknowledge the boundaries of the current work. These limitations, which directly
 inform the future research directions, are as follows.
 
-First, the prototype compiler, while functional, does not yet implement all features of the language
-design. Most notably, the \emph{reactive type system}, which is formally defined, has not been
-integrated into the compiler. Consequently, the crucial compile-time guarantees against oversampling
-are not yet enforced in practice.
-
-Second, the formal verification of the language semantics was conducted by hand. Although this
+First, the formal verification of the language semantics was conducted by hand. Although this
 approach is sufficient to establish the core properties of the language, the proofs have not been
 machine-checked in a formal proof assistant like \Rocq~\cite{rocq} or
 Isabelle~\cite{DBLP:books/sp/NipkowPW02}. Such a formalization provides a higher degree of
 confidence but was outside the scope of this project.
 
-Finally, the verification capabilities of \GReusot face a key limitation in the compositional
+Second, the verification capabilities of \GReusot face a key limitation in the compositional
 reasoning of stateful components. While properties of a component's own state can be verified,
 it is not possible to prove a \texttt{requires} clause of a sub-component if that clause depends on
 its internal state. Because the state of sub-components is treated as opaque, their invariants
@@ -125,14 +120,14 @@ to software that is difficult to maintain and evolve.
 A \dsl such as \GRust addresses these challenges by raising the level of abstraction. It allows
 engineers to focus on the functional behavior of the system, rather than on the intricate details of
 asynchronous programming and memory management in \Rust. As benchmarks on existing \ampere code
-suggest (\Cref{sec:grust:benchmarks:grust_vs_rust}), this shift can lead to significant productivity
+suggest (\Cref{sec:grust:benchmarks:grust_vs_rust} in \Cref{cha:grust}), this shift can lead to significant productivity
 gains. Furthermore, by making the system design explicit and readable, \GRust enhances long-term
 maintainability. The model itself serves as a form of documentation, which facilitates review,
 debugging, and modification.
 %
 This perspective is further strengthened by the promising results from the \GRust prototype, which
 exhibits minimal overhead compared to manually implemented code at \ampere
-(\Cref{sec:grust:benchmarks:grust_vs_rust}). The prototype compiler was developed with a focus on
+(\Cref{sec:grust:benchmarks:grust_vs_rust} in \Cref{cha:grust}). The prototype compiler was developed with a focus on
 demonstrating the practical usability of the language, not on performance optimization. The
 efficiency of this unoptimized prototype indicates that the abstraction layer does not impose a
 significant performance penalty. This outcome leaves ample room for future optimizations, should
@@ -171,20 +166,22 @@ language, transforming the \GRust prototype into a production-ready toolchain fo
 
 \subsection{Language and Compiler Evolution}
 
-The first priority is to ensure that the practical implementation of the \GRust compiler fully
-aligns with its formal specification.
+The first priority is to enhance the practical implementation of the \GRust compiler, with a focus
+on improving its diagnostic capabilities.
 
-\paragraph{Implementation of the Reactive Type System}
-A primary objective for future work is the full implementation of the \emph{reactive type system}
-detailed in \Cref{sec:semantics:grsync:react_typing,sec:semantics:grfrp:react_typing}. While the
-formal design is complete, the current prototype compiler does not yet enforce its rules. This type
-system is critical for guaranteeing the soundness of the execution model at the heart of \GRust. Its
+\paragraph{Errors from the Reactive Type System}
+A primary objective is to improve the error reporting for the \emph{reactive type system} (detailed
+in \Cref{sec:semantics:grsync:react_typing,sec:semantics:grfrp:react_typing}). This type system is
+critical for guaranteeing the soundness of the execution model of \GRust, as it formally proves that
+a component is \emph{reactive}---resilient to oversampling and safe for event-driven execution. Its
 central purpose is to statically distinguish between \emph{continuous} flows (those dependent on
-execution time, like \timeop) and \emph{discrete} flows (those only driven by input changes). By
-implementing these typing rules, the compiler could formally prove that a component is
-\emph{reactive}---that is, resilient to oversampling and safe for use in an event-driven context.
-Integrating this system is the necessary step to provide the full safety and predictability
-guarantees promised by the \GRust language design.
+execution time, like \timeop) and \emph{discrete} flows (those only driven by input changes).
+%
+Although the type system is fully implemented, the diagnostic messages produced by the prototype
+compiler are not sufficiently informative to help developers resolve type violations. Future work
+must focus on generating clear, actionable diagnostics that provide context for an error and suggest
+potential solutions, possibly based on common patterns. This enhancement is a crucial step toward
+delivering the predictability guarantees promised by the \GRust language.
 
 \subsection{Verification, Validation, and Safety Assurance}
 

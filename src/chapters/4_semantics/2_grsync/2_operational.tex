@@ -57,8 +57,8 @@ The sampling types $sty$ of flows (\ie the type of the value visible in a flow a
 are recorded in a typing context \tyCtx. A signal type is denoted by $ty$, while an event type is
 denoted by \mayB{ty}, indicating that an event may have no value. The sampling type of a flow
 identified by $x$ is accessed as $\tyCtx[x] = sty$. These types serve as syntactic labels, but their
-correct usage is governed by a type system, detailed in \Cref{sec:grust:typing}. In the semantics,
-they are used to distinguish the behavior of signals from that of events.
+correct usage is governed by a type system, detailed in \Cref{sec:grust:typing} of \Cref{cha:grust}.
+In the semantics, they are used to distinguish the behavior of signals from that of events.
 %
 A program is represented as a mapping \G from component and service names to their definitions.
 The definition of a component $f$ is accessed by $\G[F]$, and the one of a service $F$ by $\G[F]$.
@@ -897,10 +897,10 @@ cannot yet be determined and returns $\bot$.
 \end{center}
 
 \paragraph{Summary}
-This section presented the operational semantics of \GRSync using a small-step, state-machine-based 
+This section presented the operational semantics of \GRSync using a small-step, state-machine-based
 formalism. We introduced a set of transition rules that describe the execution of each language
 construct, from high-level components to individual expressions and patterns. The state, which is
-finite and statically determined, encapsulates memories and the states of nested components. A key 
-aspect of this semantics is the use of a fix-point iteration to evaluate simultaneous equations. 
-This approach resolves data dependencies without imposing a fixed execution order. The propagation 
+finite and statically determined, encapsulates memories and the states of nested components. A key
+aspect of this semantics is the use of a fix-point iteration to evaluate simultaneous equations.
+This approach resolves data dependencies without imposing a fixed execution order. The propagation
 of a bottom value ($\bot$) ensures that computations proceed only when their inputs are determined.

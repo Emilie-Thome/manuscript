@@ -432,7 +432,7 @@ implemented and extended with a high degree of confidence.
 \subsubsection{Efficient and Safe Execution \via Asynchronous \Rust}
 \label{sec:grust:implem:design_principles:async_rust}
 
-As explained in \Cref{sec:intro:gap}, \ampere is adopting asynchronous \Rust to realize the
+As explained in \Cref{sec:intro:gap} of \Cref{cha:intro}, \ampere is adopting asynchronous \Rust to realize the
 push-based execution model required by the \sdv architecture. However, direct implementation in a
 low-level language like \Rust is challenging, and the complexities of asynchronous programming
 further increase the risk of errors. \GRust addresses this by automatically generating safe and
@@ -1115,7 +1115,7 @@ These are the crates developers directly interact with.
           execution model.\footnote{The correctness of time and memory-dependent components, such as
               integrators, is not guaranteed in a push-based system. Consequently, \GRust imposes a
               typing discipline to restrict their usage, a mechanism further explained and formalized in
-              \Cref{sec:semantics:grsync:react_typing}.}
+              \Cref{sec:semantics:grsync:react_typing} of \Cref{cha:semantics}.}
 \end{itemize}
 
 \subparagraph{Runtime Support}
@@ -1253,7 +1253,8 @@ the generated \texttt{step} function must be an imperative, sequential block of 
 The primary challenge for the compiler is therefore to resolve the data dependencies
 inherent in the component's equations, establish a valid partial order for their
 execution, and synthesize a single, imperative \texttt{step} function that correctly
-implements the component's semantics, formalized in \Cref{sec:semantics:grsync:opsem}.
+implements the component's semantics, formalized in \Cref{sec:semantics:grsync:opsem} of
+\Cref{cha:semantics}.
 
 \paragraph{Detailed Compilation Passes}
 The compilation of a \GRSync component is a multi-stage process that transforms the
@@ -1348,9 +1349,9 @@ component toggle(trigger: unit?) -> (state: bool) {
 
           In addition to standard type checking, a sound implementation must also enforce the rules
           of the \emph{reactive type system}, which is formally detailed in
-          \Cref{sec:semantics:grsync:react_typing}. This system is crucial for guaranteeing that a
-          component's behavior remains consistent when used within an asynchronous, event-driven
-          \GRFRP service.
+          \Cref{sec:semantics:grsync:react_typing} of \Cref{cha:semantics}. This system is crucial
+          for guaranteeing that a component's behavior remains consistent when used within an
+          asynchronous, event-driven \GRFRP service.
 
           The core challenge arises from constructs like the \kft{time} operator and untriggered
           \kft{last} memories. These can create \emph{continuous} flows, whose values change with
@@ -1364,11 +1365,6 @@ component toggle(trigger: unit?) -> (state: bool) {
           formally established by the \emph{Oversampling Theorem}
           (\Cref{thm:semantics:grsync:theorems:oversampling}), which proves that well-typed programs
           are immune to such inconsistencies.
-
-          While this verification is a key part of the language's formal semantics, its
-          implementation in the prototype compiler is not yet complete. This check would logically
-          follow the main type analysis pass, enriching the symbol table with reactive type
-          information before subsequent stages.
 
     \item \textbf{Causality Analysis:} This pass ensures that a component is computable by analyzing
           its data dependencies. The compiler constructs a \emph{dependency graph} where nodes
@@ -1922,11 +1918,11 @@ To implement this pattern, a service is compiled into a \Rust module that encaps
 logic through several generated elements.
 \begin{description}
     \item[Context Struct]
-          The \emph{Context Struct} holds the memories needed for future computations.
-          These values, such as the last value of a signal, correspond to the state
-          defined in the operational semantics (\Cref{sec:semantics:grfrp:opsem}).
-          Each stored value is paired with a boolean flag to indicate whether it has been
-          updated in the current execution step.
+          The \emph{Context Struct} holds the memories needed for future computations. These values,
+          such as the last value of a signal, correspond to the state defined in the operational
+          semantics (\Cref{sec:semantics:grfrp:opsem} in \Cref{cha:semantics}). Each stored value is
+          paired with a boolean flag to indicate whether it has been updated in the current
+          execution step.
 
     \item[Input Storage Struct]
           The \emph{Input Storage Struct} implements the delay specified by the annotation
@@ -2096,9 +2092,9 @@ service hazard_light_controller {
           \end{figure}
 
           This pass must also enforce the rules of the \emph{reactive type system} for \GRFRP, which
-          is formally detailed in \Cref{sec:semantics:grfrp:react_typing}. This system is essential
-          for ensuring that service behavior remains predictable and compositional in an
-          event-driven, push-based execution model.
+          is formally detailed in \Cref{sec:semantics:grfrp:react_typing} of \Cref{cha:semantics}.
+          This system is essential for ensuring that service behavior remains predictable and
+          compositional in an event-driven, push-based execution model.
 
           The central challenge is managing the \kft{time} operator, which introduces a
           \emph{continuous} flow whose value changes at every execution step. In an event-driven
@@ -2111,10 +2107,6 @@ service hazard_light_controller {
           behavior of a service is determined by its declared data dependencies, not by the
           arbitrary timing of its execution. The soundness of this approach is formally established
           by the \emph{Oversampling Theorem} (\Cref{thm:semantics:grfrp:theorems:oversampling}).
-
-          As with its \GRSync counterpart, the implementation of this reactive type checking is
-          planned but not yet complete in the prototype compiler. It would logically follow the
-          standard type analysis pass, further annotating the symbol table before code generation.
 
     \item \textbf{Normalization:} This pass simplifies the AST by rewriting complex statements into
           a series of simple, single-assignment equations where operations apply only to
