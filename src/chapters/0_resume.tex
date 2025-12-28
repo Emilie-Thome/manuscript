@@ -824,9 +824,9 @@ Les contributions de cette thèse sont les suivantes~:
 \subsection{Limites des Travaux Actuels}
 
 Bien que cette thèse établisse la viabilité de l'approche \GRust, certaines limites définissent le
-périmètre des contributions actuelles. Le compilateur prototype n'implémente pas encore le système
-de types réactifs, ce qui signifie que les garanties contre le sur-échantillonnage ne sont pas
-encore appliquées en pratique. Les preuves sémantiques ont été réalisées manuellement et n'ont pas
+périmètre des contributions actuelles. Le compilateur prototype implémente le système de types
+réactifs, mais aucune aide compréhensible n'est pour l'instant fournie pour corriger un programme ne
+respectant pas ces règles. Les preuves sémantiques ont été réalisées manuellement et n'ont pas
 été vérifiées par un assistant de preuve formel comme \Rocq~\cite{rocq} ou
 Isabelle~\cite{DBLP:books/sp/NipkowPW02}, ce qui représenterait un niveau de confiance supérieur.
 Enfin, l'outil de vérification \GReusot est limité dans sa capacité à raisonner de manière
@@ -838,9 +838,9 @@ des invariants d'état pour les sous-composants.
 Les résultats prometteurs de \GRust ouvrent de nombreuses perspectives de recherche et de
 développement pour en faire un outil industriel robuste.
 
-\paragraph{Évolution du Langage et du Compilateur} La priorité est de finaliser l'implémentation du
-système de types réactifs dans le compilateur pour garantir statiquement la résilience au
-sur-échantillonnage. À plus long terme, le compilateur pourrait être rendu agnostique au
+\paragraph{Évolution du Langage et du Compilateur} La priorité est d'ajouter des aides à la
+correction d'un programme ne respectant pas le système de types réactifs, sur la base d'heuristiques
+sur les cas d'erreurs fréquents. À plus long terme, le compilateur pourrait être rendu agnostique au
 \textit{runtime} asynchrone (actuellement dépendant de \texttt{tokio}~\cite{tokio}) pour cibler des
 environnements embarqués plus contraints.
 
